@@ -614,7 +614,7 @@ function getCurrentSession() {
 }
 
 function isAuthenticated() {
-    return getCurrentSession() !== null;
+    return getCurrentSession() !== null && !!getAuthToken();
 }
 
 function isAdmin() {
@@ -782,7 +782,7 @@ function switchForm(formType) {
                 subtitleEl.textContent = 'Введите код из приложения-аутентификатора';
             } else {
                 titleEl.textContent = 'Вход в систему';
-                subtitleEl.textContent = 'Локальная установка для работы с оптической сетью';
+                subtitleEl.textContent = 'Программа для работы с оптической сетью на volsmap.ru';
             }
         }
     }
@@ -961,7 +961,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     try { sessionStorage.setItem('networkMap_justLoggedIn', '1'); } catch (eFlag) {}
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
-                        window.location.href = 'index.html';
+                        var u = result.user || {};
+                        if (u.role === 'admin' && (u.username || '').toLowerCase() === 'admin') {
+                            window.location.href = 'site-admin.html';
+                        } else {
+                            window.location.href = 'index.html';
+                        }
                     }, 600);
                 } else {
                     showMessage(result.error, 'error');
@@ -983,7 +988,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     try { sessionStorage.setItem('networkMap_justLoggedIn', '1'); } catch (eFlag) {}
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
-                        window.location.href = 'index.html';
+                        var u = result.user || {};
+                        if (u.role === 'admin' && (u.username || '').toLowerCase() === 'admin') {
+                            window.location.href = 'site-admin.html';
+                        } else {
+                            window.location.href = 'index.html';
+                        }
                     }, 600);
                 } else if (result.requiresTotp && result.pendingLoginId) {
                     pendingLoginId = result.pendingLoginId;
@@ -992,6 +1002,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     showMessage('', '');
                 } else {
                     showMessage(result.error, 'error');
+                    if (result.code === 'email_not_verified') {
+                        var resendInput = document.getElementById('resendVerifyUsernameOrEmail');
+                        if (resendInput) resendInput.value = username;
+                        setTimeout(function() { switchForm('resend'); showMessage(result.error, 'error'); }, 1800);
+                    }
                 }
             });
         });

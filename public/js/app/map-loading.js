@@ -9,18 +9,21 @@ var _mapLoadSafetyTimer = null;
 var _mapBulkImportActive = false;
 var MAP_BULK_IMPORT_MIN_ITEMS = 350;
 var MAP_BULK_IMPORT_BATCH_SIZE = 60;
+var MAP_BULK_IMPORT_BATCH_SIZE_INITIAL = 120;
 var MAP_BULK_IMPORT_CABLE_BATCH_SIZE = 40;
+var MAP_BULK_IMPORT_CABLE_BATCH_SIZE_INITIAL = 80;
 var MAP_UNDO_REDO_BATCH_MIN = 1;
 var MAP_UNDO_REDO_BATCH_SIZE = 50;
 var INCREMENTAL_UNDO_MAX_CHANGES = 50;
 
 var _entranceStartedAt = 0;
 var _entranceExitStarted = false;
-var APP_ENTRANCE_MIN_MS = 2000;
-var APP_ENTRANCE_EXIT_MS = 620;
+var APP_ENTRANCE_MIN_MS = 200;
+var APP_ENTRANCE_EXIT_MS = 280;
 
-/** Время на пачку импорта за один шаг: при первой загрузке экран закрыт оверлеем, можно больше. */
+/** Время на пачку импорта за один шаг. Под оверлеем первой загрузки — больше (UI скрыт). */
 var MAP_BULK_IMPORT_STEP_BUDGET_MS = 40;
+var MAP_BULK_IMPORT_STEP_BUDGET_INITIAL_MS = 100;
 var MAP_UNDO_REDO_STEP_BUDGET_MS = 14;
 
 function isMapBulkImportActive() {
@@ -117,7 +120,7 @@ function initAppEntrance() {
 
     if (justLoggedIn) {
         el.classList.add('app-entrance--welcome');
-        APP_ENTRANCE_MIN_MS = 2200;
+        APP_ENTRANCE_MIN_MS = 500;
         var greet = document.getElementById('appEntranceGreet');
         var name = '';
         try {
@@ -133,7 +136,8 @@ function initAppEntrance() {
             greet.textContent = name ? ('Добро пожаловать, ' + name) : 'Добро пожаловать';
         }
     } else {
-        APP_ENTRANCE_MIN_MS = 1100;
+        // Не держим оверлей искусственно — время выбора региона уже идёт в _entranceStartedAt.
+        APP_ENTRANCE_MIN_MS = 0;
     }
 
     var reduceMotion = false;
@@ -141,8 +145,8 @@ function initAppEntrance() {
         reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     } catch (eMotion) {}
     if (reduceMotion) {
-        APP_ENTRANCE_MIN_MS = Math.min(APP_ENTRANCE_MIN_MS, 400);
-        APP_ENTRANCE_EXIT_MS = 120;
+        APP_ENTRANCE_MIN_MS = Math.min(APP_ENTRANCE_MIN_MS, 200);
+        APP_ENTRANCE_EXIT_MS = 80;
         el.classList.add('app-entrance--reduced');
     }
 }
@@ -202,6 +206,39 @@ function setMapLoadingOverlayText(text) {
 }
 window.setMapLoadingOverlayText = setMapLoadingOverlayText;
 
+/**
+ * Раньше сбрасывали таймер после выбора региона — из‑за этого после «Открыть»
+ * снова ждали 1–2 с min entrance. Больше не обнуляем: время пикера засчитывается.
+ */
+function resetAppEntranceTimer() {
+    /* no-op: keep _entranceStartedAt from initAppEntrance */
+}
+window.resetAppEntranceTimer = resetAppEntranceTimer;
+
+/** Бюджет/размер пачки bulk-импорта: под оверлеем первой загрузки агрессивнее. */
+function getMapBulkImportStepBudgetMs() {
+    if (_mapInitialLoadPending) return MAP_BULK_IMPORT_STEP_BUDGET_INITIAL_MS;
+    return MAP_BULK_IMPORT_STEP_BUDGET_MS;
+}
+window.getMapBulkImportStepBudgetMs = getMapBulkImportStepBudgetMs;
+
+function getMapBulkImportBatchSize() {
+    if (_mapInitialLoadPending) return MAP_BULK_IMPORT_BATCH_SIZE_INITIAL;
+    return MAP_BULK_IMPORT_BATCH_SIZE;
+}
+window.getMapBulkImportBatchSize = getMapBulkImportBatchSize;
+
+function getMapBulkImportCableBatchSize() {
+    if (_mapInitialLoadPending) return MAP_BULK_IMPORT_CABLE_BATCH_SIZE_INITIAL;
+    return MAP_BULK_IMPORT_CABLE_BATCH_SIZE;
+}
+window.getMapBulkImportCableBatchSize = getMapBulkImportCableBatchSize;
+
+function isMapRegionPickerAwaiting() {
+    return !!window._mapRegionPickerAwaiting;
+}
+window.isMapRegionPickerAwaiting = isMapRegionPickerAwaiting;
+
 function markMapTilesReady() {
     if (_mapTilesReady) return;
     _mapTilesReady = true;
@@ -214,24 +251,27 @@ function markMapDataReady() {
     if (typeof applyAutoPerfForMapSize === 'function' && Array.isArray(window.objects)) {
         try { applyAutoPerfForMapSize(window.objects.length); } catch (eAuto) {}
     }
-    // Пока пользователь ещё не трогал карту — прогреть cable/uid индексы.
+    // На большой карте не планируем фоновый прогрев сразу после ready — клинит через N секунд.
     try {
-        if (typeof warmMapEditCaches === 'function') {
-            if (typeof requestIdleCallback === 'function') {
-                requestIdleCallback(function() { warmMapEditCaches(); }, { timeout: 2000 });
-            } else {
-                setTimeout(function() { warmMapEditCaches(); }, 100);
-            }
-        } else if (typeof MapPerf !== 'undefined' && MapPerf.warmIndexes) {
-            MapPerf.warmIndexes();
+        var objCount = (typeof window.objects !== 'undefined' && Array.isArray(window.objects)) ? window.objects.length : 0;
+        if (objCount < 5000 && typeof warmMapEditCaches === 'function') {
+            setTimeout(function() {
+                if (typeof requestIdleCallback === 'function') {
+                    requestIdleCallback(function() { warmMapEditCaches(); }, { timeout: 30000 });
+                } else {
+                    warmMapEditCaches();
+                }
+            }, 20000);
         }
     } catch (eWarmReady) {}
-    // Dual: только прогрев пустого opposite-движка (без importData — иначе гонка с objects/stats)
-    try {
-        if (typeof MapRuntime !== 'undefined' && MapRuntime.scheduleWarmOpposite) {
-            MapRuntime.scheduleWarmOpposite(0);
-        }
-    } catch (eWarmRt) {}
+    // Opposite-движок — только по клику смены подложки (warm внутри switch), не по таймеру.
+
+    // Не держим оверлей из‑за тайлов: если tilesload/actionend не пришли — снимаем через 400 мс.
+    if (!_mapTilesReady) {
+        setTimeout(function() {
+            if (!_mapTilesReady) markMapTilesReady();
+        }, 400);
+    }
     tryCompleteMapInitialLoad();
 }
 window.markMapDataReady = markMapDataReady;
@@ -265,17 +305,23 @@ function finishMapInitialReveal() {
             if (myMap && myMap.container) {
                 try { myMap.container.fitToViewport(); } catch (eFit) {}
             }
+            // Фильтр уже прогоняли в importDataPostProcess — повторный скан 25k сразу после reveal клинит.
             try {
-                if (typeof applyMapFilter === 'function') applyMapFilter();
-                else if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+                if (typeof applyMapViewportUpdate === 'function') {
+                    setTimeout(function() {
+                        try { applyMapViewportUpdate(); } catch (eVp) {}
+                    }, 300);
+                }
             } catch (eFilterReveal) {}
             if (!window.syncIsConnected && typeof showSyncRequiredOverlay === 'function') {
                 showSyncRequiredOverlay();
             }
             scheduleWelcomeAfterMapReady();
-            // Dual: слой из prefs после первой загрузки (hydrate opposite отключён — ломал objects/stats)
+            // Dual prefs / warm — отложенно, без мгновенного switch runtime после «Готово».
             if (typeof MapRuntime !== 'undefined' && MapRuntime.flushPendingAfterLoad) {
-                try { MapRuntime.flushPendingAfterLoad(); } catch (eFlush) {}
+                setTimeout(function() {
+                    try { MapRuntime.flushPendingAfterLoad(); } catch (eFlush) {}
+                }, 1500);
             }
         });
     });
@@ -310,7 +356,7 @@ function startMapLoadSafetyTimeout() {
         _mapLoadSafetyTimer = null;
         if (!_mapDataReady) markMapDataReady();
         if (!_mapTilesReady) markMapTilesReady();
-    }, 45000);
+    }, 12000);
 }
 
 function setupMapTilesReady() {
@@ -324,11 +370,13 @@ function setupMapTilesReady() {
         done = true;
         markMapTilesReady();
     }
+    // Сначала таймер — иначе исключение на events.add блокирует снятие оверлея навсегда.
+    setTimeout(mark, 350);
+    setTimeout(mark, 2000);
     if (myMap.events && typeof myMap.events.add === 'function') {
         try { myMap.events.add('tilesload', mark); } catch (eTiles) {}
+        try { myMap.events.add('actionend', mark); } catch (eAction) {}
     }
-    myMap.events.add('actionend', mark);
-    setTimeout(mark, 350);
 }
 
 initAppEntrance();

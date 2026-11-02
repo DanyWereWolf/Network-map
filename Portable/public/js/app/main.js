@@ -25,8 +25,6 @@ function startMapApp() {
             .catch(function() {});
     }
 
-    startMapLoadSafetyTimeout();
-
     initUserUI();
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
@@ -74,7 +72,55 @@ function startMapApp() {
             }
         }, 50);
     }
-    whenYmapsReady(init);
+
+    function proceedWithMapInit() {
+        if (typeof setMapLoadingOverlayText === 'function') {
+            setMapLoadingOverlayText('Загрузка карты…');
+        }
+        // Не сбрасываем entrance-таймер: иначе после выбора региона снова ждём min MS.
+        startMapLoadSafetyTimeout();
+        whenYmapsReady(init);
+    }
+
+    // Регион — до создания карты и загрузки объектов (пикер поверх экрана входа).
+    var chooseRegion = (typeof chooseMapRegionBeforeLoad === 'function')
+        ? chooseMapRegionBeforeLoad()
+        : Promise.resolve(window.currentMapRegionId || null);
+
+    if (typeof setMapLoadingOverlayText === 'function') {
+        setMapLoadingOverlayText('Выбор региона…');
+    }
+
+    chooseRegion.then(function(regionId) {
+        if (!regionId) {
+            if (typeof setMapLoadingOverlayText === 'function') {
+                setMapLoadingOverlayText('Регион не выбран');
+            }
+            if (typeof showError === 'function') {
+                showError('Не удалось выбрать регион карты. Обновите страницу или войдите снова.', 'Регион');
+            }
+            if (typeof markMapDataReady === 'function') markMapDataReady();
+            if (typeof markMapTilesReady === 'function') markMapTilesReady();
+            return;
+        }
+        if (typeof setCurrentMapRegionId === 'function') setCurrentMapRegionId(regionId);
+        else window.currentMapRegionId = String(regionId);
+        proceedWithMapInit();
+    }).catch(function(err) {
+        var msg = (err && err.message) ? String(err.message) : 'Не удалось получить список регионов';
+        if (typeof setMapLoadingOverlayText === 'function') {
+            setMapLoadingOverlayText('Ошибка загрузки');
+        }
+        // Без токена/регионов карту не поднимаем — иначе пустой «Готово».
+        if (!getAuthToken()) {
+            try { window.location.href = 'auth.html'; } catch (eLoc) {}
+            return;
+        }
+        if (typeof showError === 'function') showError(msg, 'Регион');
+        if (typeof markMapDataReady === 'function') markMapDataReady();
+        if (typeof markMapTilesReady === 'function') markMapTilesReady();
+    });
+
     refreshMapLimitsFromServer();
 }
 

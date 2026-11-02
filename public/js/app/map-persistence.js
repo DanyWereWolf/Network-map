@@ -432,25 +432,20 @@ function warmMapEditCaches() {
     try {
         if (typeof MapPerf !== 'undefined' && MapPerf.warmIndexes) MapPerf.warmIndexes();
     } catch (eWarmPerf) {}
-    // Если снимок пустой/урезанный — собрать его в idle (не на первом move).
+    // Не гоняем getSerializedData() на 25k сразу после загрузки — это главный фриз после «Готово».
+    // lastSavedState уже должен быть из API (finishRemoteApply). Полный rebuild — только если совсем пусто.
     try {
-        var needFull = !Array.isArray(lastSavedState) ||
-            (typeof objects !== 'undefined' && Array.isArray(objects) &&
-                objects.length > 100 && lastSavedState.length < objects.length * 0.85);
+        var liveLen = (typeof objects !== 'undefined' && Array.isArray(objects)) ? objects.length : 0;
+        var needFull = liveLen > 100 &&
+            (!Array.isArray(lastSavedState) || lastSavedState.length < 1);
         if (needFull && typeof getSerializedData === 'function') {
-            lastSavedState = cloneMapSnapshot(getSerializedData());
+            lastSavedState = getSerializedData();
             invalidateLastSavedUidIndex();
         }
     } catch (eWarmSnap) {}
     try {
         ensureLastSavedUidIndex();
     } catch (eWarmUid) {}
-    try {
-        if (Array.isArray(lastSavedState) && lastSavedState.length) {
-            lastSavedState.slice();
-            JSON.parse(JSON.stringify(lastSavedState[0]));
-        }
-    } catch (eWarmJson) {}
     try {
         if (typeof objects !== 'undefined' && Array.isArray(objects) && objects.length &&
             typeof serializeMapItemFromObject === 'function') {
@@ -1188,9 +1183,14 @@ function loadData() {
         if (!token) return;
 
         function fetchMapFromApi() {
-            var choose = (typeof chooseMapRegionBeforeLoad === 'function')
-                ? chooseMapRegionBeforeLoad()
-                : Promise.resolve(window.currentMapRegionId || null);
+            var existing = (typeof getCurrentMapRegionId === 'function' && getCurrentMapRegionId())
+                || window.currentMapRegionId
+                || null;
+            var choose = existing
+                ? Promise.resolve(existing)
+                : ((typeof chooseMapRegionBeforeLoad === 'function')
+                    ? chooseMapRegionBeforeLoad()
+                    : Promise.resolve(null));
             return choose.then(function(regionId) {
                 if (!regionId) throw new Error('Регион не выбран');
                 if (typeof setCurrentMapRegionId === 'function') setCurrentMapRegionId(regionId);
@@ -1227,9 +1227,21 @@ function loadData() {
                 if (!restored) fetchMapFromApi().catch(function() {});
             });
         } else {
-            fetchMapFromApi().catch(function() {
+            fetchMapFromApi().catch(function(err) {
+                var msg = (err && err.message) ? String(err.message) : '';
                 if (typeof OfflineMapCache !== 'undefined' && OfflineMapCache.tryRestoreAndApply) {
-                    OfflineMapCache.tryRestoreAndApply();
+                    OfflineMapCache.tryRestoreAndApply().then(function(restored) {
+                        if (restored) return;
+                        if (typeof markMapDataReady === 'function') markMapDataReady();
+                        if (typeof showNotification === 'function') {
+                            showNotification(msg || 'Не удалось загрузить карту', 'error');
+                        }
+                    });
+                    return;
+                }
+                if (typeof markMapDataReady === 'function') markMapDataReady();
+                if (typeof showNotification === 'function') {
+                    showNotification(msg || 'Не удалось загрузить карту', 'error');
                 }
             });
         }
@@ -1319,9 +1331,18 @@ function loadData() {
             }
         });
     })();
-    setTimeout(function() {
-        if (!_mapDataReady && !_mapStateReceived) markMapDataReady();
-    }, 15000);
+    (function scheduleMapDataReadyFallback() {
+        function tick() {
+            if (_mapDataReady || _mapStateReceived) return;
+            // Не снимать оверлей, пока открыт выбор региона (раньше зря ждали 15 с под ним).
+            if (window._mapRegionPickerAwaiting || (typeof isMapRegionPickerAwaiting === 'function' && isMapRegionPickerAwaiting())) {
+                setTimeout(tick, 500);
+                return;
+            }
+            markMapDataReady();
+        }
+        setTimeout(tick, 15000);
+    })();
 }
 
 function showSyncRequiredOverlay() {
@@ -1869,28 +1890,44 @@ function applyRemoteState(data, meta) {
         function finishRemoteApply() {
             if (applyFinished) return;
             applyFinished = true;
+            // Всегда снимаем apply-флаг первым — иначе sync/save остаются заблокированы.
             _mapApplyInProgress = false;
-            lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
-            invalidateLastSavedUidIndex();
+            // Дешёвый снимок сразу (без JSON deep-clone) — иначе idle через 2с клинит вкладку.
+            try {
+                if (meta && meta.fromApi && Array.isArray(data)) {
+                    lastSavedState = data;
+                    invalidateLastSavedUidIndex();
+                }
+            } catch (eSnapEarly) {}
+            // Сначала снимаем оверлей — JSON-снимок и stats не должны его держать.
+            try { markMapDataReady(); } catch (eReady) {}
             // Снимок только что собран — отменить отложенный полный rebuild от remote ops.
             if (_remoteUndoInvalidateTimer) {
                 clearTimeout(_remoteUndoInvalidateTimer);
                 _remoteUndoInvalidateTimer = null;
             }
             _remoteSnapshotIdleScheduled = false;
-            var runStats = function() {
+            var runHeavy = function() {
+                try {
+                    if (!Array.isArray(lastSavedState) || lastSavedState.length < 1) {
+                        if (meta && meta.fromApi && Array.isArray(data)) lastSavedState = data;
+                        else lastSavedState = getSerializedData();
+                        invalidateLastSavedUidIndex();
+                    }
+                } catch (eSnap) {}
                 try { updateStats(); } catch (eStats) {}
+                // Офлайн-кэш на большой карте не пишем автоматически (stringify 25k клинит UI).
+                try {
+                    var nObj = (typeof objects !== 'undefined' && objects) ? objects.length : 0;
+                    if (nObj < 5000 && typeof OfflineMapCache !== 'undefined' && OfflineMapCache.scheduleSave) {
+                        setTimeout(function() {
+                            try { OfflineMapCache.scheduleSave(); } catch (eOff) {}
+                        }, 60000);
+                    }
+                } catch (eOffSched) {}
             };
-            if (_mapInitialLoadPending) {
-                if (typeof requestIdleCallback === 'function') requestIdleCallback(runStats, { timeout: 1200 });
-                else setTimeout(runStats, 0);
-            } else {
-                runStats();
-            }
-            markMapDataReady();
-            if (typeof OfflineMapCache !== 'undefined' && OfflineMapCache.scheduleSave) {
-                OfflineMapCache.scheduleSave();
-            }
+            if (typeof requestIdleCallback === 'function') requestIdleCallback(runHeavy, { timeout: 12000 });
+            else setTimeout(runHeavy, 2500);
             if (meta && meta.fromApi && typeof OfflineMapCache !== 'undefined' && OfflineMapCache.hideOfflineBanner) {
                 OfflineMapCache.hideOfflineBanner();
                 window._volsmapOfflineMapActive = false;
@@ -2470,9 +2507,114 @@ function importDataAssignUniqueIds(data) {
 
 function importDataCreatePlacemarkRef(item) {
     if (!item || item.type === 'cable' || item.type === 'cableLabel') return null;
-    if (item.type === 'region' || type === 'zone' || item.type === 'zone') return createRegionFromData(item);
+    if (item.type === 'region' || item.type === 'zone') return createRegionFromData(item);
     return createObjectFromData(item, null, { bulkImport: true });
 }
+
+/** Точка/линия/полигон пересекает bounds (для приоритетного импорта viewport). */
+function serializedGeometryTouchesBounds(geometry, bounds) {
+    if (!bounds || geometry == null) return true;
+    if (typeof geometry[0] === 'number') {
+        if (typeof MapPerf !== 'undefined' && MapPerf.coordInBounds) {
+            return MapPerf.coordInBounds(geometry, bounds);
+        }
+        return geometry[0] >= bounds.minLat && geometry[0] <= bounds.maxLat &&
+            geometry[1] >= bounds.minLon && geometry[1] <= bounds.maxLon;
+    }
+    if (!Array.isArray(geometry) || !geometry.length) return true;
+    var ring = geometry;
+    if (Array.isArray(geometry[0]) && Array.isArray(geometry[0][0])) ring = geometry[0];
+    var minLat = Infinity;
+    var maxLat = -Infinity;
+    var minLon = Infinity;
+    var maxLon = -Infinity;
+    var any = false;
+    for (var i = 0; i < ring.length; i++) {
+        var p = ring[i];
+        if (!p || p.length < 2 || typeof p[0] !== 'number') continue;
+        any = true;
+        if (typeof MapPerf !== 'undefined' && MapPerf.coordInBounds && MapPerf.coordInBounds(p, bounds)) {
+            return true;
+        }
+        if (p[0] < minLat) minLat = p[0];
+        if (p[0] > maxLat) maxLat = p[0];
+        if (p[1] < minLon) minLon = p[1];
+        if (p[1] > maxLon) maxLon = p[1];
+    }
+    if (!any) return true;
+    return !(maxLat < bounds.minLat || minLat > bounds.maxLat ||
+        maxLon < bounds.minLon || minLon > bounds.maxLon);
+}
+
+/**
+ * Маска «создать сразу»: объекты в viewport + концы кабелей, видимых на экране.
+ * Остальное догружается после снятия оверлея.
+ */
+function buildViewportPriorityCreateMask(data, bounds) {
+    var n = data.length;
+    var createNow = new Array(n);
+    var priorityUid = Object.create(null);
+    var i;
+    var item;
+    for (i = 0; i < n; i++) {
+        item = data[i];
+        if (!item || item.type === 'cable' || item.type === 'cableLabel') {
+            createNow[i] = false;
+            continue;
+        }
+        var urgent = !bounds || item.type === 'region' || item.type === 'zone' ||
+            serializedGeometryTouchesBounds(item.geometry, bounds);
+        createNow[i] = urgent;
+        if (urgent && item.uniqueId != null && item.uniqueId !== '') {
+            priorityUid[String(item.uniqueId)] = true;
+        }
+    }
+    if (!bounds) return createNow;
+    for (i = 0; i < n; i++) {
+        item = data[i];
+        if (!item || item.type !== 'cable') continue;
+        if (!serializedGeometryTouchesBounds(item.geometry, bounds)) continue;
+        if (item.fromUniqueId != null && item.fromUniqueId !== '') {
+            priorityUid[String(item.fromUniqueId)] = true;
+        }
+        if (item.toUniqueId != null && item.toUniqueId !== '') {
+            priorityUid[String(item.toUniqueId)] = true;
+        }
+        if (typeof item.from === 'number' && item.from >= 0 && item.from < n) createNow[item.from] = true;
+        if (typeof item.to === 'number' && item.to >= 0 && item.to < n) createNow[item.to] = true;
+        var pts = item.pointUniqueIds || item.pointsUniqueIds;
+        if (Array.isArray(pts)) {
+            for (var pi = 0; pi < pts.length; pi++) {
+                if (pts[pi] != null && pts[pi] !== '') priorityUid[String(pts[pi])] = true;
+            }
+        }
+    }
+    for (i = 0; i < n; i++) {
+        item = data[i];
+        if (!item || item.type === 'cable' || item.type === 'cableLabel') continue;
+        if (item.uniqueId != null && priorityUid[String(item.uniqueId)]) createNow[i] = true;
+    }
+    return createNow;
+}
+
+/** Подпись + hover после mount (при bulk на загрузке не создаём). */
+function ensureMapObjectDecorations(obj) {
+    if (!obj || !obj.properties) return;
+    var type = obj.properties.get('type');
+    if (!type || type === 'cable' || type === 'cableLabel' || type === 'region' || type === 'zone') {
+        if (type === 'cable' && typeof attachHoverEventsToObject === 'function') {
+            try { attachHoverEventsToObject(obj); } catch (eHovC) {}
+        }
+        return;
+    }
+    if (!obj.properties.get('label') && typeof updateObjectLabel === 'function') {
+        try { updateObjectLabel(obj, obj.properties.get('name')); } catch (eLbl) {}
+    }
+    if (typeof attachHoverEventsToObject === 'function') {
+        try { attachHoverEventsToObject(obj); } catch (eHov) {}
+    }
+}
+window.ensureMapObjectDecorations = ensureMapObjectDecorations;
 
 function buildImportRefIndex(objectRefs) {
     var refsOnly = [];
@@ -2678,8 +2820,11 @@ function importDataRunCables(data, objectRefs, onDone) {
             if (data[di] && data[di].type === 'cable') cableItems.push(data[di]);
         }
     }
+    var cableBatchSizeDefault = (typeof getMapBulkImportCableBatchSize === 'function')
+        ? getMapBulkImportCableBatchSize()
+        : (typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40);
     var useCableBatch = isMapBulkImportActive()
-        && cableItems.length >= (typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40);
+        && cableItems.length >= cableBatchSizeDefault;
     if (!useCableBatch) {
         try {
             cableItems.forEach(function(item) {
@@ -2693,8 +2838,10 @@ function importDataRunCables(data, objectRefs, onDone) {
         return;
     }
     var cableIdx = 0;
-    var cableBatchSize = typeof MAP_BULK_IMPORT_CABLE_BATCH_SIZE === 'number' ? MAP_BULK_IMPORT_CABLE_BATCH_SIZE : 40;
-    var cableStepBudgetMs = typeof MAP_BULK_IMPORT_STEP_BUDGET_MS === 'number' ? MAP_BULK_IMPORT_STEP_BUDGET_MS : 16;
+    var cableBatchSize = cableBatchSizeDefault;
+    var cableStepBudgetMs = (typeof getMapBulkImportStepBudgetMs === 'function')
+        ? getMapBulkImportStepBudgetMs()
+        : (typeof MAP_BULK_IMPORT_STEP_BUDGET_MS === 'number' ? MAP_BULK_IMPORT_STEP_BUDGET_MS : 16);
     function importCableBatch() {
         try {
             var stepStart = mapImportNow();
@@ -2775,11 +2922,29 @@ function importDataPostProcess(opts, onDone) {
         else finish();
     };
     var useChunkedPostProcess = isMapBulkImportActive() && !(opts && opts.undoRedo);
+    var litePost = !!(opts && opts.litePostProcess);
+    var deferHeavy = !!(opts && opts.deferHeavyPost);
     if (useChunkedPostProcess) {
-        if (typeof setMapLoadingOverlayText === 'function') {
+        if (typeof setMapLoadingOverlayText === 'function' && !deferHeavy) {
             setMapLoadingOverlayText(opts && opts.bulkImport ? 'Финализация импорта…' : 'Подготовка карты…');
         }
-        var postSteps = [
+        // Лёгкий путь после early-reveal на большой карте: только то, что нужно для видимого viewport.
+        var postSteps = litePost ? [
+            function() {
+                if (typeof syncAllCabinetMembersToCabinets === 'function') {
+                    syncAllCabinetMembersToCabinets({ skipDisplay: true });
+                }
+            },
+            function() {
+                updateCrossDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
+            },
+            function() {
+                updateNodeDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
+            },
+            function() {
+                if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+            }
+        ] : [
             function() {
                 if (typeof syncAllCabinetMembersToCabinets === 'function') {
                     syncAllCabinetMembersToCabinets({ skipDisplay: true });
@@ -2794,7 +2959,6 @@ function importDataPostProcess(opts, onDone) {
                 updateCableVisualization({ skipFilter: true });
             },
             function() {
-                // On large maps only build cross/node groups for current viewport.
                 var large = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization();
                 if (large) {
                     updateCrossDisplay({ full: true, viewportOnly: true, skipFilter: true, skipCableUpdate: true });
@@ -2811,7 +2975,6 @@ function importDataPostProcess(opts, onDone) {
                 }
             },
             function() {
-                // Состав ящиков синхронизирован в шаге 1; кроссы/узлы, фильтр и линии — отдельными шагами.
                 if (typeof updateCabinetDisplay === 'function') {
                     updateCabinetDisplay({ skipMemberSync: true, skipDependents: true });
                 }
@@ -2855,15 +3018,9 @@ function importDataPostProcess(opts, onDone) {
                 });
             },
             function() {
-                // Prefer viewport sync over full filter on large maps.
-                if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization()) {
-                    if (typeof applyMapFilter === 'function') applyMapFilter();
-                } else if (typeof applyMapFilter === 'function') {
-                    applyMapFilter();
-                }
+                if (typeof applyMapFilter === 'function') applyMapFilter();
             },
             function() {
-                // Defer connection lines + camera monitor — not needed for first paint.
                 setTimeout(function() {
                     try { scheduleConnectionLinesUpdate('full'); } catch (eCl) {}
                     try {
@@ -2872,21 +3029,29 @@ function importDataPostProcess(opts, onDone) {
                 }, 0);
             }
         ];
-        var postStepNames = [
-            'кабели и ящики', 'визуализация кабелей', 'кроссы', 'узлы', 'ящики',
-            'миграции свитчей', 'порты и регионы', 'регионы на фон', 'подписи регионов',
-            'z-index кабелей', 'фильтр', 'линии связей'
-        ];
+        var postStepNames = litePost
+            ? ['ящики', 'кроссы', 'узлы', 'viewport']
+            : [
+                'кабели и ящики', 'визуализация кабелей', 'кроссы', 'узлы', 'ящики',
+                'миграции свитчей', 'порты и регионы', 'регионы на фон', 'подписи регионов',
+                'z-index кабелей', 'фильтр', 'линии связей'
+            ];
         var stepTimings = [];
         var postStart = mapImportNow();
         var baseText = opts && opts.bulkImport ? 'Финализация импорта…' : 'Подготовка карты…';
         var stepIdx = 0;
+        function scheduleNextPostStep() {
+            // После reveal даём UI дышать между шагами (rAF alone не помогает при 200мс+ шаге).
+            if (deferHeavy) setTimeout(runPostStep, 80);
+            else scheduleMapImportStep(runPostStep);
+        }
         function runPostStep() {
             if (stepIdx >= postSteps.length) {
                 window.__mapLoadSteps = stepTimings;
                 try {
                     console.info('[MapLoad] подготовка карты: ' + Math.round(mapImportNow() - postStart) + ' мс', stepTimings);
                 } catch (eLog) {}
+                // На lite/large НЕ ставим таймеры full-scan — они клинили вкладку через N секунд.
                 finish();
                 return;
             }
@@ -2898,12 +3063,12 @@ function importDataPostProcess(opts, onDone) {
                 try { console.error('[MapLoad] шаг «' + postStepNames[idx] + '»', eStep); } catch (eLog2) {}
             }
             stepTimings.push({ name: postStepNames[idx] || ('шаг ' + (idx + 1)), ms: Math.round(mapImportNow() - t0) });
-            if (typeof setMapLoadingOverlayText === 'function') {
+            if (!deferHeavy && typeof setMapLoadingOverlayText === 'function') {
                 setMapLoadingOverlayText(baseText + ' (' + Math.min(stepIdx + 1, postSteps.length) + '/' + postSteps.length + ')');
             }
-            scheduleMapImportStep(runPostStep);
+            scheduleNextPostStep();
         }
-        scheduleMapImportStep(runPostStep);
+        scheduleNextPostStep();
         return;
     }
     if (opts && opts.undoRedo) requestAnimationFrame(work);
@@ -2924,30 +3089,55 @@ function importData(data, opts, done) {
     importDataAssignUniqueIds(data);
 
     function completeImport(err) {
-        importDataPostProcess(opts, function() {
-            _mapBulkImportActive = false;
-            if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
-            if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
-                MapPerf.adoptExistingGeoObjects(objects);
-            }
-            // Повторно применить LOD/фильтр уже после снятия bulk-флага —
-            // иначе объекты, добавленные в обход MapPerf, остаются видимыми.
+        // Объекты и кабели уже на карте — снимаем оверлей до тяжёлого post-process.
+        var earlyReveal = !!_mapInitialLoadPending && useBulk && !undoRedo;
+        var largeMap = Array.isArray(objects) && objects.length >= 5000;
+        if (earlyReveal && typeof markMapDataReady === 'function') {
             try {
-                if (typeof applyMapFilter === 'function') applyMapFilter();
-                else if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
-            } catch (eLodApply) {}
-            // Прогрев индексов сразу после загрузки (не ждать первого move).
-            try {
-                if (typeof warmMapEditCaches === 'function') {
-                    if (typeof requestIdleCallback === 'function') {
-                        requestIdleCallback(function() { warmMapEditCaches(); }, { timeout: 1500 });
-                    } else {
-                        setTimeout(function() { warmMapEditCaches(); }, 0);
-                    }
+                if (typeof MapPerf !== 'undefined') MapPerf.reindexAllObjects(objects);
+                if (typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization()) {
+                    MapPerf.adoptExistingGeoObjects(objects);
                 }
-            } catch (eWarmImp) {}
+            } catch (eIdxEarly) {}
+            try { markMapDataReady(); } catch (eEarly) {}
+        }
+        // На большой карте после reveal не гоняем полный post-process синхронно —
+        // иначе UI «зависает после загрузки» на десятки секунд.
+        var postOpts = opts || {};
+        if (earlyReveal && largeMap) {
+            postOpts = Object.assign({}, postOpts, { litePostProcess: true, deferHeavyPost: true });
+        }
+        function afterPost() {
+            _mapBulkImportActive = false;
+            try {
+                if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+                else if (typeof applyMapFilter === 'function' && !largeMap) applyMapFilter();
+            } catch (eLodApply) {}
             if (typeof done === 'function') done(err || null);
-        });
+            // На большой карте НЕ запускаем отложенный тяжёлый проход через N секунд —
+            // именно он клинил UI «через несколько секунд после загрузки».
+            if (largeMap) return;
+            setTimeout(function() {
+                try {
+                    if (typeof ensureMapObjectDecorations === 'function' && Array.isArray(objects)) {
+                        var decBounds = (typeof MapPerf !== 'undefined' && MapPerf.getExpandedBounds)
+                            ? MapPerf.getExpandedBounds(myMap) : null;
+                        var decorated = 0;
+                        for (var di = 0; di < objects.length; di++) {
+                            var dObj = objects[di];
+                            if (!dObj || !dObj.properties) continue;
+                            if (decBounds && MapPerf.isObjectInViewport && !MapPerf.isObjectInViewport(dObj, decBounds)) {
+                                continue;
+                            }
+                            ensureMapObjectDecorations(dObj);
+                            decorated++;
+                            if (decorated >= 200) break;
+                        }
+                    }
+                } catch (eDecPass) {}
+            }, 3000);
+        }
+        importDataPostProcess(postOpts, afterPost);
     }
 
     function failImport(err) {
@@ -2960,9 +3150,19 @@ function importData(data, opts, done) {
         var idx = 0;
         var placemarkLoaded = 0;
         var placemarkTotal = 0;
-        data.forEach(function(it) { if (it && it.type !== 'cable' && it.type !== 'cableLabel') placemarkTotal++; });
+        data.forEach(function(it) {
+            if (it && it.type !== 'cable' && it.type !== 'cableLabel') placemarkTotal++;
+        });
 
-        var stepBudgetMs = undoRedo ? MAP_UNDO_REDO_STEP_BUDGET_MS : MAP_BULK_IMPORT_STEP_BUDGET_MS;
+        if (!undoRedo && typeof getMapBulkImportBatchSize === 'function') {
+            importBatchSize = getMapBulkImportBatchSize();
+        }
+        var stepBudgetMs = undoRedo
+            ? MAP_UNDO_REDO_STEP_BUDGET_MS
+            : ((typeof getMapBulkImportStepBudgetMs === 'function')
+                ? getMapBulkImportStepBudgetMs()
+                : MAP_BULK_IMPORT_STEP_BUDGET_MS);
+
         function importPlacemarkBatch() {
             try {
                 var stepStart = mapImportNow();
@@ -3095,7 +3295,11 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (type) placemark.properties.set('type', type);
     if (data.name != null) {
         placemark.properties.set('name', data.name);
-        if (typeof updateObjectLabel === 'function') updateObjectLabel(placemark, data.name);
+        // При bulk-загрузке подписи создаём лениво (на mount) — иначе ×2 Placemark на объект.
+        if (!(typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) &&
+            typeof updateObjectLabel === 'function') {
+            updateObjectLabel(placemark, data.name);
+        }
     }
     if (data.revision != null) {
         var revIncoming = Number(data.revision);
@@ -3749,10 +3953,16 @@ function createObjectFromData(data, opts, createOpts) {
         scheduleDragUpdate(placemark);
     });
 
-    updateObjectLabel(placemark, name);
-    if (type === 'camera') refreshCameraMapPresentation(placemark);
-
-    attachHoverEventsToObject(placemark);
+    var bulkCreate = !!(createOpts && createOpts.bulkImport) ||
+        (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive());
+    // Bulk: без второй Placemark-подписи и hover — иначе на 10–20k карта «висит» минутами.
+    if (!bulkCreate) {
+        updateObjectLabel(placemark, name);
+        if (type === 'camera') refreshCameraMapPresentation(placemark);
+        attachHoverEventsToObject(placemark);
+    } else if (type === 'camera') {
+        try { refreshCameraMapPresentation(placemark); } catch (eCamBulk) {}
+    }
     if (typeof bindPlacemarkPlacementDragSupport === 'function') bindPlacemarkPlacementDragSupport(placemark);
     if (!(createOpts && createOpts.skipAddToObjects)) {
         objects.push(placemark);

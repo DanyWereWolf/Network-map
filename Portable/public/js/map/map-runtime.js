@@ -11,6 +11,8 @@
     'use strict';
 
     var switching = false;
+    var switchSafetyTimer = null;
+    var SWITCH_SAFETY_MS = 25000;
     var lastBasemapType = null;
     var pendingAfterLoad = null;
     var NATIVE_LOAD_TIMEOUT_MS = 20000;
@@ -290,12 +292,39 @@
         if (hydratingOpposite && Array.isArray(hydrateFrozenData)) {
             return hydrateFrozenData;
         }
+        // lastSavedState уже полный JSON-снимок — без повторной сериализации ~25k объектов.
+        try {
+            if (typeof lastSavedState !== 'undefined' && Array.isArray(lastSavedState) && lastSavedState.length) {
+                var liveLen = (typeof objects !== 'undefined' && Array.isArray(objects)) ? objects.length : 0;
+                if (!liveLen || lastSavedState.length >= liveLen * 0.95) {
+                    return lastSavedState;
+                }
+            }
+        } catch (eSaved) {}
         try {
             if (typeof getSerializedData === 'function') {
                 return getSerializedData();
             }
         } catch (e) {}
         return [];
+    }
+
+    function setRuntimeSwitching(on) {
+        switching = !!on;
+        try { global.__volsmapRuntimeSwitching = !!on; } catch (eFlag) {}
+        if (switchSafetyTimer) {
+            clearTimeout(switchSafetyTimer);
+            switchSafetyTimer = null;
+        }
+        if (on) {
+            switchSafetyTimer = setTimeout(function () {
+                switchSafetyTimer = null;
+                if (!switching) return;
+                console.warn('[MapRuntime] switch safety timeout — снимаем оверлей');
+                setRuntimeSwitching(false);
+                showSwitchOverlay(false);
+            }, SWITCH_SAFETY_MS);
+        }
     }
 
     function showSwitchOverlay(on) {
@@ -642,7 +671,7 @@
     }
 
     function finishSwitch(mapType, done) {
-        switching = false;
+        setRuntimeSwitching(false);
         showSwitchOverlay(false);
         if (typeof markMapTilesReady === 'function') {
             try { markMapTilesReady(); } catch (eM) {}
@@ -678,7 +707,7 @@
             return;
         }
 
-        switching = true;
+        setRuntimeSwitching(true);
         ensureShimSaved();
         ensureRuntimeHost();
 
@@ -711,7 +740,8 @@
                     }, true);
                     return;
                 }
-                showSwitchOverlay(true);
+                // Карта уже на экране — не держим blur на весь reimport.
+                showSwitchOverlay(false);
                 restoreObjects(data, function () {
                     slot.objects = getObjectsRef();
                     slot.fp = fp;
@@ -739,7 +769,7 @@
                     try {
                         createMap(view.center, view.zoom, mapType, el);
                     } catch (eCreate) {
-                        switching = false;
+                        setRuntimeSwitching(false);
                         showSwitchOverlay(false);
                         console.error('[MapRuntime] createMap failed', eCreate);
                         if (typeof showError === 'function') {
@@ -748,6 +778,9 @@
                         if (typeof done === 'function') done(eCreate);
                         return;
                     }
+                    // Пустая карта уже видна — reimport идёт без блокирующего оверлея.
+                    showSwitchOverlay(false);
+                    fitActiveMap();
                     restoreObjects(data, function () {
                         slots[target] = {
                             el: el,
@@ -781,7 +814,7 @@
                 createFresh();
             }
         }).catch(function (err) {
-            switching = false;
+            setRuntimeSwitching(false);
             showSwitchOverlay(false);
             console.error('[MapRuntime] switch failed', err);
             try {
@@ -790,6 +823,7 @@
                 if (prev && prev.el) {
                     showSlotElement(prev.el);
                     global.myMap = prev.map;
+                    if (prev.objects && prev.objects.length) adoptObjects(prev.objects);
                     applyRuntimeApi(prevName,
                         prevName === 'yandex' ? (global.__ymapsNative || global.ymaps) : (global.__ymapsShim || global.ymaps));
                 }
@@ -801,14 +835,8 @@
         });
         } // end beginSwitchBody
 
-        // Если слот ещё не гидратирован — дожать warm/hydrate до show
-        if (!canInstantPreview(target) && !hydratingOpposite && !warmingOpposite) {
-            try {
-                if (!slotHasEngine(slots[target])) warmOppositeSlot();
-                else hydrateOppositeSlot();
-            } catch (eH) {}
-        }
-        waitBackgroundThen(beginSwitchBody);
+        // Сразу переключаем. Warm в фоне конкурировал с import и давал зависание «Смена подложки…».
+        beginSwitchBody();
     }
 
     function canInstantPreview(targetName) {
@@ -880,7 +908,16 @@
     }
 
     function flushPendingAfterLoad() {
-        try { preloadOppositeRuntime(); } catch (ePre) {}
+        // Только лёгкая подгрузка API opposite — без createMap и без switch сразу после reveal.
+        try {
+            var activeBoot = getActiveRuntime();
+            if (activeBoot === 'leaflet') preloadNativeIfDual();
+            else {
+                ensureShimSaved();
+                ensureLeafletShimApi().catch(function () {});
+            }
+        } catch (ePre) {}
+        // Не греем opposite по таймеру после загрузки — только при реальной смене подложки.
 
         var type = pendingAfterLoad;
         pendingAfterLoad = null;
@@ -896,9 +933,9 @@
                     }
                     return;
                 }
-                setTimeout(function () {
-                    applyBasemapType(userType, null, { asUserChoice: false });
-                }, 50);
+                // Не переключаем runtime сразу после загрузки — это и был фриз на 25k.
+                // Личный слой применится при следующем явном выборе / следующей сессии (boot).
+                lastBasemapType = userType;
                 return;
             }
         }
@@ -913,9 +950,8 @@
             persistBasemapType(type);
             return;
         }
-        setTimeout(function () {
-            applyBasemapType(type, null, { asUserChoice: false });
-        }, 50);
+        // Отложенный cross-runtime switch после загрузки — только по явному клику пользователя.
+        lastBasemapType = type;
     }
 
     function preloadNativeIfDual() {

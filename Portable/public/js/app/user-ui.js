@@ -8,7 +8,16 @@ function checkAuth() {
     }
     
     const session = AuthSystem.getCurrentSession();
-    if (!session) {
+    var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+    // Сессия без токена = «пустая» карта (API 401) и ложный «Готово».
+    if (!session || !token) {
+        try {
+            sessionStorage.removeItem('networkMap_session');
+            sessionStorage.removeItem('networkMap_token');
+            localStorage.removeItem('networkMap_session');
+            localStorage.removeItem('networkMap_token');
+            localStorage.removeItem('networkMap_tokenExpiry');
+        } catch (eClear) {}
         window.location.href = 'auth.html';
         return false;
     }
@@ -305,12 +314,12 @@ function setupPropertiesPanelClose() {
     });
 }
 
-var mapLimitsCache = { count: 0, limit: null, unlocked: true, remaining: null, defaultFreeLimit: null };
+var mapLimitsCache = { count: 0, limit: 20000, unlocked: false, remaining: 20000, defaultFreeLimit: 20000 };
 var MAP_LIMIT_WARN_RATIO = 0.98;
 var MAP_LIMIT_BANNER_DISMISS_KEY = 'mapLimitBannerDismissedCount';
 var mapLimitBannerCloseBound = false;
-var OWNER_CONTACT_EMAIL = '';
-var OWNER_CONTACT_MAILTO = '';
+var OWNER_CONTACT_EMAIL = 'support@volsmap.ru';
+var OWNER_CONTACT_MAILTO = 'mailto:' + OWNER_CONTACT_EMAIL + '?subject=' + encodeURIComponent('Снятие лимита объектов — Карта оптической сети');
 
 function applyMapLimitsCache(limits) {
     if (!limits || typeof limits !== 'object') return;
@@ -390,25 +399,34 @@ function updateMapLimitBanner() {
     var count = mapLimitsCache.count != null ? mapLimitsCache.count : 0;
     var limit = mapLimitsCache.limit;
     var remaining = mapLimitsCache.remaining != null ? mapLimitsCache.remaining : Math.max(0, limit - count);
-    var text = 'Почти исчерпан лимит объектов на карте: ' + count + ' из ' + limit + ' (осталось ' + remaining + '). Измените mapObjectLimit в server-config.json при необходимости.';
-    if (msgEl) msgEl.textContent = text;
+    var text = 'Почти исчерпан лимит объектов на карте: ' + count + ' из ' + limit + ' (осталось ' + remaining + '). ';
+    if (msgEl) {
+        msgEl.innerHTML = text + '<a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;text-decoration:underline;">Связаться с владельцем</a>';
+    }
     el.classList.remove('map-limit-banner--hidden');
 }
 
 function onMapObjectLimitError(message, limits) {
     if (limits) applyMapLimitsCache(limits);
-    var text = message || 'Достигнут лимит объектов на карте. Измените mapObjectLimit в server-config.json (-1 = без лимита).';
+    var text = message || 'Достигнут лимит объектов на карте. Чтобы снять ограничение, напишите владельцу программы.';
     if (typeof showWarning === 'function') {
-        showWarning(text, 'Лимит объектов', true, 'warning');
+        showWarning(
+            text + ' <a href="' + OWNER_CONTACT_MAILTO + '" style="color:inherit;text-decoration:underline;">Написать владельцу</a>',
+            'Лимит объектов',
+            true,
+            'angry'
+        );
     } else {
         alert(text);
     }
 }
 window.onMapObjectLimitError = onMapObjectLimitError;
 
-function wouldExceedMapObjectLimit() {
-    // Portable: лимитов объектов нет
-    return false;
+function wouldExceedMapObjectLimit(extraCount) {
+    extraCount = extraCount || 1;
+    if (mapLimitsCache.unlocked || mapLimitsCache.limit == null) return false;
+    var count = mapLimitsCache.count != null ? mapLimitsCache.count : 0;
+    return (count + extraCount) > mapLimitsCache.limit;
 }
 
 function notifyMapObjectLimitBlocked() {
@@ -485,8 +503,6 @@ function renderProfileUserInfo() {
 
 function renderProfileOrganizationInfo(org) {
     renderProfileUserInfo();
-    var contactEl = document.getElementById('profileOrgContact');
-    var adminActions = document.getElementById('profileOrgAdminActions');
     if (!org) {
         setProfileModalField('profileOrgName', 'Не привязана');
         setProfileStatusBadge('—');
@@ -497,8 +513,6 @@ function renderProfileOrganizationInfo(org) {
         if (cuLimitEmpty) cuLimitEmpty.textContent = '';
         setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', 0, 0, true);
         setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', 0, 0, true);
-        if (contactEl) { contactEl.style.display = 'none'; contactEl.textContent = ''; }
-        if (adminActions) adminActions.style.display = 'none';
         return;
     }
     var limits = org.mapLimits || mapLimitsCache;
@@ -507,24 +521,30 @@ function renderProfileOrganizationInfo(org) {
     setProfileModalField('profileOrgName', org.name || '—');
     setProfileStatusBadge(org.status === 'suspended' ? 'suspended' : (org.status === 'pending' ? 'pending' : 'active'));
     setProfileModalField('profileMapObjects', count != null ? String(count) : '—');
-    setProfileModalField('profileMapLimit', '∞');
-    setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', count, 0, true);
+    if (limits && limits.unlocked) {
+        setProfileModalField('profileMapLimit', '∞');
+        setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', count, 0, true);
+    } else if (limits && limits.limit != null) {
+        setProfileModalField('profileMapLimit', String(limits.limit));
+        setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', count, limits.limit, false);
+    } else {
+        setProfileModalField('profileMapLimit', '');
+        setProfileMetricBar('profileMapLimitFill', 'profileMapLimitBar', 0, 0, true);
+    }
     var cu = org.concurrentUsers;
     var cuLimitEl = document.getElementById('profileConcurrentLimit');
-    setProfileModalField('profileConcurrentUsers', String(cu && cu.active != null ? cu.active : 0));
-    if (cuLimitEl) cuLimitEl.textContent = '∞';
-    setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', cu && cu.active, 0, true);
-    if (contactEl) {
-        if (org.contactEmail) {
-            contactEl.textContent = org.contactEmail;
-            contactEl.style.display = '';
-        } else {
-            contactEl.textContent = '';
-            contactEl.style.display = 'none';
-        }
-    }
-    if (adminActions) {
-        adminActions.style.display = isOrgMapAdmin() ? '' : 'none';
+    if (cu && cu.unlimited) {
+        setProfileModalField('profileConcurrentUsers', String(cu.active != null ? cu.active : 0));
+        if (cuLimitEl) cuLimitEl.textContent = '∞';
+        setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', cu.active, 0, true);
+    } else if (cu && cu.limit != null) {
+        setProfileModalField('profileConcurrentUsers', String(cu.active != null ? cu.active : 0));
+        if (cuLimitEl) cuLimitEl.textContent = String(cu.limit);
+        setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', cu.active, cu.limit, false);
+    } else {
+        setProfileModalField('profileConcurrentUsers', '—');
+        if (cuLimitEl) cuLimitEl.textContent = '';
+        setProfileMetricBar('profileConcurrentFill', 'profileConcurrentBar', 0, 0, true);
     }
 }
 
@@ -613,14 +633,14 @@ function openUsersModal() {
     modal.scrollLeft = 0;
     modal.style.display = 'flex';
 
-    loadOrgGeneralPanel();
     loadOrgDisplayPanel();
+    loadOrgSecurityPanel();
     loadOrgEmbedPanel();
     loadOrgZabbixPanel();
 }
 
 function prepareUsersModalLayout() {
-    var ids = ['orgGeneralSection', 'orgDisplaySection', 'orgEmbedSection', 'orgZabbixSection'];
+    var ids = ['orgDisplaySection', 'orgSecuritySection', 'orgEmbedSection', 'orgZabbixSection'];
     var show = isOrgMapAdmin() && !!getApiBase();
     ids.forEach(function(id) {
         var el = document.getElementById(id);
@@ -629,113 +649,24 @@ function prepareUsersModalLayout() {
     updateOrgAdminSettingsVisibility();
 }
 
+var orgSecurityPendingSecret = '';
+
 function isOrgMapAdmin() {
     return !!(currentUser && currentUser.role === 'admin' && currentUser.organizationId);
 }
 
 function updateOrgAdminSettingsVisibility() {
     var wrap = document.getElementById('orgAdminSettings');
-    var general = document.getElementById('orgGeneralSection');
     var display = document.getElementById('orgDisplaySection');
+    var security = document.getElementById('orgSecuritySection');
     var embed = document.getElementById('orgEmbedSection');
     var zabbix = document.getElementById('orgZabbixSection');
     if (!wrap) return;
-    var anyVisible = (general && general.style.display !== 'none') ||
-        (display && display.style.display !== 'none') ||
+    var anyVisible = (display && display.style.display !== 'none') ||
+        (security && security.style.display !== 'none') ||
         (embed && embed.style.display !== 'none') ||
         (zabbix && zabbix.style.display !== 'none');
     wrap.style.display = anyVisible ? 'flex' : 'none';
-}
-
-function loadOrgGeneralPanel() {
-    var section = document.getElementById('orgGeneralSection');
-    if (!section) return;
-    if (!isOrgMapAdmin() || !getApiBase()) {
-        section.style.display = 'none';
-        updateOrgAdminSettingsVisibility();
-        return;
-    }
-    section.style.display = 'block';
-    updateOrgAdminSettingsVisibility();
-    var nameEl = document.getElementById('orgGeneralName');
-    var emailEl = document.getElementById('orgGeneralContactEmail');
-    fetch(getApiBase() + '/api/organizations/me', {
-        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
-    }).then(function(r) { return r.json(); })
-    .then(function(body) {
-        if (body.error) throw new Error(body.error);
-        var org = body.organization || {};
-        if (nameEl) nameEl.value = org.name || '';
-        if (emailEl) emailEl.value = org.contactEmail || '';
-        setOrgSettingsSummaryMeta('orgGeneralSummaryMeta', org.name || '', false);
-        if (currentUser) {
-            currentUser.organization = Object.assign({}, currentUser.organization || {}, org);
-            try {
-                var session = typeof getStoredSession === 'function' ? getStoredSession() : null;
-                if (session) {
-                    session.organization = Object.assign({}, session.organization || {}, org);
-                    if (typeof storeAuthSession === 'function') {
-                        /* keep token; only refresh cached org via sessionStorage */
-                    }
-                    try { sessionStorage.setItem('networkMap_session', JSON.stringify(session)); } catch (eS) {}
-                }
-            } catch (eCache) {}
-        }
-    }).catch(function(e) {
-        if (typeof showWarning === 'function') showWarning(e.message || 'Не удалось загрузить организацию', 'Организация');
-    });
-}
-
-function saveOrgGeneralSettings() {
-    if (!isOrgMapAdmin() || !getApiBase()) return;
-    var nameEl = document.getElementById('orgGeneralName');
-    var emailEl = document.getElementById('orgGeneralContactEmail');
-    var name = nameEl ? String(nameEl.value || '').trim() : '';
-    var contactEmail = emailEl ? String(emailEl.value || '').trim() : '';
-    if (name.length < 2) {
-        if (typeof showWarning === 'function') showWarning('Укажите название организации', 'Организация');
-        return;
-    }
-    fetch(getApiBase() + '/api/organizations/me', {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + getAuthToken()
-        },
-        body: JSON.stringify({ name: name, contactEmail: contactEmail })
-    }).then(function(r) {
-        return r.json().then(function(b) {
-            if (!r.ok) throw new Error((b && b.error) || 'Ошибка сохранения');
-            return b;
-        });
-    }).then(function(body) {
-        var org = body.organization || {};
-        setOrgSettingsSummaryMeta('orgGeneralSummaryMeta', org.name || name, false);
-        if (currentUser) {
-            currentUser.organization = Object.assign({}, currentUser.organization || {}, org);
-            try {
-                var session = typeof getStoredSession === 'function' ? getStoredSession() : null;
-                if (session) {
-                    session.organization = Object.assign({}, session.organization || {}, org);
-                    try { sessionStorage.setItem('networkMap_session', JSON.stringify(session)); } catch (eS) {}
-                }
-            } catch (eCache) {}
-        }
-        renderProfileOrganizationInfo(currentUser && currentUser.organization ? currentUser.organization : org);
-        if (typeof showSuccess === 'function') showSuccess('Организация сохранена');
-    }).catch(function(e) {
-        if (typeof showError === 'function') showError(e.message || 'Не удалось сохранить организацию');
-    });
-}
-
-function openOrgSettingsFromProfile() {
-    closeProfileModal();
-    openUsersModal();
-    var general = document.getElementById('orgGeneralSection');
-    openOrgSettingsCard(general);
-    if (general && typeof general.scrollIntoView === 'function') {
-        try { general.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
-    }
 }
 
 function getOrgCollaboratorCursorStyleValue() {
@@ -794,6 +725,29 @@ function saveOrgCollaboratorCursorStyle() {
     });
 }
 
+function loadOrgSecurityPanel() {
+    var section = document.getElementById('orgSecuritySection');
+    if (!section) return;
+    if (!isOrgMapAdmin() || !getApiBase()) {
+        section.style.display = 'none';
+        updateOrgAdminSettingsVisibility();
+        return;
+    }
+    section.style.display = 'block';
+    updateOrgAdminSettingsVisibility();
+    var statusEl = document.getElementById('orgSecurityStatus');
+    if (statusEl) statusEl.textContent = 'Загрузка…';
+    fetch(getApiBase() + '/api/organizations/me/security', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgSecurityPanel(!!body.twoFactorEnabled);
+    }).catch(function(e) {
+        if (statusEl) statusEl.textContent = e.message || 'Не удалось загрузить настройки';
+    });
+}
+
 function setOrgSettingsSummaryMeta(id, text, isOn) {
     var el = document.getElementById(id);
     if (!el) return;
@@ -803,6 +757,100 @@ function setOrgSettingsSummaryMeta(id, text, isOn) {
 
 function openOrgSettingsCard(sectionEl) {
     if (sectionEl && sectionEl.tagName === 'DETAILS') sectionEl.open = true;
+}
+
+function renderOrgSecurityPanel(enabled) {
+    var statusEl = document.getElementById('orgSecurityStatus');
+    var setupBtn = document.getElementById('org2faSetupBtn');
+    var disableBtn = document.getElementById('org2faDisableBtn');
+    var setupPanel = document.getElementById('orgSecuritySetup');
+    var disablePanel = document.getElementById('org2faDisablePanel');
+    orgSecurityPendingSecret = '';
+    if (setupPanel) setupPanel.style.display = 'none';
+    if (disablePanel) disablePanel.style.display = 'none';
+    if (statusEl) {
+        statusEl.textContent = enabled
+            ? '2FA включена: при входе все пользователи организации вводят код из общего приложения-аутентификатора.'
+            : '2FA выключена.';
+        statusEl.className = 'org-security-status' + (enabled ? ' is-on' : '');
+    }
+    setOrgSettingsSummaryMeta('orgSecuritySummaryMeta', enabled ? '2FA вкл.' : 'выкл.', !!enabled);
+    if (setupBtn) setupBtn.style.display = enabled ? 'none' : 'inline-flex';
+    if (disableBtn) disableBtn.style.display = enabled ? 'inline-flex' : 'none';
+}
+
+function startOrg2faSetup() {
+    if (!getApiBase()) return;
+    fetch(getApiBase() + '/api/organizations/me/security/2fa/setup', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        orgSecurityPendingSecret = body.secret || '';
+        var setupPanel = document.getElementById('orgSecuritySetup');
+        var qr = document.getElementById('org2faQr');
+        var secretEl = document.getElementById('org2faSecret');
+        if (setupPanel) setupPanel.style.display = 'block';
+        openOrgSettingsCard(document.getElementById('orgSecuritySection'));
+        if (qr) {
+            qr.src = body.qrCodeUrl || '';
+            qr.style.display = body.qrCodeUrl ? 'block' : 'none';
+        }
+        if (secretEl) secretEl.textContent = orgSecurityPendingSecret;
+        var codeEl = document.getElementById('org2faEnableCode');
+        if (codeEl) { codeEl.value = ''; codeEl.focus(); }
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Ошибка настройки 2FA');
+    });
+}
+
+function enableOrg2fa() {
+    var code = (document.getElementById('org2faEnableCode') && document.getElementById('org2faEnableCode').value || '').replace(/\s/g, '');
+    if (!orgSecurityPendingSecret || !/^\d{6,8}$/.test(code)) {
+        if (typeof showWarning === 'function') showWarning('Введите код из приложения после сканирования QR', '2FA');
+        return;
+    }
+    fetch(getApiBase() + '/api/organizations/me/security/2fa/enable', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: orgSecurityPendingSecret, totpCode: code })
+    }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+    .then(function(res) {
+        if (!res.ok) throw new Error((res.body && res.body.error) || 'Ошибка');
+        if (typeof showSuccess === 'function') showSuccess('Двухфакторная аутентификация включена');
+        renderOrgSecurityPanel(true);
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось включить 2FA');
+    });
+}
+
+function disableOrg2fa() {
+    var panel = document.getElementById('org2faDisablePanel');
+    if (panel) panel.style.display = 'block';
+    openOrgSettingsCard(document.getElementById('orgSecuritySection'));
+    var codeEl = document.getElementById('org2faDisableCode');
+    if (codeEl) { codeEl.value = ''; codeEl.focus(); }
+}
+
+function confirmDisableOrg2fa() {
+    var code = (document.getElementById('org2faDisableCode') && document.getElementById('org2faDisableCode').value || '').replace(/\s/g, '');
+    if (!/^\d{6,8}$/.test(code)) {
+        if (typeof showWarning === 'function') showWarning('Введите текущий код 2FA', '2FA');
+        return;
+    }
+    fetch(getApiBase() + '/api/organizations/me/security/2fa/disable', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ totpCode: code })
+    }).then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+    .then(function(res) {
+        if (!res.ok) throw new Error((res.body && res.body.error) || 'Ошибка');
+        if (typeof showSuccess === 'function') showSuccess('2FA отключена');
+        renderOrgSecurityPanel(false);
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось отключить 2FA');
+    });
 }
 
 function loadOrgEmbedPanel() {
@@ -1706,12 +1754,36 @@ function setupUsersModalHandlers() {
         });
     }
 
-    var orgGeneralSaveBtn = document.getElementById('orgGeneralSaveBtn');
-    if (orgGeneralSaveBtn) orgGeneralSaveBtn.addEventListener('click', saveOrgGeneralSettings);
-    var profileOpenOrgSettingsBtn = document.getElementById('profileOpenOrgSettingsBtn');
-    if (profileOpenOrgSettingsBtn) profileOpenOrgSettingsBtn.addEventListener('click', openOrgSettingsFromProfile);
+    var org2faSetupBtn = document.getElementById('org2faSetupBtn');
+    if (org2faSetupBtn) org2faSetupBtn.addEventListener('click', startOrg2faSetup);
     var orgCollaboratorCursorStyleSaveBtn = document.getElementById('orgCollaboratorCursorStyleSaveBtn');
     if (orgCollaboratorCursorStyleSaveBtn) orgCollaboratorCursorStyleSaveBtn.addEventListener('click', saveOrgCollaboratorCursorStyle);
+    var org2faEnableBtn = document.getElementById('org2faEnableBtn');
+    if (org2faEnableBtn) org2faEnableBtn.addEventListener('click', enableOrg2fa);
+    var org2faCancelSetupBtn = document.getElementById('org2faCancelSetupBtn');
+    if (org2faCancelSetupBtn) {
+        org2faCancelSetupBtn.addEventListener('click', function() {
+            orgSecurityPendingSecret = '';
+            var setupPanel = document.getElementById('orgSecuritySetup');
+            if (setupPanel) setupPanel.style.display = 'none';
+        });
+    }
+    var org2faDisableBtn = document.getElementById('org2faDisableBtn');
+    if (org2faDisableBtn) org2faDisableBtn.addEventListener('click', disableOrg2fa);
+    var org2faConfirmDisableBtn = document.getElementById('org2faConfirmDisableBtn');
+    if (org2faConfirmDisableBtn) org2faConfirmDisableBtn.addEventListener('click', confirmDisableOrg2fa);
+    var org2faCopySecretBtn = document.getElementById('org2faCopySecretBtn');
+    if (org2faCopySecretBtn) {
+        org2faCopySecretBtn.addEventListener('click', function() {
+            var secret = orgSecurityPendingSecret || (document.getElementById('org2faSecret') && document.getElementById('org2faSecret').textContent) || '';
+            if (!secret) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(secret).then(function() {
+                    if (typeof showSuccess === 'function') showSuccess('Секрет скопирован');
+                }).catch(function() {});
+            }
+        });
+    }
 
     var orgEmbedEnableBtn = document.getElementById('orgEmbedEnableBtn');
     if (orgEmbedEnableBtn) orgEmbedEnableBtn.addEventListener('click', function() { enableOrgEmbed(false); });

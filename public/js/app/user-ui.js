@@ -8,7 +8,16 @@ function checkAuth() {
     }
     
     const session = AuthSystem.getCurrentSession();
-    if (!session) {
+    var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+    // Сессия без токена = «пустая» карта (API 401) и ложный «Готово».
+    if (!session || !token) {
+        try {
+            sessionStorage.removeItem('networkMap_session');
+            sessionStorage.removeItem('networkMap_token');
+            localStorage.removeItem('networkMap_session');
+            localStorage.removeItem('networkMap_token');
+            localStorage.removeItem('networkMap_tokenExpiry');
+        } catch (eClear) {}
         window.location.href = 'auth.html';
         return false;
     }

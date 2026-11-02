@@ -623,6 +623,10 @@
         if (!uid || mountedUids.has(uid)) return;
         if (!shouldMountObject(obj, ctx)) return;
         try {
+            // Bulk-загрузка откладывает label/hover — создаём при первом появлении в viewport.
+            if (typeof global.ensureMapObjectDecorations === 'function') {
+                try { global.ensureMapObjectDecorations(obj); } catch (eDec) {}
+            }
             if (!isGeoObjectOnMap(obj)) global.myMap.geoObjects.add(obj);
             mountedUids.add(uid);
             var type = obj.properties && obj.properties.get('type');

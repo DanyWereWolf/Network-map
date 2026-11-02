@@ -614,7 +614,7 @@ function getCurrentSession() {
 }
 
 function isAuthenticated() {
-    return getCurrentSession() !== null;
+    return getCurrentSession() !== null && !!getAuthToken();
 }
 
 function isAdmin() {

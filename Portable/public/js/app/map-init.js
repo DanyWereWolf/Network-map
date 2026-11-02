@@ -116,10 +116,7 @@ function init() {
     })();
 
     setupMapTilesReady();
-    // Dual: прогрев второго движка + заливка объектов параллельно с loadData
-    if (typeof MapRuntime !== 'undefined' && MapRuntime.scheduleWarmOpposite) {
-        try { MapRuntime.scheduleWarmOpposite(200); } catch (eWarmInit) {}
-    }
+    // Прогрев opposite — только после markMapDataReady (map-loading.js), чтобы не конкурировать с первой загрузкой.
 }
 
 /** On-prem (mapEngine=leaflet): доступны и Яндекс, и ортофото — независимо. */
@@ -488,17 +485,9 @@ function setupEventListeners() {
                 body: JSON.stringify({ mapStart: { center: [lat, lon], zoom: zoom } })
             }).then(function(r) {
                 if (!r.ok) throw new Error('Ошибка сохранения');
-                var forTeam = currentUser && currentUser.role === 'admin';
-                if (typeof showInfo === 'function') {
-                    showInfo(
-                        forTeam
-                            ? 'Вид сохранён. Карта будет открываться здесь у всей команды.'
-                            : 'Текущий вид сохранён. При следующем открытии карта откроется здесь.',
-                        'Расположение карты'
-                    );
-                }
+                if (typeof showInfo === 'function') showInfo('Текущий вид сохранён. При следующем открытии карта откроется здесь.', 'Начальная точка');
             }).catch(function() {
-                if (typeof showWarning === 'function') showWarning('Не удалось сохранить расположение карты.', 'Ошибка');
+                if (typeof showWarning === 'function') showWarning('Не удалось сохранить начальную позицию.', 'Ошибка');
             });
         });
     }
@@ -750,7 +739,7 @@ function setupEventListeners() {
         }
     };
 
-    setupMapSearch();
+    if (typeof setupMapSearch === 'function') setupMapSearch();
 
     initTheme();
 }

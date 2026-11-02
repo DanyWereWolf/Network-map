@@ -60,8 +60,21 @@
     function fetchMapRegions() {
         var base = apiBase();
         if (!base) return Promise.resolve(null);
+        var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+        if (!token) {
+            return Promise.reject(new Error('Нет токена авторизации — войдите снова'));
+        }
         return fetch(base.replace(/\/$/, '') + '/api/map-regions', { headers: getAuthHeaders() })
-            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (r) {
+                if (r.status === 401) {
+                    if (typeof handleSessionExpired === 'function') {
+                        handleSessionExpired('Сессия истекла. Войдите снова.');
+                    }
+                    throw new Error('Сессия истекла. Войдите снова.');
+                }
+                if (!r.ok) return null;
+                return r.json();
+            })
             .then(function (body) {
                 if (body && Array.isArray(body.regions)) {
                     _regionsCache = body;
@@ -74,34 +87,78 @@
         return _regionsCache;
     }
 
+    function enhanceDynamicModal(modal) {
+        if (!modal) return;
+        if (typeof window.refreshModalGlass === 'function') {
+            try { window.refreshModalGlass(modal); } catch (eGlass) {}
+        } else if (typeof window.initPanelPlexusCanvases === 'function') {
+            try { window.initPanelPlexusCanvases(modal); } catch (ePlexus) {}
+        }
+    }
+
     function ensurePickerDom() {
         var el = document.getElementById('mapRegionPickerModal');
         if (el) return el;
         el = document.createElement('div');
         el.id = 'mapRegionPickerModal';
-        el.className = 'modal map-region-picker-modal';
+        el.className = 'modal modal--centered map-region-picker-modal';
         el.setAttribute('role', 'dialog');
         el.setAttribute('aria-modal', 'true');
         el.setAttribute('aria-labelledby', 'mapRegionPickerTitle');
         el.style.display = 'none';
         el.innerHTML =
-            '<div class="modal-content map-region-picker-content">' +
-            '  <div class="modal-header"><h2 id="mapRegionPickerTitle">Выберите регион</h2></div>' +
-            '  <div class="modal-body">' +
-            '    <p class="map-region-picker-hint">Карта загружается по регионам (до ~10&nbsp;000 объектов в каждом). Выберите регион для работы.</p>' +
-            '    <div id="mapRegionPickerList" class="map-region-picker-list" role="listbox" aria-label="Регионы карты"></div>' +
-            '    <div class="map-region-picker-create" id="mapRegionPickerCreateWrap" hidden>' +
-            '      <input type="text" id="mapRegionPickerNewName" class="modal-input" maxlength="80" placeholder="Имя нового региона" />' +
-            '      <button type="button" id="mapRegionPickerCreateBtn" class="btn-secondary">Создать</button>' +
+            '<div class="modal-content panel-glass panel-glass--lite map-region-picker-content">' +
+            '  <div class="panel-glass-bg" aria-hidden="true"><div class="panel-glass-gradient"></div></div>' +
+            '  <div class="modal-header map-region-picker-header">' +
+            '    <div class="map-region-picker-header__main">' +
+            '      <div class="map-region-picker-header__icon" aria-hidden="true">' +
+            '        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '          <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>' +
+            '        </svg>' +
+            '      </div>' +
+            '      <div class="map-region-picker-header__text">' +
+            '        <h2 id="mapRegionPickerTitle">Выберите регион</h2>' +
+            '        <p class="map-region-picker-header__sub" id="mapRegionPickerSub">Карта загружается по регионам</p>' +
+            '      </div>' +
             '    </div>' +
             '  </div>' +
-            '  <div class="modal-footer map-region-picker-actions">' +
-            '    <label class="map-region-picker-default"><input type="checkbox" id="mapRegionPickerSetDefault" /> Сделать выбранный регионом по умолчанию</label>' +
-            '    <button type="button" id="mapRegionPickerOpenBtn" class="btn-primary" disabled>Открыть</button>' +
+            '  <div class="modal-body map-region-picker-body">' +
+            '    <p class="map-region-picker-hint">До ~10&nbsp;000 объектов в каждом. Выберите регион — карта откроется только с его данными.</p>' +
+            '    <div id="mapRegionPickerList" class="map-region-picker-list" role="listbox" aria-label="Регионы карты"></div>' +
+            '    <div class="map-region-picker-create" id="mapRegionPickerCreateWrap" hidden>' +
+            '      <div class="map-region-picker-create__label">Новый регион</div>' +
+            '      <div class="map-region-picker-create__row">' +
+            '        <input type="text" id="mapRegionPickerNewName" class="form-input" maxlength="80" placeholder="Название региона" autocomplete="off" />' +
+            '        <button type="button" id="mapRegionPickerCreateBtn" class="btn-secondary map-region-picker-create__btn">Создать</button>' +
+            '      </div>' +
+            '    </div>' +
+            '    <label class="map-region-picker-default" title="При следующем входе этот регион откроется сразу">' +
+            '      <input type="checkbox" id="mapRegionPickerSetDefault" />' +
+            '      <span class="map-region-picker-default__box" aria-hidden="true">' +
+            '        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>' +
+            '      </span>' +
+            '      <span class="map-region-picker-default__text">' +
+            '        <span class="map-region-picker-default__title">Регион по умолчанию</span>' +
+            '        <span class="map-region-picker-default__hint">открывать выбранный при входе</span>' +
+            '      </span>' +
+            '    </label>' +
+            '  </div>' +
+            '  <div class="map-region-picker-actions">' +
+            '    <button type="button" id="mapRegionPickerOpenBtn" class="btn-primary map-region-picker-open" disabled>' +
+            '      <span>Открыть карту</span>' +
+            '      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 5l7 7-7 7"></path></svg>' +
+            '    </button>' +
             '  </div>' +
             '</div>';
         document.body.appendChild(el);
         var selectedId = null;
+        function pluralObjects(n) {
+            var mod10 = n % 10;
+            var mod100 = n % 100;
+            if (mod10 === 1 && mod100 !== 11) return n + ' объект';
+            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return n + ' объекта';
+            return n + ' объектов';
+        }
         function renderList(payload) {
             var list = document.getElementById('mapRegionPickerList');
             if (!list) return;
@@ -110,22 +167,52 @@
             var defId = payload && payload.defaultMapRegionId;
             if (!selectedId && defId) selectedId = String(defId);
             if (!selectedId && regions[0]) selectedId = String(regions[0].id);
-            regions.forEach(function (r) {
+            regions.forEach(function (r, idx) {
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'map-region-picker-item' + (String(r.id) === String(selectedId) ? ' is-selected' : '');
                 btn.setAttribute('role', 'option');
                 btn.setAttribute('aria-selected', String(r.id) === String(selectedId) ? 'true' : 'false');
                 btn.dataset.regionId = r.id;
+                btn.style.setProperty('--item-i', String(idx));
                 var count = r.objectCount != null ? r.objectCount : 0;
-                var warn = r.softWarn ? ' <span class="map-region-picker-warn">⚠️</span>' : '';
-                btn.innerHTML = '<span class="map-region-picker-name"></span><span class="map-region-picker-count">' + count + ' объект.</span>' + warn;
+                var isDefault = defId && String(r.id) === String(defId);
+                var badges = '';
+                if (isDefault) {
+                    badges += '<span class="map-region-picker-badge map-region-picker-badge--default">по умолчанию</span>';
+                }
+                if (r.softWarn) {
+                    badges += '<span class="map-region-picker-badge map-region-picker-badge--warn">почти лимит</span>';
+                    btn.classList.add('map-region-picker-item--warn');
+                }
+                btn.innerHTML =
+                    '<span class="map-region-picker-item__icon" aria-hidden="true">' +
+                    '  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                    '    <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>' +
+                    '  </svg>' +
+                    '</span>' +
+                    '<span class="map-region-picker-item__info">' +
+                    '  <span class="map-region-picker-name"></span>' +
+                    '  <span class="map-region-picker-meta-row">' +
+                    '    <span class="map-region-picker-count"></span>' +
+                    badges +
+                    '  </span>' +
+                    '</span>' +
+                    '<span class="map-region-picker-item__check" aria-hidden="true">' +
+                    '  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>' +
+                    '</span>';
                 btn.querySelector('.map-region-picker-name').textContent = r.name || 'Регион';
+                btn.querySelector('.map-region-picker-count').textContent = pluralObjects(count);
                 btn.addEventListener('click', function () {
                     selectedId = String(r.id);
                     renderList(payload);
                     var openBtn = document.getElementById('mapRegionPickerOpenBtn');
                     if (openBtn) openBtn.disabled = !selectedId;
+                });
+                btn.addEventListener('dblclick', function () {
+                    selectedId = String(r.id);
+                    var openBtn = document.getElementById('mapRegionPickerOpenBtn');
+                    if (openBtn && !openBtn.disabled) openBtn.click();
                 });
                 list.appendChild(btn);
             });
@@ -202,14 +289,24 @@
         }
         var title = document.getElementById('mapRegionPickerTitle');
         if (title) title.textContent = opts.title || 'Выберите регион';
+        var sub = document.getElementById('mapRegionPickerSub');
+        if (sub) {
+            sub.textContent = opts.subtitle || 'Карта загружается по регионам';
+        }
         if (payload && payload.defaultMapRegionId) el._setSelectedId(String(payload.defaultMapRegionId));
         el._renderList(payload || { regions: [] });
+        global._mapRegionPickerAwaiting = true;
+        if (typeof setMapLoadingOverlayText === 'function') {
+            try { setMapLoadingOverlayText('Выбор региона…'); } catch (eTxt) {}
+        }
         el.style.display = 'flex';
         el.setAttribute('aria-hidden', 'false');
+        enhanceDynamicModal(el);
     }
 
     function hidePicker() {
         var el = document.getElementById('mapRegionPickerModal');
+        global._mapRegionPickerAwaiting = false;
         if (!el) return;
         el.style.display = 'none';
         el.setAttribute('aria-hidden', 'true');
@@ -217,9 +314,20 @@
 
     /** Обязательный выбор региона перед загрузкой карты. */
     function chooseMapRegionBeforeLoad() {
+        var existing = getCurrentMapRegionId();
+        if (existing) return Promise.resolve(existing);
+        var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+        if (!token) {
+            return Promise.reject(new Error('Требуется вход в аккаунт'));
+        }
         return fetchMapRegions().then(function (payload) {
             if (!payload || !Array.isArray(payload.regions) || !payload.regions.length) {
                 return Promise.reject(new Error('Не удалось получить список регионов'));
+            }
+            if (payload.regions.length === 1 && payload.regions[0] && payload.regions[0].id) {
+                var onlyId = String(payload.regions[0].id);
+                setCurrentMapRegionId(onlyId);
+                return onlyId;
             }
             return new Promise(function (resolve) {
                 _pickerResolve = resolve;
@@ -241,7 +349,9 @@
                 break;
             }
         }
-        chip.textContent = name;
+        var label = chip.querySelector('.map-region-current-chip__label');
+        if (label) label.textContent = name;
+        else chip.textContent = name;
         chip.title = 'Текущий регион: ' + name + ' (нажмите, чтобы сменить)';
         chip.hidden = !id;
     }
@@ -256,7 +366,7 @@
                     }
                     switchToMapRegion(id).then(function () { resolve(true); }).catch(function () { resolve(false); });
                 };
-                showPicker(payload, { title: 'Сменить регион' });
+                showPicker(payload, { title: 'Сменить регион', subtitle: 'Откроется карта выбранного региона' });
             });
         });
     }
@@ -406,25 +516,56 @@
             if (existing) existing.remove();
             var modal = document.createElement('div');
             modal.id = 'mapRegionMoveModal';
-            modal.className = 'modal';
-            modal.style.display = 'flex';
+            modal.className = 'modal modal--centered map-region-move-modal';
+            modal.style.display = 'none';
             modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            modal.setAttribute('aria-labelledby', 'mapRegionMoveTitle');
             var options = others.map(function (r) {
                 return '<option value="' + String(r.id).replace(/"/g, '&quot;') + '">' +
                     String(r.name || 'Регион').replace(/</g, '&lt;') +
                     ' (' + (r.objectCount || 0) + ')</option>';
             }).join('');
             modal.innerHTML =
-                '<div class="modal-content">' +
-                '  <div class="modal-header"><h2>Перенести в регион</h2><span class="close" id="mapRegionMoveClose">&times;</span></div>' +
-                '  <div class="modal-body"><p>Выделено: ' + selectedObjects.length + '</p>' +
-                '  <label>Регион назначения<select id="mapRegionMoveSelect" class="modal-input">' + options + '</select></label></div>' +
-                '  <div class="modal-footer"><button type="button" class="btn-secondary" id="mapRegionMoveCancel">Отмена</button>' +
-                '  <button type="button" class="btn-primary" id="mapRegionMoveOk">Перенести</button></div>' +
+                '<div class="modal-content panel-glass panel-glass--lite map-region-move-content">' +
+                '  <div class="panel-glass-bg" aria-hidden="true"><div class="panel-glass-gradient"></div></div>' +
+                '  <div class="modal-header map-region-picker-header">' +
+                '    <div class="map-region-picker-header__main">' +
+                '      <div class="map-region-picker-header__icon" aria-hidden="true">' +
+                '        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                '          <path d="M5 12h14"></path><path d="M13 5l7 7-7 7"></path>' +
+                '        </svg>' +
+                '      </div>' +
+                '      <div class="map-region-picker-header__text">' +
+                '        <h2 id="mapRegionMoveTitle">Перенести в регион</h2>' +
+                '        <p class="map-region-picker-header__sub">Выделено объектов: ' + selectedObjects.length + '</p>' +
+                '      </div>' +
+                '    </div>' +
+                '    <span class="close" id="mapRegionMoveClose" role="button" tabindex="0" aria-label="Закрыть">&times;</span>' +
+                '  </div>' +
+                '  <div class="modal-body map-region-picker-body">' +
+                '    <div class="form-group">' +
+                '      <label for="mapRegionMoveSelect">Регион назначения</label>' +
+                '      <select id="mapRegionMoveSelect" class="form-select">' + options + '</select>' +
+                '    </div>' +
+                '    <div class="map-region-picker-actions map-region-picker-actions--end">' +
+                '      <button type="button" class="btn-secondary" id="mapRegionMoveCancel">Отмена</button>' +
+                '      <button type="button" class="btn-primary" id="mapRegionMoveOk">Перенести</button>' +
+                '    </div>' +
+                '  </div>' +
                 '</div>';
             document.body.appendChild(modal);
             function close() { modal.remove(); }
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) close();
+            });
             document.getElementById('mapRegionMoveClose').onclick = close;
+            document.getElementById('mapRegionMoveClose').addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    close();
+                }
+            });
             document.getElementById('mapRegionMoveCancel').onclick = close;
             document.getElementById('mapRegionMoveOk').onclick = function () {
                 var sel = document.getElementById('mapRegionMoveSelect');
@@ -436,12 +577,23 @@
                     }
                 });
             };
+            modal.style.display = 'flex';
+            enhanceDynamicModal(modal);
         });
     }
 
     function initMapRegionUi() {
         var chip = document.getElementById('mapRegionCurrentChip');
         if (chip) {
+            if (!chip.querySelector('.map-region-current-chip__icon')) {
+                chip.innerHTML =
+                    '<span class="map-region-current-chip__icon" aria-hidden="true">' +
+                    '  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                    '    <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>' +
+                    '  </svg>' +
+                    '</span>' +
+                    '<span class="map-region-current-chip__label">Регион</span>';
+            }
             chip.addEventListener('click', function () {
                 switchMapRegionInteractive();
             });

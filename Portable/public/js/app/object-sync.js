@@ -653,6 +653,10 @@ function saveLinkedMapObjects(objectsToSave) {
 
 function pushSaveDataToSync(opts) {
     opts = opts || {};
+    // Пока карта ещё грузится/apply/смена подложки — полный state будет урезанным.
+    if (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) return;
+    if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress) return;
+    try { if (window.__volsmapRuntimeSwitching) return; } catch (eSw) {}
     // add/remove уже ушли как op — не слать полный state (у других map_refresh = пересборка карты).
     if (opts.addObject || (opts.removeUniqueIds && opts.removeUniqueIds.length) || opts.removeObject) {
         return;

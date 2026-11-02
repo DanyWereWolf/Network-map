@@ -631,6 +631,12 @@
 
     function sendState(data) {
         if (!data) return;
+        // Не заливать неполный снимок во время первичной загрузки / смены подложки.
+        try {
+            if (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) return;
+            if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress) return;
+            if (window.__volsmapRuntimeSwitching) return;
+        } catch (eSkip) {}
         pendingState = data;
         if (sendTimer) clearTimeout(sendTimer);
         sendTimer = setTimeout(function flushSendState() {
@@ -638,6 +644,11 @@
             var toSend = pendingState;
             pendingState = null;
             if (!toSend) return;
+            try {
+                if (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) return;
+                if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress) return;
+                if (window.__volsmapRuntimeSwitching) return;
+            } catch (eSkip2) {}
             if (lastOpSendTime && (Date.now() - lastOpSendTime) < SUPPRESS_STATE_AFTER_OP_MS) {
                 pendingState = toSend;
                 var wait = SUPPRESS_STATE_AFTER_OP_MS - (Date.now() - lastOpSendTime);

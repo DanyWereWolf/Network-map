@@ -647,13 +647,17 @@ app.get('/api/map', (req, res) => {
         }
         // Живое sync-состояние приоритетнее store: иначе reload до debounce (1.5с)
         // отдаёт карту без только что добавленного кабеля.
+        // Не вызываем getSyncStateForOrg на cold path — он deepClone всей org-карты (~21k).
         var full = [];
         if (orgId) {
             var live = null;
             try {
-                live = getSyncStateForOrg(orgId, { forceFromDb: false });
+                var syncKey = normalizeSyncOrgId(orgId);
+                if (syncKey && syncCurrentStateByOrg[syncKey] && Array.isArray(syncCurrentStateByOrg[syncKey].data)) {
+                    live = syncCurrentStateByOrg[syncKey];
+                }
             } catch (eLive) { live = null; }
-            if (live && Array.isArray(live.data) && live.data.length) {
+            if (live && Array.isArray(live.data)) {
                 full = live.data;
             } else {
                 full = db.getMapData(orgId) || [];

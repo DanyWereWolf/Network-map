@@ -116,10 +116,7 @@ function init() {
     })();
 
     setupMapTilesReady();
-    // Dual: прогрев второго движка + заливка объектов параллельно с loadData
-    if (typeof MapRuntime !== 'undefined' && MapRuntime.scheduleWarmOpposite) {
-        try { MapRuntime.scheduleWarmOpposite(200); } catch (eWarmInit) {}
-    }
+    // Прогрев opposite — только после markMapDataReady (map-loading.js), чтобы не конкурировать с первой загрузкой.
 }
 
 /** On-prem (mapEngine=leaflet): доступны и Яндекс, и ортофото — независимо. */
@@ -742,7 +739,7 @@ function setupEventListeners() {
         }
     };
 
-    setupMapSearch();
+    if (typeof setupMapSearch === 'function') setupMapSearch();
 
     initTheme();
 }

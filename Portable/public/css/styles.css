@@ -1,9 +1,9 @@
-/* ==================== CSS Переменные (тема) ==================== */
+﻿/* ==================== CSS ���������� (����) ==================== */
 :root {
     --font-sans: 'IBM Plex Sans', 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-display: 'Sora', 'IBM Plex Sans', sans-serif;
 
-    /* Светлая тема — как на главном лендинге */
+    /* ������� ���� � ��� �� ������� �������� */
     --bg-primary: #e8eef3;
     --bg-secondary: #ffffff;
     --bg-tertiary: #f1f5f9;
@@ -75,7 +75,7 @@
     --panel-glass-blur-sm: blur(12px) saturate(1.1);
 }
 
-/* Тёмная тема */
+/* Ҹ���� ���� */
 [data-theme="dark"] {
     --bg-primary: #0b1526;
     --bg-secondary: #122033;
@@ -120,7 +120,7 @@
     --edit-mode-accent-soft: rgba(251, 146, 60, 0.2);
 }
 
-/* Плавная смена светлой / тёмной темы */
+/* ������� ����� ������� / ����� ���� */
 @media (prefers-reduced-motion: no-preference) {
     html.theme-changing,
     html.theme-changing *:not([class*="ymaps"]):not(canvas),
@@ -133,12 +133,12 @@
     }
 }
 
-/* ==================== РћСЃРЅРѕРІРЅС‹Рµ СЃС‚РёР»Рё ==================== */
+/* ==================== Основные стили ==================== */
 * {
     box-sizing: border-box;
 }
 
-/* Р‘РµР· СЃРєСЂРѕР»Р»Р° РєРѕСЂРЅСЏ: РёРЅР°С‡Рµ РЅР° iOS С€Р°РїРєР° В«РїР»С‹РІС‘С‚В» РїСЂРё overscroll Рё СЃРјРµРЅРµ РІС‹СЃРѕС‚С‹ РїР°РЅРµР»Рё Р±СЂР°СѓР·РµСЂР° */
+/* Без скролла корня: иначе на iOS шапка «плывёт» при overscroll и смене высоты панели браузера */
 html {
     height: 100%;
     overflow: hidden;
@@ -161,7 +161,7 @@ body {
         color var(--theme-transition-duration) var(--theme-transition-ease);
 }
 
-/* РЎС‚РµРєР»Рѕ + РіСЂР°РґРёРµРЅС‚/plexus РЅР° РїР°РЅРµР»СЏС… РєР°СЂС‚С‹ */
+/* Стекло + градиент/plexus на панелях карты */
 .panel-glass {
     position: relative;
     overflow: hidden;
@@ -209,7 +209,7 @@ body {
     z-index: 1;
 }
 
-/* РЎС‚РµРєР»СЏРЅРЅС‹Рµ РјРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° */
+/* Стеклянные модальные окна */
 .modal.modal--centered,
 .modal.help-modal {
     align-items: center;
@@ -259,7 +259,7 @@ body {
     background: transparent;
 }
 
-/* Р‘Р°Р»СѓРЅС‹ РІС‹Р±РѕСЂР° СѓР·Р»Р° / ONU / OLT */
+/* Балуны выбора узла / ONU / OLT */
 .modal-content.node-selection-modal-content .node-selection-balloon.panel-glass,
 .modal-content.node-selection-modal-content .network-map-balloon.panel-glass {
     background: var(--panel-glass-bg) !important;
@@ -306,7 +306,7 @@ body {
     background: color-mix(in srgb, var(--panel-glass-surface) 85%, transparent);
 }
 
-/* ==================== Р’РµСЂС…РЅСЏСЏ РїР°РЅРµР»СЊ ==================== */
+/* ==================== Верхняя панель ==================== */
 .top-header {
     background: var(--header-bg);
     color: white;
@@ -565,7 +565,7 @@ body {
     }
 }
 
-/* ==================== Поиск по карте ==================== */
+/* ==================== ����� �� ����� ==================== */
 .header-search {
     flex: 1;
     max-width: 420px;
@@ -751,7 +751,7 @@ body {
     overflow: hidden;
 }
 
-/* ==================== Р‘РѕРєРѕРІР°СЏ РїР°РЅРµР»СЊ ==================== */
+/* ==================== Боковая панель ==================== */
 .sidebar {
     position: relative;
     left: 0;
@@ -781,7 +781,7 @@ body {
     overflow: visible;
 }
 
-/* РљРЅРѕРїРєР°-Р·Р°РєР»Р°РґРєР° вЂ” РІ .container, РЅР° РїСЂР°РІРѕРј РєСЂР°СЋ СЃР°Р№РґР±Р°СЂР° */
+/* Кнопка-закладка — в .container, на правом краю сайдбара */
 .sidebar-toggle {
     position: absolute;
     top: 12px;
@@ -884,7 +884,7 @@ body.sidebar-collapsed .sidebar-content {
 
 body.sidebar-collapsed .map-area-wrapper,
 body.properties-hidden .map-area-wrapper {
-    /* map is flex:1 — no fixed width needed */
+    /* map is flex:1 � no fixed width needed */
 }
 
 body.info-dock-collapsed .map-area-wrapper {
@@ -936,7 +936,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 }
 
 
-/* РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ С‚РµРјС‹ */
+/* Переключатель темы */
 .theme-toggle {
     position: relative;
     overflow: hidden;
@@ -954,7 +954,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     display: block !important;
 }
 
-/* ==================== Панель пользователя ==================== */
+/* ==================== ������ ������������ ==================== */
 .user-panel {
     display: flex;
     align-items: center;
@@ -1123,7 +1123,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     background: rgba(255, 255, 255, 0.18);
 }
 
-/* ==================== РЎРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ ==================== */
+/* ==================== Список пользователей ==================== */
 .users-actions {
     margin-bottom: 16px;
 }
@@ -1561,7 +1561,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     border: 1px solid var(--border-color);
 }
 
-/* РќР°РїРѕРјРёРЅР°РЅРёРµ Рѕ РїРѕС‡С‚Рё РёСЃС‡РµСЂРїР°РЅРЅРѕРј Р»РёРјРёС‚Рµ РѕР±СЉРµРєС‚РѕРІ (в‰Ґ98%) */
+/* Напоминание о почти исчерпанном лимите объектов (≥98%) */
 .map-limit-banner {
     display: flex;
     align-items: center;
@@ -1642,7 +1642,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     font-size: 13px;
 }
 
-/* ==================== РЎРµРєС†РёСЏ Р·Р°СЏРІРѕРє РЅР° СЂРµРіРёСЃС‚СЂР°С†РёСЋ ==================== */
+/* ==================== Секция заявок на регистрацию ==================== */
 .pending-users-section {
     background: color-mix(in srgb, #fef3c7 75%, var(--panel-glass-surface));
     border: 1px solid #fde68a;
@@ -1760,7 +1760,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     color: #d97706;
 }
 
-/* ==================== Журнал изменений ==================== */
+/* ==================== ������ ��������� ==================== */
 .user-menu-btn {
     position: relative;
     overflow: visible;
@@ -2383,7 +2383,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent-warning) 70%, transparent);
 }
 
-/* Карточка: режим + фильтр */
+/* ��������: ����� + ������ */
 .sidebar-controls-card {
     --sidebar-card-accent: var(--accent-primary);
     --sidebar-card-accent-hi: color-mix(in srgb, var(--accent-primary) 65%, #fff);
@@ -2788,7 +2788,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     line-height: 1.3;
 }
 
-/* Панель настроек приложения */
+/* ������ �������� ���������� */
 .app-settings-section-desc {
     margin: 0 0 10px;
     font-size: 0.6875rem;
@@ -2832,7 +2832,7 @@ html.perf-plexus-off .auth-bg-plexus {
 }
 
 
-/* Карточки выбора в настройках */
+/* �������� ������ � ���������� */
 .settings-choice-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3178,7 +3178,7 @@ html.perf-plexus-off .auth-bg-plexus {
     flex: 0 0 auto;
 }
 
-/* Приветственное окно (первый вход, центр экрана) */
+/* �������������� ���� (������ ����, ����� ������) */
 .welcome-modal {
     z-index: 30000;
     align-items: center;
@@ -3774,7 +3774,7 @@ html.perf-plexus-off .auth-bg-plexus {
     color: var(--text-secondary, #64748b);
 }
 
-/* Загрузка трассы — полный экран панели, в духе входа / карты */
+/* �������� ������ � ������ ����� ������, � ���� ����� / ����� */
 .fiber-trace-loading-overlay {
     position: relative;
     flex: 1;
@@ -4166,7 +4166,7 @@ html[data-theme="light"] .fiber-trace-loading-bar,
     transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Пока тяжёлая отрисовка — hint «дышит», чтобы было видно что процесс идёт */
+/* ���� ������ ��������� � hint ������, ����� ���� ����� ��� ������� ��� */
 .fiber-trace-loading-overlay[data-trace-busy="1"] .fiber-trace-loading-hint {
     animation: fiberTraceHintPulse 1.1s ease-in-out infinite;
 }
@@ -4621,7 +4621,7 @@ html[data-theme="light"] .fiber-trace-loading-back.trace-back-btn:focus-visible,
     letter-spacing: 0.01em;
 }
 
-/* ==================== РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ СЂРµР¶РёРјРѕРІ ==================== */
+/* ==================== Переключатель режимов ==================== */
 .control-section {
     margin-bottom: 12px;
 }
@@ -4718,7 +4718,7 @@ button.is-edit-locked {
     line-height: 1.2;
 }
 
-/* ==================== РђРєРєРѕСЂРґРµРѕРЅ ==================== */
+/* ==================== Аккордеон ==================== */
 .accordion-section {
     margin-bottom: 10px;
     background: var(--panel-glass-surface);
@@ -4881,7 +4881,7 @@ button.is-edit-locked {
     transform: translateY(0);
 }
 
-/* Dropdown экспорта не должен обрезаться границами секции "Файлы". */
+/* Dropdown �������� �� ������ ���������� ��������� ������ "�����". */
 .accordion-section--files.active {
     overflow: visible;
 }
@@ -4898,7 +4898,7 @@ button.is-edit-locked {
     padding: 12px;
 }
 
-/* Р¤РёР»СЊС‚СЂ РєР°СЂС‚С‹ */
+/* Фильтр карты */
 #mapfilter-content.accordion-content,
 .accordion-section.active #mapfilter-content.accordion-content {
     padding: 0;
@@ -5160,7 +5160,7 @@ button.is-edit-locked {
 .map-filter-chip--teal { --filter-tone: #14b8a6; }
 .map-filter-chip--amber { --filter-tone: #f59e0b; }
 
-/* РЎРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ СЃРѕ СЃС‚Р°СЂС‹РјРё РєР»Р°СЃСЃР°РјРё (РјРѕР±РёР»СЊРЅС‹Рµ РїРµСЂРµРѕРїСЂРµРґРµР»РµРЅРёСЏ) */
+/* Совместимость со старыми классами (мобильные переопределения) */
 .map-filter-checkboxes {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -5180,7 +5180,7 @@ button.is-edit-locked {
     margin: 0;
 }
 
-/* РџР°РЅРµР»СЊ РґРѕР±Р°РІР»РµРЅРёСЏ РѕР±СЉРµРєС‚РѕРІ */
+/* Панель добавления объектов */
 .objects-panel-hint {
     margin: 0 0 12px;
     font-size: 0.75rem;
@@ -5629,7 +5629,7 @@ button.is-edit-locked {
 }
 
 .object-placement-coords-summary::before {
-    content: '▸';
+    content: '?';
     font-size: 0.625rem;
     color: var(--text-muted);
     margin-right: -4px;
@@ -5694,7 +5694,7 @@ button.is-edit-locked {
 }
 
 .object-settings-advanced-summary::before {
-    content: '▸';
+    content: '?';
     font-size: 0.625rem;
     color: var(--text-muted);
     transition: transform 0.15s ease;
@@ -5755,7 +5755,7 @@ button.is-edit-locked {
     gap: 8px;
 }
 
-/* ==================== Р¤РѕСЂРјС‹ ==================== */
+/* ==================== Формы ==================== */
 .form-group {
     margin-bottom: 12px;
 }
@@ -5774,7 +5774,7 @@ button.is-edit-locked {
     letter-spacing: 0.4px;
 }
 
-/* РџРѕР»Рµ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊ/РјРѕРґРµР»СЊ: input + РєРЅРѕРїРєР° В«РґРѕР±Р°РІРёС‚СЊВ» */
+/* Поле производитель/модель: input + кнопка «добавить» */
 .device-field-row {
     display: flex;
     gap: 8px;
@@ -5812,7 +5812,7 @@ button.is-edit-locked {
     color: var(--accent-primary);
 }
 
-/* Р’С‹РїР°РґР°СЋС‰РёР№ СЃРїРёСЃРѕРє СЃ РїРѕРёСЃРєРѕРј (РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊ / РјРѕРґРµР»СЊ) */
+/* Выпадающий список с поиском (производитель / модель) */
 .device-combobox {
     position: relative;
     width: 100%;
@@ -5986,7 +5986,7 @@ textarea.form-input {
     cursor: pointer;
 }
 
-/* ==================== РљРЅРѕРїРєРё ==================== */
+/* ==================== Кнопки ==================== */
 button {
     font-family: inherit;
 }
@@ -6065,7 +6065,7 @@ button {
     transform: translateY(-2px);
 }
 
-/* РљРѕРјРїР°РєС‚РЅС‹Рµ РєРЅРѕРїРєРё РІ С‚СѓР»Р±Р°СЂР°С… (РєР°Р±РµР»СЊ, РєСЂРѕСЃСЃ) */
+/* Компактные кнопки в тулбарах (кабель, кросс) */
 .btn-inline,
 .cables-panel .btn-secondary.btn-inline,
 .cable-fiber-settings-toolbar .btn-primary,
@@ -6088,7 +6088,7 @@ button {
     flex-shrink: 0;
 }
 
-/* РљРЅРѕРїРєРё РІ РїР°РЅРµР»СЏС… Р¤Р°Р№Р»С‹, Р РµР·РµСЂРІРЅС‹Рµ РєРѕРїРёРё, Р¤РёР»СЊС‚СЂ РєР°СЂС‚С‹ вЂ” С‡СѓС‚СЊ Р·Р°РјРµС‚РЅРµРµ */
+/* Кнопки в панелях Файлы, Резервные копии, Фильтр карты — чуть заметнее */
 #files-content .btn-secondary,
 #backups-content .btn-secondary,
 #backups-content .backups-refresh-btn,
@@ -6296,7 +6296,7 @@ button {
     border-color: #475569;
 }
 
-/* ==================== РљР°Р±РµР»Рё (СЃР°Р№РґР±Р°СЂ) ==================== */
+/* ==================== Кабели (сайдбар) ==================== */
 .cables-panel {
     display: flex;
     flex-direction: column;
@@ -6331,7 +6331,7 @@ button {
     border: 0;
 }
 
-/* вЂ”вЂ” Р’РћР›РЎ: РїСЂРѕРєР»Р°РґРєР°, РїР°Р»РёС‚СЂР° Р¶РёР», РЅР°СЃС‚СЂРѕР№РєРё РІ РєР°СЂС‚РѕС‡РєР°С… вЂ”вЂ” */
+/* —— ВОЛС: прокладка, палитра жил, настройки в карточках —— */
 .cable-fiber-config-card {
     padding: 10px 12px;
     margin-bottom: 4px;
@@ -6872,7 +6872,7 @@ button {
     z-index: 3600;
 }
 
-/* РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ РїР°Р»РёС‚СЂС‹ Р¶РёР» вЂ” РѕР±С‰Р°СЏ СЂР°Р·РјРµС‚РєР° .modal + .panel-glass */
+/* Модальное окно палитры жил — общая разметка .modal + .panel-glass */
 .fiber-palette-modal-content {
     width: min(560px, 100%);
     max-width: 560px;
@@ -7115,7 +7115,7 @@ button {
     border-color: transparent;
 }
 
-/* ==================== Р›РµРіРµРЅРґР° ==================== */
+/* ==================== Легенда ==================== */
 .legend-panel {
     padding-top: 2px;
 }
@@ -7208,7 +7208,7 @@ button {
     vertical-align: middle;
 }
 
-/* ==================== РЎС‚Р°С‚РёСЃС‚РёРєР° ==================== */
+/* ==================== Статистика ==================== */
 .stats-section {
     margin-top: 12px;
     padding: 0;
@@ -7469,12 +7469,12 @@ button {
     opacity: 0.5;
 }
 
-/* ==================== Р”РµР№СЃС‚РІРёСЏ ==================== */
+/* ==================== Действия ==================== */
 .actions-section {
     margin-top: 16px;
 }
 
-/* РћРїР°СЃРЅС‹Рµ РґРµР№СЃС‚РІРёСЏ вЂ” СЃРІС‘СЂРЅСѓС‚С‹Р№ Р±Р»РѕРє РІРЅРёР·Сѓ, С‡С‚РѕР±С‹ РЅРµ РЅР°Р¶Р°С‚СЊ СЃР»СѓС‡Р°Р№РЅРѕ */
+/* Опасные действия — свёрнутый блок внизу, чтобы не нажать случайно */
 .accordion-section-danger .accordion-header {
     color: var(--accent-warning);
 }
@@ -7492,7 +7492,7 @@ button {
 
 
 
-/* ==================== РљР°СЂС‚Р° ==================== */
+/* ==================== Карта ==================== */
 .map-area-wrapper {
     position: relative;
     flex: 1;
@@ -7522,7 +7522,7 @@ button {
     transition: box-shadow var(--transition-normal), border-color var(--transition-normal), border-radius var(--transition-normal);
 }
 
-/* Dual runtime: Яндекс и Leaflet живут рядом, переключение без destroy */
+/* Dual runtime: ������ � Leaflet ����� �����, ������������ ��� destroy */
 .map-runtime-host {
     position: relative;
     flex: 1;
@@ -7686,7 +7686,7 @@ body.edit-mode-active:not(.underground-draw-active) .map-area-wrapper::after {
     to { transform: rotate(360deg); }
 }
 
-/* ==================== Полноэкранный вход (после логина) ==================== */
+/* ==================== ������������� ���� (����� ������) ==================== */
 .app-entrance {
     position: fixed;
     inset: 0;
@@ -8296,9 +8296,9 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* Скроллбары — единый стиль в css/scrollbars.css */
+/* ���������� � ������ ����� � css/scrollbars.css */
 
-/* Синхронизация (совместная работа) */
+/* ������������� (���������� ������) */
 .sidebar-sync-presence {
     margin: 0;
     padding: 0;
@@ -8748,7 +8748,7 @@ html[data-theme="light"] .app-entrance__status {
     cursor: not-allowed;
 }
 
-/* ==================== РњРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° ==================== */
+/* ==================== Модальные окна ==================== */
 #confirmModal {
     z-index: 3500;
 }
@@ -8779,7 +8779,7 @@ html[data-theme="light"] .app-entrance__status {
     backdrop-filter: blur(20px);
 }
 
-/* РљСЂРѕСЃСЃ / РјСѓС„С‚Р°: РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРµ СЂР°Р±РѕС‡РµРµ РјРµСЃС‚Рѕ Р¶РёР» */
+/* Кросс / муфта: полноэкранное рабочее место жил */
 #infoModal.fiber-management-modal-open {
     padding: 0;
     align-items: stretch;
@@ -9342,7 +9342,7 @@ html[data-theme="light"] .app-entrance__status {
 }
 
 .fiber-ws-details-summary::before {
-    content: '▸';
+    content: '?';
     font-size: 0.65rem;
     color: var(--text-muted);
     transition: transform 0.15s ease;
@@ -11002,7 +11002,7 @@ html[data-theme="light"] .app-entrance__status {
     border-color: #fb923c;
 }
 
-/* Область схемы: прокрутка + масштаб */
+/* ������� �����: ��������� + ������� */
 .fiber-scheme-viewport {
     flex: 1;
     min-height: 240px;
@@ -11576,7 +11576,7 @@ html[data-theme="light"] .app-entrance__status {
     pointer-events: none;
 }
 
-/* РЎРєСЂС‹С‚СЊ / РџРѕРєР°Р·Р°С‚СЊ СЃС…РµРјСѓ */
+/* Скрыть / Показать схему */
 .fiber-scheme-toggle-row {
     margin-bottom: 6px;
 }
@@ -11596,7 +11596,7 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--text-primary);
 }
 
-/* РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ РЎС…РµРјР° / РЎРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ */
+/* Переключатель Схема / Список соединений */
 .fiber-view-toggle {
     display: flex;
     gap: 0;
@@ -11627,7 +11627,7 @@ html[data-theme="light"] .app-entrance__status {
     color: white;
 }
 
-/* РЎРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ (Р°Р»СЊС‚РµСЂРЅР°С‚РёРІР° СЃС…РµРјРµ) */
+/* Список соединений (альтернатива схеме) */
 .fiber-connections-list-wrap {
     max-height: 42vh;
     min-height: 120px;
@@ -11936,7 +11936,7 @@ html[data-theme="light"] .app-entrance__status {
     overflow-y: auto;
 }
 
-/* РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ СЃРїСЂР°РІРєРё */
+/* Модальное окно справки */
 .help-modal-content {
     width: min(780px, 100%);
     max-width: 780px;
@@ -13057,7 +13057,7 @@ html[data-theme="light"] .app-entrance__status {
     transform: none;
 }
 
-/* Окно обновлений */
+/* ���� ���������� */
 .updates-modal-content {
     max-width: 420px;
     width: min(420px, 100%);
@@ -13077,7 +13077,7 @@ html[data-theme="light"] .app-entrance__status {
     -webkit-backdrop-filter: var(--panel-glass-blur-sm);
 }
 
-/* Личный кабинет */
+/* ������ ������� */
 .profile-modal-content {
     max-width: 460px;
     width: min(460px, 100%);
@@ -13161,7 +13161,7 @@ html[data-theme="light"] .app-entrance__status {
     background: color-mix(in srgb, var(--bg-primary) 92%, var(--bg-secondary));
 }
 
-/* ——— Профиль: главный блок ——— */
+/* ��� �������: ������� ���� ��� */
 .profile-user-card {
     display: flex;
     flex-direction: column;
@@ -13325,7 +13325,7 @@ html[data-theme="light"] .app-entrance__status {
     flex-shrink: 0;
 }
 
-/* ——— Организация: компактная строка ——— */
+/* ��� �����������: ���������� ������ ��� */
 .profile-hero {
     display: flex;
     align-items: center;
@@ -13439,7 +13439,7 @@ html[data-theme="light"] .app-entrance__status {
     border: 1px solid var(--border-color);
 }
 
-/* ——— Лимиты ——— */
+/* ��� ������ ��� */
 .profile-limits {
     padding: 16px 0 0;
     margin: 0;
@@ -13754,7 +13754,7 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--text-primary);
 }
 
-/* РЎС‚РёР»Рё РґР»СЏ РѕСЃС‚Р°Р»СЊРЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ РјРѕРґР°Р»СЊРЅС‹С… РѕРєРѕРЅ */
+/* Стили для остальных элементов модальных окон */
 .cable-info {
     margin-bottom: 20px;
     padding: 16px;
@@ -13893,7 +13893,7 @@ html[data-theme="light"] .app-entrance__status {
     color: #991b1b;
 }
 
-/* РЎРµРєС†РёСЏ С‚Р°Р±Р»РёС†С‹ РєР°Р±РµР»РµР№ Рё Р¶РёР» */
+/* Секция таблицы кабелей и жил */
 .cross-fiber-table-section {
     margin-top: 10px;
 }
@@ -13905,7 +13905,7 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--text-primary);
 }
 
-/* РўР°Р±Р»РёС†Р° РєР°Р±РµР»РµР№/Р¶РёР» РІ РєСЂРѕСЃСЃРµ: РјР°РєСЃРёРјСѓРј РІРёРґРёРјРѕР№ РѕР±Р»Р°СЃС‚Рё, С„РёРєСЃРёСЂРѕРІР°РЅРЅС‹Р№ Р·Р°РіРѕР»РѕРІРѕРє, РїСЂРѕРєСЂСѓС‚РєР° */
+/* Таблица кабелей/жил в кроссе: максимум видимой области, фиксированный заголовок, прокрутка */
 .cross-fiber-table-wrap {
     max-height: 55vh;
     min-height: 180px;
@@ -13916,7 +13916,7 @@ html[data-theme="light"] .app-entrance__status {
     background: var(--bg-card);
 }
 
-/* РљРѕРіРґР° СЃС…РµРјР° Рё СЃРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ СЃРєСЂС‹С‚С‹ вЂ” С‚Р°Р±Р»РёС†Р° Р·Р°РЅРёРјР°РµС‚ РїРѕС‡С‚Рё РІСЃС‘ РјРµСЃС‚Рѕ */
+/* Когда схема и список соединений скрыты — таблица занимает почти всё место */
 .fiber-connections-container.scheme-hidden .cross-fiber-table-wrap {
     max-height: 82vh;
     min-height: 400px;
@@ -13927,7 +13927,7 @@ html[data-theme="light"] .app-entrance__status {
     min-height: 120px;
 }
 
-/* workspace: таблица/соединения — overflow; высоту задаёт fitFiberWorkspaceScrollAreas */
+/* workspace: �������/���������� � overflow; ������ ����� fitFiberWorkspaceScrollAreas */
 .fiber-management-modal-open .fiber-ws-panel-table .cross-fiber-table-wrap,
 .fiber-management-modal-open .fiber-ws-panel-connections .fiber-connections-list-wrap {
     overflow: auto !important;
@@ -13937,7 +13937,7 @@ html[data-theme="light"] .app-entrance__status {
     max-height: 55vh;
 }
 
-/* legacy: cross-edit-mode Р±РѕР»СЊС€Рµ РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РІ workspace */
+/* legacy: cross-edit-mode больше не используется в workspace */
 .fiber-connections-container.cross-edit-mode .cross-fiber-table-wrap {
     max-height: none;
     min-height: 0;
@@ -14782,7 +14782,7 @@ html[data-theme="light"] .app-entrance__status {
     padding: 8px 6px;
 }
 
-/* РСЃРїРѕР»СЊР·СѓРµРјС‹Рµ Р¶РёР»С‹ РІ РєСЂРѕСЃСЃРµ вЂ” СЏСЂРєРѕ РєСЂР°СЃРЅС‹Рµ */
+/* Используемые жилы в кроссе — ярко красные */
 .cross-fiber-table .fiber-item.cross-fiber-used,
 .cross-fiber-table .fiber-item.fiber-used {
     background: #fecaca !important;
@@ -14796,7 +14796,7 @@ html[data-theme="light"] .app-entrance__status {
     font-weight: 600;
 }
 
-/* Р’С‹Р±СЂР°РЅРЅР°СЏ Р¶РёР»Р° РґР»СЏ СЃРѕРµРґРёРЅРµРЅРёСЏ (РІ С‚Р°Р±Р»РёС†Рµ РєСЂРѕСЃСЃРµ) */
+/* Выбранная жила для соединения (в таблице кроссе) */
 .cross-fiber-table .fiber-item.fiber-selected {
     box-shadow: 0 0 0 2px #f59e0b;
     background: #fffbeb !important;
@@ -14813,7 +14813,7 @@ html[data-theme="light"] .app-entrance__status {
     border-color: #dc2626 !important;
 }
 
-/* Панель выбора волокна в кроссе / муфте */
+/* ������ ������ ������� � ������ / ����� */
 .fiber-selection-bar {
     padding: 8px 12px;
     margin: 0;
@@ -14855,7 +14855,7 @@ html[data-theme="light"] .app-entrance__status {
     background: #d97706;
 }
 
-/* РЎРІРѕСЂР°С‡РёРІР°РµРјР°СЏ РёРЅСЃС‚СЂСѓРєС†РёСЏ РІ РєСЂРѕСЃСЃРµ */
+/* Сворачиваемая инструкция в кроссе */
 .cross-instruction-details summary::-webkit-details-marker {
     display: none;
 }
@@ -14895,7 +14895,7 @@ html[data-theme="light"] .app-entrance__status {
     padding: 20px;
 }
 
-/* ==================== РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ РІС‹Р±РѕСЂР° СѓР·Р»Р° (РєР°Рє Р±Р°Р»СѓРЅ РіСЂСѓРїРї вЂ” РѕРґРЅР° РєР°СЂС‚РѕС‡РєР°, Р±РµР· РґРІРѕР№РЅРѕРіРѕ Р±Р°Р»СѓРЅР°) ==================== */
+/* ==================== Модальное окно выбора узла (как балун групп — одна карточка, без двойного балуна) ==================== */
 .modal-content.node-selection-modal-content {
     max-width: 500px;
     width: auto;
@@ -15068,7 +15068,7 @@ html[data-theme="light"] .app-entrance__status {
     margin-bottom: 0;
 }
 
-/* РџРѕРґСЃРІРµС‚РєР° РїРѕРёСЃРєР° */
+/* Подсветка поиска */
 .node-list-item-name mark {
     background: #fef08a;
     color: inherit;
@@ -15080,7 +15080,7 @@ html[data-theme="light"] .app-entrance__status {
     background: rgba(255, 255, 255, 0.3);
 }
 
-/* ==================== Уведомления (Toast) ==================== */
+/* ==================== ����������� (Toast) ==================== */
 .toast-container {
     position: fixed;
     top: 20px;
@@ -15340,9 +15340,9 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* ==================== РђРґР°РїС‚РёРІРЅРѕСЃС‚СЊ ==================== */
+/* ==================== Адаптивность ==================== */
 
-/* РЎСЂРµРґРЅРёРµ СЌРєСЂР°РЅС‹ (РїР»Р°РЅС€РµС‚С‹) */
+/* Средние экраны (планшеты) */
 @media (max-width: 1024px) {
     :root {
         --sidebar-width: 300px;
@@ -15416,7 +15416,7 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* РњР°Р»РµРЅСЊРєРёРµ СЌРєСЂР°РЅС‹ (Р±РѕР»СЊС€РёРµ С‚РµР»РµС„РѕРЅС‹, РјР°Р»РµРЅСЊРєРёРµ РїР»Р°РЅС€РµС‚С‹) */
+/* Маленькие экраны (большие телефоны, маленькие планшеты) */
 @media (max-width: 768px) {
     .top-header {
         padding: 0 12px;
@@ -15624,8 +15624,8 @@ html[data-theme="light"] .app-entrance__status {
         font-size: 1.125rem;
     }
     
-    /* РќР° РјРѕР±РёР»СЊРЅС‹С… СѓР±РёСЂР°РµРј Р±Р»РѕРє СЃС‚Р°С‚РёСЃС‚РёРєРё РёР· РїР°РЅРµР»Рё,
-       С‡С‚РѕР±С‹ РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹ Рё С„РёР»СЊС‚СЂС‹ Р±С‹Р»Рё Р±Р»РёР¶Рµ Рє РІРµСЂС…Сѓ */
+    /* На мобильных убираем блок статистики из панели,
+       чтобы инструменты и фильтры были ближе к верху */
     .stats-section {
         display: none;
     }
@@ -15704,7 +15704,7 @@ html[data-theme="light"] .app-entrance__status {
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     }
 
-    /* Р–СѓСЂРЅР°Р» */
+    /* Журнал */
     .history-filter-fields {
         grid-template-columns: 1fr;
     }
@@ -15723,7 +15723,7 @@ html[data-theme="light"] .app-entrance__status {
         font-size: 14px;
     }
     
-    /* РџРѕР»СЊР·РѕРІР°С‚РµР»Рё */
+    /* Пользователи */
     .user-item {
         flex-wrap: wrap;
         gap: 8px;
@@ -15750,7 +15750,7 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* РћС‡РµРЅСЊ РјР°Р»РµРЅСЊРєРёРµ СЌРєСЂР°РЅС‹ (С‚РµР»РµС„РѕРЅС‹) */
+/* Очень маленькие экраны (телефоны) */
 @media (max-width: 480px) {
     .top-header {
         padding: 0 8px;
@@ -15866,7 +15866,7 @@ html[data-theme="light"] .app-entrance__status {
         font-size: 0.75rem;
     }
     
-    /* РњРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° */
+    /* Модальные окна */
     .modal-content {
         margin: 2% auto;
         max-height: 96vh;
@@ -15888,13 +15888,13 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* Копирайт и промо Яндекс.Карт */
+/* �������� � ����� ������.���� */
 #map [class*="copyrights-pane"],
 #map [class*="map-copyrights-promo"] {
     display: none !important;
 }
 
-/* Переключатель слоёв карты (свой UI вместо TypeSelector) */
+/* ������������� ���� ����� (���� UI ������ TypeSelector) */
 .map-layer-selector {
     position: absolute;
     top: calc(var(--map-frame-padding) + 10px);
@@ -16048,7 +16048,7 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--accent-primary);
 }
 
-/* —— Модалка ортофото-подложки / слой по умолчанию —— */
+/* �� ������� ��������-�������� / ���� �� ��������� �� */
 .basemap-admin-content.panel-glass {
     max-width: 560px;
     width: min(560px, 94vw);
@@ -16368,7 +16368,7 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* ==================== Р‘Р°Р»СѓРЅ РєР°СЂС‚С‹ (РЇРЅРґРµРєСЃ.РљР°СЂС‚С‹) вЂ” С‚РµРјР° РїСЂРёР»РѕР¶РµРЅРёСЏ ==================== */
+/* ==================== Балун карты (Яндекс.Карты) — тема приложения ==================== */
 [class*="ymaps"][class*="balloon"] {
     font-family: var(--font-sans) !important;
 }
@@ -16387,11 +16387,11 @@ html[data-theme="light"] .app-entrance__status {
     border-color: var(--border-color) !important;
 }
 
-/* Р’СЃРїР»С‹РІР°СЋС‰Р°СЏ РїРѕРґСЃРєР°Р·РєР° (hint) РєР°СЂС‚С‹ вЂ” РѕРїСѓСЃРєР°РµРј С‡СѓС‚СЊ РЅРёР¶Рµ РјРµС‚РєРё */
+/* Всплывающая подсказка (hint) карты — опускаем чуть ниже метки */
 #map [class*="hint"] {
     transform: translateY(10px) !important;
 }
-/* РљРѕРіРґР° РІРЅСѓС‚СЂРё РЅР°С€ Р±Р°Р»СѓРЅ РІС‹Р±РѕСЂР° РіСЂСѓРїРїС‹ вЂ” СѓР±РёСЂР°РµРј РѕР±С‘СЂС‚РєСѓ API (РѕРґРёРЅ Р±Р°Р»СѓРЅ, РЅРµ РґРІР°) */
+/* Когда внутри наш балун выбора группы — убираем обёртку API (один балун, не два) */
 [class*="balloon__content"]:has(.network-map-balloon),
 [class*="balloon-panel"]:has(.network-map-balloon) {
     padding: 0 !important;
@@ -16402,7 +16402,7 @@ html[data-theme="light"] .app-entrance__status {
 [class*="balloon__layout"]:has(.network-map-balloon) [class*="balloon__tail"] {
     display: none !important;
 }
-/* Р‘Р°Р»СѓРЅ РІС‹Р±РѕСЂР° РіСЂСѓРїРїС‹ вЂ” РєР°СЂС‚РѕС‡РєР° СЃ С‡С‘С‚РєРѕР№ СЃС‚СЂСѓРєС‚СѓСЂРѕР№ */
+/* Балун выбора группы — карточка с чёткой структурой */
 .network-map-balloon {
     background: var(--bg-card) !important;
     color: var(--text-primary) !important;
@@ -16431,13 +16431,13 @@ html[data-theme="light"] .app-entrance__status {
     background: var(--bg-hover) !important;
 }
 
-/* РЎРїРёСЃРѕРє СЌР»РµРјРµРЅС‚РѕРІ РіСЂСѓРїРїС‹ вЂ” РїСЂРѕРєСЂСѓС‚РєР° РїСЂРё Р±РѕР»СЊС€РѕРј РєРѕР»РёС‡РµСЃС‚РІРµ */
+/* Список элементов группы — прокрутка при большом количестве */
 .group-balloon-list {
     max-height: 220px;
     overflow-y: auto;
 }
 
-/* РЁР°РїРєР° Р±Р°Р»СѓРЅР° вЂ” РѕС‚РґРµР»СЊРЅС‹Р№ Р±Р»РѕРє, РєРѕРЅС‚СЂР°СЃС‚РЅР°СЏ РєРЅРѕРїРєР° Р·Р°РєСЂС‹С‚РёСЏ */
+/* Шапка балуна — отдельный блок, контрастная кнопка закрытия */
 .group-balloon-header {
     display: flex;
     align-items: center;
@@ -16491,7 +16491,7 @@ html[data-theme="light"] .app-entrance__status {
     color: #fff;
 }
 
-/* Р‘Р»РѕРє В«РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹В» вЂ” СЏРІРЅРѕРµ РїРѕР»Рµ Рё Р°РєС†РµРЅС‚РЅР°СЏ РєРЅРѕРїРєР° */
+/* Блок «Название группы» — явное поле и акцентная кнопка */
 .group-name-row {
     padding: 12px 14px;
     border-bottom: 1px solid var(--border-color);
@@ -16561,7 +16561,7 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--text-primary);
 }
 
-/* Р­Р»РµРјРµРЅС‚ РіСЂСѓРїРїС‹: РЅР°Р·РІР°РЅРёРµ + РєРЅРѕРїРєР° В«РџРµСЂРµРјРµСЃС‚РёС‚СЊВ» */
+/* Элемент группы: название + кнопка «Переместить» */
 .cross-group-item,
 .node-group-item {
     display: flex;
@@ -16591,7 +16591,7 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--accent-primary);
 }
 
-/* РџРѕРґРїРёСЃРё РѕР±СЉРµРєС‚РѕРІ РЅР° РєР°СЂС‚Рµ (РІСЃРµ С‚РёРїС‹): РєРѕРјРїР°РєС‚РЅРѕ Рё РїРѕ С†РµРЅС‚СЂСѓ РїРѕРґ РѕР±СЉРµРєС‚РѕРј */
+/* Подписи объектов на карте (все типы): компактно и по центру под объектом */
 .map-label,
 #map .map-label,
 [class*="ymaps"] .map-label {
@@ -16614,7 +16614,7 @@ html[data-theme="light"] .app-entrance__status {
     backdrop-filter: blur(6px);
 }
 
-/* РџРѕРґРїРёСЃСЊ РЅР° РєР°СЂС‚Рµ: Р»С‘РіРєР°СЏ РѕР±РІРѕРґРєР° РґР»СЏ С‡РёС‚Р°РµРјРѕСЃС‚Рё РЅР° Р»СЋР±РѕРј С„РѕРЅРµ */
+/* Подпись на карте: лёгкая обводка для читаемости на любом фоне */
 [data-theme="light"] .map-label,
 [data-theme="light"] #map .map-label,
 [data-theme="light"] [class*="ymaps"] .map-label {
@@ -16651,7 +16651,7 @@ html[data-theme="light"] .app-entrance__status {
     background: #94a3b8;
 }
 
-/* Чип статуса Zabbix в подписи объекта */
+/* ��� ������� Zabbix � ������� ������� */
 .map-label--with-zabbix,
 .map-label.map-label--camera {
     gap: 5px;
@@ -16704,7 +16704,7 @@ html[data-theme="light"] .app-entrance__status {
     box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.55), 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
-/* —— Карточка описания при наведении на объект карты —— */
+/* �� �������� �������� ��� ��������� �� ������ ����� �� */
 #cursorIndicator.map-hover-card {
     position: fixed;
     pointer-events: none;
@@ -16879,7 +16879,7 @@ html[data-theme="light"] .app-entrance__status {
     white-space: nowrap;
 }
 
-/* Блок Zabbix в карточке наведения */
+/* ���� Zabbix � �������� ��������� */
 .map-hover-zabbix {
     margin-top: 2px;
     padding: 8px 9px;
@@ -17041,7 +17041,7 @@ html[data-theme="light"] .app-entrance__status {
     color: #86efac;
 }
 
-/* РљСѓСЂСЃРѕСЂ-РїСЂРёС†РµР» РЅР° РєР°СЂС‚Рµ: С…РѕСЂРѕС€Рѕ РІРёРґРµРЅ РІ СЃРІРµС‚Р»РѕР№ Рё С‚С‘РјРЅРѕР№ С‚РµРјРµ */
+/* Курсор-прицел на карте: хорошо виден в светлой и тёмной теме */
 #map.map-crosshair-active {
     cursor: crosshair;
 }
@@ -17049,7 +17049,7 @@ html[data-theme="light"] .app-entrance__status {
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cline x1='16' y1='2' x2='16' y2='12' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='16' y1='20' x2='16' y2='30' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='2' y1='16' x2='12' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='20' y1='16' x2='30' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair;
 }
 
-/* Р Р°Р·СЂРµР· РєР°Р±РµР»СЏ / СѓСЃС‚Р°РЅРѕРІРєР° РјСѓС„С‚С‹ РЅР° РјР°СЂС€СЂСѓС‚Рµ */
+/* Разрез кабеля / установка муфты на маршруте */
 .cable-split-section {
     margin-bottom: 20px;
     padding: 16px;
@@ -17237,13 +17237,13 @@ html.cable-split-mode-active #map {
     color: #2dd4bf;
 }
 
-/* РўС‘РјРЅР°СЏ С‚РµРјР° РґР»СЏ РїРѕРґР»РѕР¶РєРё РєР°СЂС‚С‹: РёРЅРІРµСЂСЃРёСЏ С‚РѕР»СЊРєРѕ СЃР»РѕСЏ СЃ С‚Р°Р№Р»Р°РјРё (РѕР±СЉРµРєС‚С‹ Рё РєР°Р±РµР»Рё РІ РґСЂСѓРіРёС… СЃР»РѕСЏС… РЅРµ Р·Р°С‚СЂР°РіРёРІР°СЋС‚СЃСЏ) */
+/* Тёмная тема для подложки карты: инверсия только слоя с тайлами (объекты и кабели в других слоях не затрагиваются) */
 [data-theme="dark"] #map [class*="ground-pane"] {
     filter: invert(1) hue-rotate(180deg);
     -webkit-filter: invert(1) hue-rotate(180deg);
 }
 
-/* Трассировка: на весь экран */
+/* �����������: �� ���� ����� */
 #infoModal[data-trace-view="1"] {
     padding: 0;
     align-items: stretch;
@@ -17625,7 +17625,7 @@ html.cable-split-mode-active #map {
     font-size: 0.72rem;
 }
 
-/* Трассировка: совместимость со светлой и тёмной темой (legacy) */
+/* �����������: ������������� �� ������� � ����� ����� (legacy) */
 .trace-path-title {
     margin: 0 0 12px 0;
     font-size: 1rem;
@@ -17676,7 +17676,7 @@ html.cable-split-mode-active #map {
 .trace-path-block .trace-path-muted { margin-left: 6px; }
 .trace-port-badge { background: var(--bg-accent); color: var(--text-primary); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
 
-/* РљРЅРѕРїРєРё "РџРѕРєР°Р·Р°С‚СЊ РЅР° РєР°СЂС‚Рµ" РІ С‚СЂР°СЃСЃРёСЂРѕРІРєРµ */
+/* Кнопки "Показать на карте" в трассировке */
 .trace-show-on-map-btn {
     transition: background-color 0.2s, transform 0.1s;
 }
@@ -17817,7 +17817,7 @@ html.cable-split-mode-active #map {
     margin-top: 4px;
 }
 
-/* Схема волокон */
+/* ����� ������� */
 .trace-schematic {
     margin: 0 0 14px;
     padding: 12px 14px 14px;
@@ -18076,7 +18076,7 @@ html.cable-split-mode-active #map {
     fill: rgba(5, 150, 105, 0.26);
 }
 
-/* Древовидная схема (одна объединённая) */
+/* ����������� ����� (���� ������������) */
 .trace-schematic--tree {
     background:
         linear-gradient(165deg, color-mix(in srgb, var(--accent-primary) 6%, var(--bg-tertiary)), var(--bg-tertiary));
@@ -18546,7 +18546,7 @@ html.cable-split-mode-active #map {
     font-weight: 600;
 }
 
-/* Р’С‹РґРµР»РµРЅРёРµ Р¶РёР», РїРѕРґРєР»СЋС‡РµРЅРЅС‹С… Рє СЃРїР»РёС‚С‚РµСЂСѓ */
+/* Выделение жил, подключенных к сплиттеру */
 .fiber-splitter-connected {
     background-color: var(--bg-accent) !important;
     border-color: var(--accent-warning) !important;
@@ -18557,7 +18557,7 @@ html.cable-split-mode-active #map {
     font-weight: 600;
 }
 
-/* РЎРїСЂР°РІРѕС‡РЅРёРє СѓСЃС‚СЂРѕР№СЃС‚РІ вЂ” РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРµ РѕРєРЅРѕ */
+/* Справочник устройств — полноэкранное окно */
 #deviceCatalogModal.device-catalog-modal-open {
     padding: 0;
     display: flex;
@@ -18910,7 +18910,7 @@ html.cable-split-mode-active #map {
     gap: 6px;
 }
 
-/* Одинаковая высота парных кнопок в справочнике (primary/secondary, border, без margin) */
+/* ���������� ������ ������ ������ � ����������� (primary/secondary, border, ��� margin) */
 .device-catalog-entry-footer .btn-primary,
 .device-catalog-entry-footer .btn-secondary,
 .device-catalog-switch-ports-footer .btn-primary,
@@ -19751,7 +19751,7 @@ html.cable-split-mode-active #map {
     flex-shrink: 0;
 }
 
-/* РћРєРЅРѕ РґРѕР±Р°РІР»РµРЅРёСЏ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ / РјРѕРґРµР»Рё */
+/* Окно добавления производителя / модели */
 .device-catalog-entry-modal {
     z-index: 2100;
 }
@@ -19869,7 +19869,7 @@ html.cable-split-mode-active #map {
     background: rgba(255, 255, 255, 0.5);
 }
 
-/* Ноутбуки / невысокая высота окна — уплотнение справочника */
+/* �������� / ��������� ������ ���� � ���������� ����������� */
 @media (max-width: 1366px), (max-height: 860px) {
     .device-catalog-modal-content .device-catalog-modal-header {
         padding-top: 10px;
@@ -20076,7 +20076,7 @@ html.cable-split-mode-active #map {
     }
 }
 
-/* РљР°СЂС‚РѕС‡РєР° СѓР·Р»Р° СЃРµС‚Рё */
+/* Карточка узла сети */
 .node-card {
     display: flex;
     flex-direction: column;
@@ -20505,7 +20505,7 @@ html.cable-split-mode-active #map {
     transform: translateY(-1px);
 }
 
-/* РљР°СЂС‚РѕС‡РєР° РєР°РјРµСЂС‹ */
+/* Карточка камеры */
 .camera-card {
     display: flex;
     flex-direction: column;
@@ -20630,7 +20630,7 @@ html.cable-split-mode-active #map {
     margin-bottom: 0;
 }
 
-/* Р’РёРґРµРѕРїРѕС‚РѕРє РєР°РјРµСЂС‹ */
+/* Видеопоток камеры */
 .camera-card .object-card-section--stream {
     border-color: color-mix(in srgb, #475569 32%, var(--panel-glass-border));
 }
@@ -21311,7 +21311,7 @@ body.object-gallery-lightbox-open {
     filter: brightness(1.08);
 }
 
-/* РљР°СЂС‚РѕС‡РєР° РѕРїРѕСЂС‹ / РєСЂРµРїР»РµРЅРёСЏ */
+/* Карточка опоры / крепления */
 .support-card {
     display: flex;
     flex-direction: column;
@@ -21979,7 +21979,7 @@ body.object-gallery-lightbox-open {
     }
 }
 
-/* Карточка OLT */
+/* �������� OLT */
 .olt-card {
     display: flex;
     flex-direction: column;
@@ -22130,7 +22130,7 @@ body.object-gallery-lightbox-open {
     line-height: 1.35;
 }
 
-/* Карточка Wi‑Fi радиомоста */
+/* �������� Wi?Fi ���������� */
 .radio-bridge-card {
     display: flex;
     flex-direction: column;
@@ -22296,7 +22296,7 @@ body.object-gallery-lightbox-open {
     margin: 4px 0 0;
 }
 
-/* ===== Coverage joystick (камера / радиомост) ===== */
+/* ===== Coverage joystick (������ / ���������) ===== */
 .coverage-joystick {
     --cov-joy-accent: var(--accent-primary);
     display: flex;
@@ -22550,7 +22550,7 @@ body.object-gallery-lightbox-open {
     display: none;
 }
 
-/* Подложка: блокирует карту и UI на время настройки */
+/* ��������: ��������� ����� � UI �� ����� ��������� */
 .coverage-joystick-backdrop {
     position: fixed;
     inset: 0;
@@ -22560,7 +22560,7 @@ body.object-gallery-lightbox-open {
     touch-action: none;
 }
 
-/* Плавающая панель джойстика (вне карточки) */
+/* ��������� ������ ��������� (��� ��������) */
 .coverage-joystick-panel {
     position: fixed;
     z-index: 10050;
@@ -22698,7 +22698,7 @@ body.coverage-joystick-map-locked .app-header {
     gap: 14px;
 }
 
-/* ==================== Host cards: кросс / муфта ==================== */
+/* ==================== Host cards: ����� / ����� ==================== */
 .host-card {
     display: flex;
     flex-direction: column;
@@ -22742,7 +22742,7 @@ body.coverage-joystick-map-locked .app-header {
     border-color: #b45309;
 }
 
-/* Компактный host-card внутри сайдбара workspace */
+/* ���������� host-card ������ �������� workspace */
 .fiber-ws-sidebar .host-card-hero {
     padding: 10px;
 }
@@ -24241,7 +24241,7 @@ body.coverage-joystick-map-locked .app-header {
     }
 }
 
-/* ——— Чат организации ——— */
+/* ��� ��� ����������� ��� */
 .org-chat-panel {
     position: fixed;
     right: 20px;
@@ -25140,7 +25140,7 @@ body.coverage-joystick-map-locked .app-header {
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.28);
 }
 
-/* ——— Чат: мобильный полноэкранный вид ——— */
+/* ��� ���: ��������� ������������� ��� ��� */
 @media (max-width: 768px) {
     body.org-chat-mobile-open {
         overflow: hidden;
@@ -25372,7 +25372,7 @@ body.coverage-joystick-map-locked .app-header {
     }
 }
 
-/* Карточка прокладки / перепрокладки подземного участка */
+/* �������� ��������� / ������������� ���������� ������� */
 .underground-draw-card {
     --ug-card-accent: #dc2626;
     --ug-card-bg: var(--bg-card, #fff);
@@ -25867,7 +25867,7 @@ body.underground-draw-active .map-area-wrapper::after {
     margin-bottom: 16px;
 }
 
-/* ——— Ящик (cabinet) ——— */
+/* ��� ���� (cabinet) ��� */
 .cabinet-card {
     display: flex;
     flex-direction: column;
@@ -26502,7 +26502,7 @@ body.underground-draw-active .map-area-wrapper::after {
 [data-theme="dark"] .cabinet-member-badge--cyan { background: #164e63; color: #67e8f9; }
 [data-theme="dark"] .cabinet-member-badge--amber { background: #451a03; color: #fcd34d; }
 
-/* —— Режим встраивания (Zabbix / iframe) —— */
+/* �� ����� ����������� (Zabbix / iframe) �� */
 html.volsmap-embed,
 html.volsmap-embed body,
 body.volsmap-embed {
@@ -26567,7 +26567,7 @@ html.volsmap-embed .app-entrance {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* Уровень сигнала на трассе (optical-calculator) */
+/* ������� ������� �� ������ (optical-calculator) */
 .modal-content.signal-trace-modal-content {
     max-width: 860px;
     width: min(860px, calc(100vw - 28px));
@@ -26733,7 +26733,7 @@ html.volsmap-embed .app-entrance {
     overscroll-behavior: contain;
     min-height: 120px;
     flex: 1 1 auto;
-    height: 0; /* занять оставшуюся высоту колонки и скроллить содержимое */
+    height: 0; /* ������ ���������� ������ ������� � ��������� ���������� */
     max-height: calc(min(90vh, 900px) - 200px);
     padding-right: 4px;
     scrollbar-gutter: stable;
@@ -27690,7 +27690,7 @@ body.edit-mode-active .edit-toolbar {
     background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
 }
 
-/* Уже окна: объекты — только иконки, подписи у Кабель/Регионы */
+/* ��� ����: ������� � ������ ������, ������� � ������/������� */
 @media (max-width: 1360px) {
     .edit-toolbar-label {
         display: none;
@@ -27728,7 +27728,7 @@ body.edit-mode-active .edit-toolbar {
     }
 }
 
-/* Tool props (RIGHT) — hidden until tool selected */
+/* Tool props (RIGHT) � hidden until tool selected */
 .tool-props-panel:not(.is-filled),
 .properties-panel:not(.is-filled) {
     width: 0 !important;
@@ -27846,7 +27846,7 @@ body.edit-mode-active .edit-toolbar {
     margin: 0 0 12px;
 }
 
-/* Info dock LEFT — redesigned IA */
+/* Info dock LEFT � redesigned IA */
 .info-dock,
 .info-dock--left {
     position: relative;
@@ -28533,39 +28533,486 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
 .map-region-current-chip {
     display: inline-flex;
     align-items: center;
-    max-width: 160px;
+    gap: 7px;
+    max-width: 200px;
+    min-height: 34px;
     margin: 0 8px;
-    padding: 6px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color, rgba(0,0,0,.12));
-    background: var(--panel-bg, #fff);
-    color: var(--text-primary, #111);
-    font-size: 13px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+    color: #fff;
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
     font-weight: 600;
+    letter-spacing: 0.01em;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.map-region-current-chip__icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    opacity: 0.92;
+}
+.map-region-current-chip__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .map-region-current-chip[hidden] { display: none !important; }
-.map-region-current-chip:hover { filter: brightness(0.97); }
-.map-region-picker-modal { align-items: center; justify-content: center; z-index: 10050; }
-.map-region-picker-content { max-width: 440px; width: 92vw; }
-.map-region-picker-hint { margin: 0 0 12px; opacity: .85; font-size: 14px; }
-.map-region-picker-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow: auto; }
+.map-region-current-chip:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.12));
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+}
+
+/* Above #appEntranceOverlay (z-index: 2000000) */
+.map-region-picker-modal,
+.map-region-move-modal {
+    align-items: center;
+    justify-content: center;
+    z-index: 2000010;
+    background: rgba(7, 17, 31, 0.42);
+    backdrop-filter: blur(8px) saturate(1.05);
+    -webkit-backdrop-filter: blur(8px) saturate(1.05);
+}
+.map-region-picker-content.panel-glass,
+.map-region-move-content.panel-glass {
+    max-width: 460px;
+    width: min(460px, 94vw);
+    margin: 0;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: mapRegionPickerIn 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.map-region-picker-content.panel-glass::after,
+.map-region-move-content.panel-glass::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    background: linear-gradient(180deg, var(--accent-primary-bright, #14b8a6), var(--accent-primary));
+    pointer-events: none;
+    z-index: 2;
+}
+@keyframes mapRegionPickerIn {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+.map-region-picker-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px 14px;
+}
+.map-region-picker-header__main {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+}
+.map-region-picker-header__icon {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    color: #fff;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.map-region-picker-header__text {
+    min-width: 0;
+}
+.map-region-picker-header__text h2 {
+    margin: 0;
+    font-family: var(--font-display, var(--font-sans));
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+.map-region-picker-header__sub {
+    margin: 5px 0 0;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.82);
+}
+.map-region-picker-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 16px 14px 18px;
+    max-height: none;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.map-region-picker-hint {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 22%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary-soft) 70%, transparent);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--text-secondary, var(--text-muted));
+}
+.map-region-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: min(44vh, 340px);
+    overflow: auto;
+    padding: 2px;
+    margin: 0 -2px;
+}
 .map-region-picker-item {
-    display: flex; align-items: center; gap: 10px; width: 100%;
-    padding: 12px 14px; border-radius: 10px;
-    border: 1px solid var(--border-color, rgba(0,0,0,.12));
-    background: transparent; color: inherit; cursor: pointer; text-align: left;
+    --item-i: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin: 0;
+    padding: 12px 12px 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--panel-glass-surface, var(--bg-card)) 88%, transparent);
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset;
+    transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    animation: mapRegionItemIn 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--item-i) * 40ms);
+}
+@keyframes mapRegionItemIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.map-region-picker-item:hover {
+    background: var(--bg-card);
+    border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--border-color));
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(15, 118, 110, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 .map-region-picker-item.is-selected {
-    border-color: var(--accent, #2563eb);
-    background: color-mix(in srgb, var(--accent, #2563eb) 12%, transparent);
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--accent-primary-soft) 85%, var(--bg-card)),
+        color-mix(in srgb, var(--accent-primary) 10%, var(--bg-card)));
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 3px var(--accent-primary-soft), 0 10px 22px rgba(15, 118, 110, 0.12);
 }
-.map-region-picker-name { flex: 1; font-weight: 600; }
-.map-region-picker-count { opacity: .7; font-size: 12px; }
-.map-region-picker-create { display: flex; gap: 8px; margin-top: 14px; }
-.map-region-picker-create .modal-input { flex: 1; }
-.map-region-picker-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
-.map-region-picker-default { font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.map-region-picker-item__icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: var(--accent-primary-soft);
+    color: var(--accent-primary);
+    transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.map-region-picker-item:hover .map-region-picker-item__icon {
+    transform: scale(1.04);
+}
+.map-region-picker-item.is-selected .map-region-picker-item__icon {
+    background: var(--accent-primary);
+    color: #fff;
+    box-shadow: 0 4px 10px color-mix(in srgb, var(--accent-primary) 35%, transparent);
+}
+.map-region-picker-item__info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.map-region-picker-name {
+    font-weight: 700;
+    font-size: 0.9375rem;
+    letter-spacing: -0.01em;
+    color: inherit;
+}
+.map-region-picker-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+.map-region-picker-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-tertiary, #e2e8f0) 80%, transparent);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+.map-region-picker-item.is-selected .map-region-picker-count {
+    background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+    color: var(--accent-primary);
+}
+.map-region-picker-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: lowercase;
+}
+.map-region-picker-badge--default {
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+    color: var(--accent-primary);
+}
+.map-region-picker-badge--warn {
+    background: rgba(217, 119, 6, 0.14);
+    color: #b45309;
+}
+.map-region-picker-item__check {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1.5px solid var(--border-color);
+    color: transparent;
+    background: transparent;
+    transition: all 0.18s ease;
+}
+.map-region-picker-item.is-selected .map-region-picker-item__check {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+    color: #fff;
+    box-shadow: 0 4px 10px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+.map-region-picker-create {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px dashed color-mix(in srgb, var(--accent-primary) 35%, var(--border-color));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent-primary-soft) 45%, transparent);
+}
+.map-region-picker-create[hidden] {
+    display: none !important;
+}
+.map-region-picker-create__label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.map-region-picker-create__row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.map-region-picker-create__row .form-input {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    margin: 0;
+    min-height: 38px;
+}
+.map-region-picker-create__btn.btn-secondary {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 96px;
+    min-height: 38px;
+    margin: 0;
+    padding: 0 14px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.map-region-picker-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 14px 16px 16px 18px;
+    border-top: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-secondary, #f1f5f9));
+    position: relative;
+    z-index: 1;
+}
+.map-region-picker-actions--end {
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: none;
+    background: transparent;
+    padding: 0;
+}
+.map-region-picker-actions .btn-primary,
+.map-region-picker-actions .btn-secondary {
+    min-height: 40px;
+}
+.map-region-picker-open.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    margin: 0;
+    border-radius: 12px;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-primary) 28%, transparent);
+}
+.map-region-picker-open.btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px color-mix(in srgb, var(--accent-primary) 34%, transparent);
+}
+.map-region-picker-open.btn-primary:disabled {
+    opacity: 0.5;
+    box-shadow: none;
+}
+.map-region-picker-body > .map-region-picker-default {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--panel-glass-surface, var(--bg-card)) 88%, transparent);
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.map-region-picker-body > .map-region-picker-default:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--border-color));
+    background: var(--bg-card);
+}
+.map-region-picker-body > .map-region-picker-default:has(input:checked) {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary-soft) 75%, var(--bg-card));
+    box-shadow: 0 0 0 3px var(--accent-primary-soft);
+}
+.map-region-picker-default input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
+}
+.map-region-picker-default__box {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1.5px solid var(--border-color);
+    background: var(--bg-secondary, #fff);
+    color: transparent;
+    transition: all var(--transition-fast);
+}
+.map-region-picker-default:has(input:checked) .map-region-picker-default__box {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+    color: #fff;
+}
+.map-region-picker-default__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    line-height: 1.2;
+}
+.map-region-picker-default__title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+.map-region-picker-default__hint {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+.map-region-move-content .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+}
+.map-region-move-content .form-group label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary, var(--text-muted));
+}
+.map-region-move-content .map-region-picker-actions {
+    margin-top: 4px;
+}
+[data-theme="dark"] .map-region-picker-item {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+[data-theme="dark"] .map-region-picker-item:hover {
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+[data-theme="dark"] .map-region-picker-actions {
+    background: color-mix(in srgb, var(--bg-card) 92%, #000);
+}
+[data-theme="dark"] .map-region-picker-badge--warn {
+    background: rgba(245, 158, 11, 0.18);
+    color: #fbbf24;
+}
+@media (prefers-reduced-motion: reduce) {
+    .map-region-picker-content.panel-glass,
+    .map-region-move-content.panel-glass,
+    .map-region-picker-item {
+        animation: none;
+    }
+    .map-region-current-chip:hover,
+    .map-region-picker-item:hover {
+        transform: none;
+    }
+}

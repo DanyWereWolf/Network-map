@@ -586,13 +586,17 @@ app.get('/api/map', (req, res) => {
         if (orgId && db.ensureMapRegionsMigrated) {
             try { db.ensureMapRegionsMigrated(orgId); } catch (eMig) {}
         }
+        // Peek live sync cache without getSyncStateForOrg (avoids cold deepClone of full org map).
         var full = [];
         if (orgId) {
             var live = null;
             try {
-                live = getSyncStateForOrg(orgId, { forceFromDb: false });
+                var syncKey = normalizeSyncOrgId(orgId);
+                if (syncKey && syncCurrentStateByOrg[syncKey] && Array.isArray(syncCurrentStateByOrg[syncKey].data)) {
+                    live = syncCurrentStateByOrg[syncKey];
+                }
             } catch (eLive) { live = null; }
-            if (live && Array.isArray(live.data) && live.data.length) {
+            if (live && Array.isArray(live.data)) {
                 full = live.data;
             } else {
                 full = db.getMapData(orgId) || [];
