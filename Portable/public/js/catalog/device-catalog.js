@@ -2797,32 +2797,52 @@ function positionComboboxPanelAnchored(trigger, panel, wrapper) {
     if (listEl) listEl.style.maxHeight = Math.max(40, maxPanelHeight - searchHeight) + 'px';
 }
 
+function comboboxOwnerOf(panel) {
+    if (!panel) return null;
+    if (panel._comboboxOwner && panel._comboboxOwner.isConnected) return panel._comboboxOwner;
+    return panel.closest('.device-combobox');
+}
+
+function comboboxTriggerOf(panel) {
+    var owner = comboboxOwnerOf(panel);
+    return owner ? owner.querySelector('.device-combobox-trigger') : null;
+}
+
+function placeComboboxPanel(panel, wrapper, floating) {
+    if (!panel || !wrapper) return;
+    panel._comboboxOwner = wrapper;
+    var parent = floating ? document.body : wrapper;
+    if (panel.parentNode !== parent) parent.appendChild(panel);
+}
+
 function positionComboboxPanel(trigger, panel, wrapper) {
-    if (wrapper && wrapper.closest('.modal')) {
-        positionComboboxPanelAnchored(trigger, panel, wrapper);
-    } else {
-        positionComboboxPanelFloating(trigger, panel);
-    }
+    var inModal = !!(wrapper && wrapper.closest('.modal'));
+    placeComboboxPanel(panel, wrapper, !inModal);
+    if (inModal) positionComboboxPanelAnchored(trigger, panel, wrapper);
+    else positionComboboxPanelFloating(trigger, panel);
 }
 
 function resetComboboxPanelPosition(pnl) {
     if (!pnl || !pnl.style) return;
+    var owner = comboboxOwnerOf(pnl);
     var wasPositioned = pnl.classList.contains('is-floating') || pnl.classList.contains('is-open-up')
         || pnl.style.position === 'fixed' || pnl.style.maxHeight;
-    if (!wasPositioned) return;
-    pnl.classList.remove('is-floating', 'is-open-up');
-    pnl.style.position = '';
-    pnl.style.top = '';
-    pnl.style.left = '';
-    pnl.style.width = '';
-    pnl.style.minWidth = '';
-    pnl.style.right = '';
-    pnl.style.bottom = '';
-    pnl.style.maxHeight = '';
-    pnl.style.marginTop = '';
-    pnl.style.marginBottom = '';
-    var listEl = pnl.querySelector('.device-combobox-list');
-    if (listEl) listEl.style.maxHeight = '';
+    if (wasPositioned) {
+        pnl.classList.remove('is-floating', 'is-open-up');
+        pnl.style.position = '';
+        pnl.style.top = '';
+        pnl.style.left = '';
+        pnl.style.width = '';
+        pnl.style.minWidth = '';
+        pnl.style.right = '';
+        pnl.style.bottom = '';
+        pnl.style.maxHeight = '';
+        pnl.style.marginTop = '';
+        pnl.style.marginBottom = '';
+        var listEl = pnl.querySelector('.device-combobox-list');
+        if (listEl) listEl.style.maxHeight = '';
+    }
+    if (owner && pnl.parentNode !== owner) owner.appendChild(pnl);
 }
 
 function initDeviceComboboxes(container) {
@@ -2996,7 +3016,12 @@ function initDeviceComboboxes(container) {
             e.stopPropagation();
             var isOpen = panel.classList.contains('is-open');
             document.querySelectorAll('.device-combobox-panel.is-open').forEach(function(p) {
-                if (p !== panel) { p.classList.remove('is-open'); var t = p.closest('.device-combobox').querySelector('.device-combobox-trigger'); if (t) t.setAttribute('aria-expanded', 'false'); resetComboboxPanelPosition(p); }
+                if (p !== panel) {
+                    p.classList.remove('is-open');
+                    var t = comboboxTriggerOf(p);
+                    if (t) t.setAttribute('aria-expanded', 'false');
+                    resetComboboxPanelPosition(p);
+                }
             });
             if (isOpen) {
                 panel.classList.remove('is-open');
@@ -3018,10 +3043,10 @@ function initDeviceComboboxes(container) {
     if (!window._deviceComboboxCloseBound) {
         window._deviceComboboxCloseBound = true;
         document.addEventListener('click', function closeComboboxOnOutside(e) {
-            if (!e.target.closest('.device-combobox')) {
+            if (!e.target.closest('.device-combobox') && !e.target.closest('.device-combobox-panel')) {
                 document.querySelectorAll('.device-combobox-panel.is-open').forEach(function(p) {
                     p.classList.remove('is-open');
-                    var t = p.closest('.device-combobox').querySelector('.device-combobox-trigger');
+                    var t = comboboxTriggerOf(p);
                     if (t) t.setAttribute('aria-expanded', 'false');
                     resetComboboxPanelPosition(p);
                 });
@@ -3033,7 +3058,7 @@ function initDeviceComboboxes(container) {
         window._deviceComboboxRepositionBound = true;
         function repositionOpenComboboxPanels() {
             document.querySelectorAll('.device-combobox-panel.is-open').forEach(function(pnl) {
-                var combobox = pnl.closest('.device-combobox');
+                var combobox = comboboxOwnerOf(pnl);
                 var comboboxTrigger = combobox && combobox.querySelector('.device-combobox-trigger');
                 if (comboboxTrigger) positionComboboxPanel(comboboxTrigger, pnl, combobox);
             });
