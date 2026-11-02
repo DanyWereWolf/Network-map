@@ -751,80 +751,88 @@
         var neighbors = typeof global.getFiberNeighborsAtHost === 'function'
             ? (global.getFiberNeighborsAtHost(hostObj, cableId, fiberNumber) || [])
             : [];
-        var splicePeer = null;
+        var fnFate = Number(fiberNumber);
 
-        // 1) Прямой сосед на следующем кабеле трассы — приоритет
-        if (nextCableId) {
-            for (var ni = 0; ni < neighbors.length; ni++) {
-                if (String(neighbors[ni].cableId) === String(nextCableId)) {
-                    splicePeer = neighbors[ni];
-                    break;
-                }
+        function peerFromConn(c) {
+            if (!c || !c.from || !c.to) return null;
+            if (String(c.from.cableId) === String(cableId) && Number(c.from.fiberNumber) === fnFate) {
+                return { cableId: c.to.cableId, fiberNumber: Number(c.to.fiberNumber) };
             }
-        }
-        // 2) Любой прямой сосед (без BFS по всей группе сварок)
-        if (!splicePeer && neighbors.length) {
-            splicePeer = neighbors[0];
-        }
-        // 3) Fallback: группа сращений, но предпочитаем peer на nextCableId
-        if (!splicePeer && typeof global.getSplicedFiberGroup === 'function') {
-            var group = global.getSplicedFiberGroup(hostObj, cableId, fiberNumber) || [];
-            var fallbackPeer = null;
-            for (var gi = 0; gi < group.length; gi++) {
-                var g = group[gi];
-                if (String(g.cableId) === String(cableId) && Number(g.fiberNumber) === Number(fiberNumber)) {
-                    continue;
-                }
-                if (nextCableId && String(g.cableId) === String(nextCableId)) {
-                    splicePeer = g;
-                    break;
-                }
-                if (!fallbackPeer) fallbackPeer = g;
+            if (String(c.to.cableId) === String(cableId) && Number(c.to.fiberNumber) === fnFate) {
+                return { cableId: c.from.cableId, fiberNumber: Number(c.from.fiberNumber) };
             }
-            if (!splicePeer) splicePeer = fallbackPeer;
-        } else if (!splicePeer) {
-            var conns = hostObj.properties.get('fiberConnections') || [];
-            var fnFate = Number(fiberNumber);
-            for (var ci = 0; ci < conns.length; ci++) {
-                var c = conns[ci];
-                if (!c || !c.from || !c.to) continue;
-                var peer = null;
-                if (String(c.from.cableId) === String(cableId) && Number(c.from.fiberNumber) === fnFate) {
-                    peer = { cableId: c.to.cableId, fiberNumber: Number(c.to.fiberNumber) };
-                } else if (String(c.to.cableId) === String(cableId) && Number(c.to.fiberNumber) === fnFate) {
-                    peer = { cableId: c.from.cableId, fiberNumber: Number(c.from.fiberNumber) };
-                }
-                if (!peer) continue;
-                if (nextCableId && String(peer.cableId) === String(nextCableId)) {
-                    splicePeer = peer;
-                    break;
-                }
-                if (!splicePeer) splicePeer = peer;
-            }
+            return null;
         }
 
-        if (splicePeer || nextCableId) {
-            // Трасса уже знает следующий hop — не рисуем «ветку» на первого попавшегося peer
-            // (иначе после NeD/группы сварок появляется лишний cyan-кабель и пересечения).
-            if (nextCableId) {
-                var peerFiber = fiberNumber;
-                if (splicePeer && String(splicePeer.cableId) === String(nextCableId)) {
-                    peerFiber = splicePeer.fiberNumber;
-                } else if (neighbors.length) {
-                    for (var nj = 0; nj < neighbors.length; nj++) {
-                        if (String(neighbors[nj].cableId) === String(nextCableId)) {
-                            peerFiber = neighbors[nj].fiberNumber;
-                            break;
-                        }
+        /** Сосед именно на указанном кабеле (не «любой первый»). */
+        function findPeerOnCable(targetCableId) {
+            if (!targetCableId) return null;
+            var ni;
+            for (ni = 0; ni < neighbors.length; ni++) {
+                if (String(neighbors[ni].cableId) === String(targetCableId)) return neighbors[ni];
+            }
+            if (typeof global.getSplicedFiberGroup === 'function') {
+                var group = global.getSplicedFiberGroup(hostObj, cableId, fiberNumber) || [];
+                for (var gi = 0; gi < group.length; gi++) {
+                    var g = group[gi];
+                    if (!g) continue;
+                    if (String(g.cableId) === String(cableId) && Number(g.fiberNumber) === fnFate) continue;
+                    if (String(g.cableId) === String(targetCableId)) {
+                        return { cableId: g.cableId, fiberNumber: Number(g.fiberNumber) };
                     }
                 }
+            }
+            var conns = hostObj.properties.get('fiberConnections') || [];
+            for (var ci = 0; ci < conns.length; ci++) {
+                var peer = peerFromConn(conns[ci]);
+                if (peer && String(peer.cableId) === String(targetCableId)) return peer;
+            }
+            return null;
+        }
+
+        function findAnySplicePeer(excludeCableId) {
+            var ni;
+            for (ni = 0; ni < neighbors.length; ni++) {
+                if (excludeCableId && String(neighbors[ni].cableId) === String(excludeCableId)) continue;
+                return neighbors[ni];
+            }
+            if (typeof global.getSplicedFiberGroup === 'function') {
+                var group = global.getSplicedFiberGroup(hostObj, cableId, fiberNumber) || [];
+                for (var gi = 0; gi < group.length; gi++) {
+                    var g = group[gi];
+                    if (!g) continue;
+                    if (String(g.cableId) === String(cableId) && Number(g.fiberNumber) === fnFate) continue;
+                    if (excludeCableId && String(g.cableId) === String(excludeCableId)) continue;
+                    return { cableId: g.cableId, fiberNumber: Number(g.fiberNumber) };
+                }
+            }
+            var conns = hostObj.properties.get('fiberConnections') || [];
+            for (var ci = 0; ci < conns.length; ci++) {
+                var peer = peerFromConn(conns[ci]);
+                if (!peer) continue;
+                if (excludeCableId && String(peer.cableId) === String(excludeCableId)) continue;
+                return peer;
+            }
+            return null;
+        }
+
+        // Continue только при реальной сварке на следующий hop.
+        // Иначе все свободные жN→жN садятся на исходящую кассету и сливаются с трассой
+        // (ж3→ж1 + фантом ж1→ж1 на одну lane).
+        if (nextCableId) {
+            var peerOnNext = findPeerOnCable(nextCableId);
+            if (peerOnNext) {
                 return {
                     kind: 'continue',
-                    label: '→ ж' + peerFiber,
+                    label: '→ ж' + peerOnNext.fiberNumber,
                     peerCableId: nextCableId,
-                    peerFiber: peerFiber
+                    peerFiber: peerOnNext.fiberNumber
                 };
             }
+        }
+
+        var splicePeer = findAnySplicePeer(nextCableId || null);
+        if (splicePeer) {
             var peerCableName = '';
             if (Array.isArray(global.objects)) {
                 var peerCab = (typeof global.findCableByUniqueId === 'function')
@@ -3051,20 +3059,21 @@
                 }
 
                 // Мост на исходящую кассету — только если сварка реально на этот кабель
-                var peerOnOut = !!(fate && fate.peerCableId && outCableId &&
+                var peerOnOut = !!(fate && fate.kind === 'continue' && fate.peerCableId && outCableId &&
                     String(fate.peerCableId) === String(outCableId) && fate.peerFiber != null);
                 var peerFiber = null;
                 if (peerOnOut) {
                     peerFiber = Number(fate.peerFiber);
+                } else if (isTraced && outSeg && outSeg.tracedFiber != null && outRibbon &&
+                    Number(seg.tracedFiber) === Number(fiber.number) &&
+                    outRibbon.laneY[Number(outSeg.tracedFiber)] != null) {
+                    // Трасса сегмента: входящая жN → исходящая жM (часто ж3→ж1)
+                    peerFiber = Number(outSeg.tracedFiber);
+                    peerOnOut = true;
                 } else if (isTraced && outRibbon && outRibbon.laneY[Number(fiber.number)] != null) {
                     // Та же жN на исходящей кассете — не подменять чужим outSeg.tracedFiber
                     // (иначе сплиттер1→в4 и сплиттер2→в2 оба садились на в2 трассы)
                     peerFiber = Number(fiber.number);
-                    peerOnOut = true;
-                } else if (isTraced && outSeg && outSeg.tracedFiber != null &&
-                    Number(fiber.number) === Number(outSeg.tracedFiber) && outRibbon) {
-                    // Продолжение той же трассового волокна, если совпадает номер
-                    peerFiber = Number(outSeg.tracedFiber);
                     peerOnOut = true;
                 }
 
@@ -3960,6 +3969,18 @@
                     }
                     if (nodeIsUnit[fi] && nodeIsUnit[s.toIdx] && s.fromSplice) {
                         return false;
+                    }
+                    // Боковой кабель с кассетного хоста (не primaryOut) на муфту/терминал —
+                    // не ствол: иначе cyan-линия «улетает» вниз с подписью жN·NF·м.
+                    if (nodeIsUnit[fi] && s.cableId) {
+                        var primCab = primaryOut(fi);
+                        if (primCab && s !== primCab &&
+                            String(s.cableId) !== String(primCab.cableId || '')) {
+                            var toSide = model.nodes[s.toIdx];
+                            if (!isSchematicSinglePortEndpoint(toSide)) {
+                                return false;
+                            }
+                        }
                     }
                     return true;
                 });
