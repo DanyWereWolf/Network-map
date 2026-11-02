@@ -310,7 +310,9 @@ function applyRegionZoomVisibility(zoom) {
     if (!Array.isArray(objects)) return;
     var hideRegions = typeof zoom === 'number' && zoom < getLodThresholds().regions;
     objects.forEach(function(obj) {
-        if (!obj || !obj.properties || obj.properties.get('type') !== 'region') return;
+        if (!obj || !obj.properties) return;
+        var type = obj.properties.get('type');
+        if (type !== 'region' && type !== 'zone') return;
         var visible = true;
         if (regionEditTarget && obj === regionEditTarget) visible = false;
         else if (obj.properties.get('_detachedForGeometryEdit')) visible = false;
@@ -420,9 +422,10 @@ function applyExpertZoomVisibility() {
         } else {
             objects.forEach(function(obj) {
                 if (!obj || !obj.options) return;
-                if (obj.properties && obj.properties.get('type') === 'region') return;
+                var hideType = obj.properties && obj.properties.get('type');
+                if (hideType === 'region' || hideType === 'zone') return;
                 try { obj.options.set('visible', false); } catch (e) {}
-                if (obj.properties && obj.properties.get('type') === 'cable' && window.CableUnderground) {
+                if (hideType === 'cable' && window.CableUnderground) {
                     try { CableUnderground.setOverlaysVisible(obj, false); } catch (eUg) {}
                 }
             });
@@ -585,8 +588,12 @@ function applyLowZoomMapUpdate() {
 function regionZoomLabelRebuildNeeded(oldZoom, newZoom) {
     if (typeof oldZoom !== 'number' || typeof newZoom !== 'number') return false;
     var regionsBelow = getLodThresholds().regions;
-    return (oldZoom >= regionsBelow && newZoom < regionsBelow) ||
-        (oldZoom < regionsBelow && newZoom >= regionsBelow);
+    // LOD: зоны скрылись/появились
+    if ((oldZoom >= regionsBelow && newZoom < regionsBelow) ||
+        (oldZoom < regionsBelow && newZoom >= regionsBelow)) return true;
+    // Пока зоны видимы — пересчитать размер подписи на каждом целом шаге зума
+    if (newZoom < regionsBelow && oldZoom < regionsBelow) return false;
+    return Math.floor(oldZoom) !== Math.floor(newZoom);
 }
 
 /** Вернуть visible у кроссов/узлов после expert-zoom hide (опция переживает remove/add). */

@@ -62,16 +62,34 @@
         return 'rgba(' + r + ',' + g + ',' + b + ',' + (isDark ? 0.88 : 0.93) + ')';
     }
 
+    function regionLabelCharFactor(text) {
+        // Кириллица в DM Sans шире латиницы — прежние 0.58 давали обрезку по краям.
+        return /[а-яёА-ЯЁ]/.test(text) ? 0.68 : 0.56;
+    }
+
+    function fitRegionLabelText(text, fs, maxInnerW) {
+        var raw = String(text == null ? '' : text);
+        if (!raw) return '';
+        var charFactor = regionLabelCharFactor(raw);
+        if (raw.length * fs * charFactor <= maxInnerW) return raw;
+        var ellipsis = '…';
+        var budget = Math.max(1, Math.floor(maxInnerW / (fs * charFactor)) - 1);
+        if (budget >= raw.length) return raw;
+        return raw.slice(0, budget).replace(/\s+$/, '') + ellipsis;
+    }
+
     /** SVG-иконка подписи — тот же подход, что у курсоров коллег (default#image, без HTML). */
     function buildRegionNameIcon(name, fillColor, strokeColor, layout) {
         layout = layout || {};
-        var text = layout.text != null ? layout.text : ((name && String(name).trim()) ? String(name).trim() : 'Регион');
+        var fullText = layout.text != null ? layout.text : ((name && String(name).trim()) ? String(name).trim() : 'Зона');
         var fs = layout.fontSizePx || 13;
-        var maxW = layout.maxWidthPx || 200;
+        var maxW = Math.max(36, layout.maxWidthPx || 200);
         var padX = 10;
         var padY = 4;
-        var charFactor = /[а-яёА-ЯЁ]/.test(text) ? 0.58 : 0.52;
-        var innerW = Math.min(maxW - padX * 2, Math.ceil(text.length * fs * charFactor));
+        var maxInner = Math.max(12, maxW - padX * 2);
+        var text = fitRegionLabelText(fullText, fs, maxInner);
+        var charFactor = regionLabelCharFactor(text);
+        var innerW = Math.min(maxInner, Math.ceil(Math.max(1, text.length) * fs * charFactor));
         var width = Math.min(maxW, innerW + padX * 2);
         var height = Math.ceil(fs * 1.25) + padY * 2;
         var bg = regionLabelBackground(fillColor);
@@ -467,27 +485,30 @@
 
     function getRegionLabelLayout(map, ring, name) {
         var box = ringToPixelBox(map, ring);
-        var text = (name && String(name).trim()) ? String(name).trim() : 'Регион';
+        var text = (name && String(name).trim()) ? String(name).trim() : 'Зона';
         if (!box || box.width < 44 || box.height < 24) {
             return { hide: true, text: text };
         }
 
         var padX = 24;
-        var innerMax = Math.max(28, Math.floor(box.width * 0.84) - padX);
-        var maxHeight = Math.floor(box.height * 0.32);
+        var boxCap = Math.floor(box.width * 0.9);
+        var innerMax = Math.max(28, boxCap - padX);
+        var maxHeight = Math.floor(box.height * 0.36);
         var fontSize = Math.max(9, Math.min(14, Math.floor(maxHeight * 0.52)));
-        var charFactor = /[а-яёА-ЯЁ]/.test(text) ? 0.58 : 0.52;
+        var charFactor = regionLabelCharFactor(text);
         var estText = text.length * fontSize * charFactor;
         if (estText > innerMax) {
             fontSize = Math.max(9, Math.floor(innerMax / (text.length * charFactor)));
         }
 
-        var totalWidth = Math.min(Math.floor(box.width * 0.84), Math.ceil(text.length * fontSize * charFactor) + padX);
+        // Ширина бейджа — по укороченному тексту, но не шире зоны.
+        var fitted = fitRegionLabelText(text, fontSize, innerMax);
+        var totalWidth = Math.min(boxCap, Math.ceil(fitted.length * fontSize * regionLabelCharFactor(fitted)) + padX);
 
         return {
             hide: false,
             text: text,
-            maxWidthPx: totalWidth,
+            maxWidthPx: Math.max(36, totalWidth),
             fontSizePx: fontSize
         };
     }

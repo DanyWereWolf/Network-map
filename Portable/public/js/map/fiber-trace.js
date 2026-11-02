@@ -3982,6 +3982,10 @@
                             }
                         }
                     }
+                    // В конечный терминал — только мост на порт кассеты, не ствол в центр панели
+                    if (termNodeSet[s.toIdx] && s.cableId) {
+                        return false;
+                    }
                     return true;
                 });
                 if (!segs.length) return;
@@ -4279,14 +4283,12 @@
             }
         }
 
-        yield { hint: 'Рисуем связи', pct: null, waitMs: 0 };
-
-        // Веер рёбер после портов сплиттера — выход с линии порта N
-        drawTreeTrunkEdges();
         yield { hint: 'Терминалы и кассеты', pct: null, waitMs: 0 };
 
         // Терминалы (муфта/кросс без исходящей кассеты, сплиттер как приёмник): входы слева.
         // ONU / МК / узел — всегда компактные (1 вход), не кассета на N портов.
+        // Важно: сначала панели, потом стволы/мосты — иначе непрозрачный фон терминала
+        // перекрывает жилу (ствол рисовался раньше и уходил «под» панель).
         var termOrder = [];
         for (var ti0 = 0; ti0 < model.nodes.length; ti0++) {
             if (nodeIsUnit[ti0] || nodeIsSplitterPorts[ti0]) continue;
@@ -4296,6 +4298,10 @@
         termOrder.sort(function (a, b) {
             return (layout.depth[a] - layout.depth[b]) || (layout.y[a] - layout.y[b]) || (a - b);
         });
+        var termNodeSet = {};
+        termOrder.forEach(function (tid) { termNodeSet[tid] = true; });
+        // Мосты в терминал — после ВСЕХ панелей, чтобы соседний терминал не перекрыл кривую
+        var deferredTermBridges = [];
 
         function synthesizeOutRibbonGeom(hostIdx, termX0, termW0, yTop0, yBot0) {
             var outC = primaryOut(hostIdx);
@@ -4571,13 +4577,16 @@
                 tapByFiber[tap] = tapByFiber[tap] || [];
                 if (!(xLeave < entryX - 6)) xLeave = entryX - 36;
                 var dx = Math.max(28, (entryX - xLeave) * 0.45);
-                parts.push('<path class="trace-sch-tree-splice trace-sch-tree-splice--traced" d="M ' +
+                // В deferred — поверх всех терминальных панелей
+                deferredTermBridges.push('<path class="trace-sch-tree-splice trace-sch-tree-splice--traced" d="M ' +
                     xLeave + ' ' + yLeave +
                     ' C ' + (xLeave + dx) + ' ' + yLeave + ', ' +
                     (entryX - dx) + ' ' + y2 + ', ' +
                     entryX + ' ' + y2 +
                     ' L ' + portX + ' ' + y2 +
                     '" fill="none" stroke="#06b6d4" stroke-width="2.4" stroke-linecap="round"/>');
+                deferredTermBridges.push('<circle cx="' + portX + '" cy="' + y2 +
+                    '" r="3.2" fill="#06b6d4" stroke="#06b6d4" stroke-width="1.2"/>');
                 if (badgeText) {
                     pushTreeEdgeBadge(badgeParts, entryX - 58, entryX - 6, y2, badgeText, null, '');
                 }
@@ -4588,6 +4597,7 @@
             inSegs.forEach(function (iseg) {
                 var fromN = model.nodes[iseg.fromIdx];
                 var tap = resolveSchematicSegTapFiber(iseg, fromN);
+                if (tap == null && iseg.tracedFiber != null) tap = Number(iseg.tracedFiber);
                 var yLeave;
                 var xLeave;
                 if (nodeIsSplitterPorts[iseg.fromIdx] && fromN) {
@@ -4689,6 +4699,20 @@
             // Геометрия исходящего кабеля с правого края — для следующего терминала
             synthesizeOutRibbonGeom(ti, termX, termW, yTopPorts, yTopPorts + bandH);
         }
+
+        // Мосты в терминалы — поверх всех панелей
+        if (deferredTermBridges.length) {
+            parts.push('<g class="trace-sch-tree-term-bridges">');
+            for (var dbi = 0; dbi < deferredTermBridges.length; dbi++) {
+                parts.push(deferredTermBridges[dbi]);
+            }
+            parts.push('</g>');
+        }
+
+        yield { hint: 'Рисуем связи', pct: null, waitMs: 0 };
+        // Стволы после терминалов — иначе панель перекрывает жилу
+        drawTreeTrunkEdges();
+
         yield { hint: 'Сварки и подписи', pct: null, waitMs: 0 };
         flushTreeEdgeBadges(parts, badgeParts);
 

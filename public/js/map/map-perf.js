@@ -19,8 +19,13 @@
     var objectsByType = {
         cable: [],
         cableLabel: [],
-        region: []
+        region: [],
+        zone: []
     };
+
+    function isZoneOrRegionType(type) {
+        return type === 'region' || type === 'zone';
+    }
     /** uid объекта → Set кабелей, касающихся from/to/points. Лениво пересобирается при dirty. */
     var cablesByObjectUid = new Map();
     var cableLinksDirty = true;
@@ -517,9 +522,9 @@
     function isObjectInViewport(obj, bounds) {
         if (!obj || !bounds) return true;
         var type = obj.properties && obj.properties.get('type');
-        // Never viewport-cull regions (same as applyViewportCullToMap). Their area
+        // Never viewport-cull zones (same as applyViewportCullToMap). Their area
         // can still cover the view when every vertex is off-screen after a deep zoom-in.
-        if ((type === 'region' || type === 'zone')) return true;
+        if (isZoneOrRegionType(type)) return true;
         if (type === 'cable') return cableInViewport(obj, bounds);
         if (type === 'cableLabel') {
             var cables = obj.properties.get('cables');
@@ -598,8 +603,9 @@
         var type = obj.properties.get('type');
         if (isCabinetMember(obj)) return false;
         if (obj.properties.get('_mapFilterVisible') === false) return false;
-        if (ctx.hideObjects && type !== 'region') return false;
-        if (ctx.hideRegions && (type === 'region' || type === 'zone')) return false;
+        // Зоны (legacy: region) остаются на карте при hideObjects — как и раньше region.
+        if (ctx.hideObjects && !isZoneOrRegionType(type)) return false;
+        if (ctx.hideRegions && isZoneOrRegionType(type)) return false;
         if (ctx.bounds && !isObjectInViewport(obj, ctx.bounds)) return false;
         return true;
     }
@@ -634,6 +640,11 @@
             if (label && shouldShowLabelForObject(obj, ctx)) {
                 if (!isGeoObjectOnMap(label)) global.myMap.geoObjects.add(label);
             }
+            var regionLabel = obj.properties && obj.properties.get('regionLabel');
+            if (regionLabel && isZoneOrRegionType(type)) {
+                if (!isGeoObjectOnMap(regionLabel)) global.myMap.geoObjects.add(regionLabel);
+                if (regionLabel.options) regionLabel.options.set('visible', true);
+            }
             if (type === 'cable' && global.CableUnderground) {
                 try { global.CableUnderground.setOverlaysVisible(obj, true); } catch (eUg) {}
             }
@@ -652,6 +663,10 @@
             global.myMap.geoObjects.remove(obj);
             var label = obj.properties && obj.properties.get('label');
             if (label) global.myMap.geoObjects.remove(label);
+            var regionLabel = obj.properties && obj.properties.get('regionLabel');
+            if (regionLabel) {
+                try { global.myMap.geoObjects.remove(regionLabel); } catch (eRl) {}
+            }
             var type = obj.properties && obj.properties.get('type');
             if (type === 'cable' && global.CableUnderground) {
                 try { global.CableUnderground.setOverlaysVisible(obj, false); } catch (eUg) {}
@@ -674,7 +689,7 @@
                     var uid = uidFromObj(obj);
                     if (uid) mountedUids.add(uid);
                     var type = obj.properties && obj.properties.get('type');
-                    if (ctx.hideObjects && type !== 'region' && obj.options) {
+                    if (ctx.hideObjects && !isZoneOrRegionType(type) && obj.options) {
                         obj.options.set('visible', false);
                     }
                     var label = obj.properties && obj.properties.get('label');
@@ -697,6 +712,10 @@
             var label = obj.properties && obj.properties.get('label');
             if (label) {
                 try { if (isGeoObjectOnMap(label)) global.myMap.geoObjects.remove(label); } catch (e2) {}
+            }
+            var regionLabel = obj.properties && obj.properties.get('regionLabel');
+            if (regionLabel) {
+                try { if (isGeoObjectOnMap(regionLabel)) global.myMap.geoObjects.remove(regionLabel); } catch (e3) {}
             }
         }
         if (uid) {
@@ -726,7 +745,7 @@
             var obj = objectsById.get(uid);
             if (!obj || isExternallyManagedMapObject(obj)) return;
             var type = obj.properties && obj.properties.get('type');
-            if ((type === 'region' || type === 'zone') && !ctx.hideRegions) return;
+            if (isZoneOrRegionType(type) && !ctx.hideRegions) return;
             toUnmount.push(obj);
         });
         for (var i = 0; i < toUnmount.length; i++) unmountObject(toUnmount[i]);
@@ -737,7 +756,7 @@
             var o = global.objects[j];
             if (!o || isExternallyManagedMapObject(o)) continue;
             var t = o.properties && o.properties.get('type');
-            if ((t === 'region' || t === 'zone') && !ctx.hideRegions) continue;
+            if (isZoneOrRegionType(t) && !ctx.hideRegions) continue;
             var uid2 = uidFromObj(o);
             if (uid2 && pinnedUids.has(uid2)) continue;
             if (uid2 && mountedUids.has(uid2)) continue;
@@ -783,8 +802,8 @@
             }
         }
 
-        // Avoid full objects[] scan: use typed indexes for cable/cableLabel/region.
-        var typedLists = [objectsByType.cable, objectsByType.cableLabel, objectsByType.region];
+        // Avoid full objects[] scan: typed indexes for cables and zones (legacy region).
+        var typedLists = [objectsByType.cable, objectsByType.cableLabel, objectsByType.region, objectsByType.zone];
         for (var tl = 0; tl < typedLists.length; tl++) {
             var list = typedLists[tl];
             for (var i = 0; i < list.length; i++) {
