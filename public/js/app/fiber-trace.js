@@ -49,12 +49,19 @@ function getNextCableRoutePointIndex(pts, currentObj, cameFrom) {
 
     var prevIdx = idx - 1;
     var nextIdx = idx + 1;
-    if (cameFrom) {
+    if (cameFrom && fromIdx !== -1) {
         if (prevIdx >= 0 && routeMatch(pts[prevIdx], cameFrom) && nextIdx < pts.length) return nextIdx;
         if (nextIdx < pts.length && routeMatch(pts[nextIdx], cameFrom) && prevIdx >= 0) return prevIdx;
     }
+    // Без направления на этом кабеле: с from — вперёд, с to — назад (симметрия концов).
+    // Раньше с конца to возвращали -2 и прыгали сразу на from, пропуская промежуточные хосты.
+    if (!cameFrom || fromIdx === -1) {
+        if (nextIdx < pts.length) return nextIdx;
+        if (prevIdx >= 0) return prevIdx;
+        return -1;
+    }
     if (nextIdx < pts.length) return nextIdx;
-    // На конце маршрута без соседа вперёд — не разворачиваться назад (это обрывало трассировку).
+    // На конце маршрута с направлением наружу — не разворачиваться назад.
     if (idx === pts.length - 1 || idx === 0) return -2;
     if (prevIdx >= 0) return prevIdx;
     return -1;
@@ -69,7 +76,17 @@ function getCableRouteEndpointBeyondPoints(cable, pts, currentObj, cameFrom) {
     var routeMatch = getTraceRouteMatchFn();
     var curIdx = pts ? getTracePointIndexOnRoute(pts, currentObj) : -1;
     var fromIdx = cameFrom && pts ? getTracePointIndexOnRoute(pts, cameFrom) : -1;
-    var movingForward = fromIdx !== -1 && curIdx !== -1 ? fromIdx < curIdx : curIdx === (pts ? pts.length - 1 : -1);
+    var movingForward;
+    if (fromIdx !== -1 && curIdx !== -1) {
+        movingForward = fromIdx < curIdx;
+    } else if (curIdx === 0) {
+        movingForward = true;
+    } else if (pts && curIdx === pts.length - 1) {
+        // На конце to без cameFrom на маршруте — идём к from, а не прыгаем «вперёд» на from как far-end.
+        movingForward = false;
+    } else {
+        movingForward = true;
+    }
 
     if (movingForward) {
         if (!routeMatch(toObj, currentObj)) return toObj;
@@ -152,14 +169,17 @@ function tryAdvanceTraceAlongCableRoute(path, hostOnRoute, previousObject, curre
 function findPeerNodeTargetsOnCable(startCross, cableId, fiberNumber, originNodeId) {
     var peers = [];
     var startUid = getObjectUniqueId(startCross);
-    var key = cableId + '-' + fiberNumber;
     objects.forEach(function(obj) {
         if (!obj || !obj.properties) return;
         var ht = obj.properties.get('type');
         if (!isFiberHostType(ht)) return;
         if (getObjectUniqueId(obj) === startUid) return;
-        var nc = obj.properties.get('nodeConnections') || {};
-        var conn = nc[key];
+        var resolved = typeof resolveHostNodeConnectionAtFiber === 'function'
+            ? resolveHostNodeConnectionAtFiber(obj, cableId, fiberNumber)
+            : null;
+        var conn = resolved && resolved.nodeConn
+            ? resolved.nodeConn
+            : ((obj.properties.get('nodeConnections') || {})[cableId + '-' + fiberNumber] || null);
         if (!conn || !conn.nodeId || conn.nodeId === originNodeId) return;
         var nodeObj = objects.find(function(n) {
             return n.properties && n.properties.get('type') === 'node' && n.properties.get('uniqueId') === conn.nodeId;
@@ -405,7 +425,7 @@ function getCableRoutePosition(cable, currentObj) {
             return { forward: toObj || null, backward: null };
         }
         if (toObj && (routeMatch(toObj, currentObj) || getObjectUniqueId(toObj) === currentId)) {
-            return { forward: fromObj || null, backward: toObj || null };
+            return { forward: fromObj || null, backward: null };
         }
         return null;
     }
@@ -436,14 +456,14 @@ function getCableRoutePosition(cable, currentObj) {
             if (memberCabId && toObj && toObj.properties && toObj.properties.get('type') === 'cabinet' &&
                 getObjectUniqueId(toObj) === memberCabId) {
                 var backHopCab = pts.length > 1 ? pts[pts.length - 2] : cable.properties.get('from');
-                return { forward: backHopCab || fromObj || null, backward: toObj };
+                return { forward: backHopCab || fromObj || null, backward: null };
             }
             var lh = pts[pts.length - 1];
             var backHop = pts.length > 1 ? pts[pts.length - 2] : cable.properties.get('from');
             if (lh && !routeMatch(lh, currentObj)) {
-                return { forward: lh, backward: backHop || null };
+                return { forward: lh, backward: null };
             }
-            return { forward: backHop || fromObj || null, backward: toObj || null };
+            return { forward: backHop || fromObj || null, backward: null };
         }
         return null;
     }
