@@ -1229,32 +1229,111 @@
                 pendingCable = null;
             }
         }
-        // Хвостовой кабель, упёршийся в опору/крепление: показываем узел «обрыв»
-        if (pendingCable && lastHostIdx >= 0 && lastWaypointItem && lastWaypointItem.object) {
-            var wpEnd = lastWaypointItem;
-            nodes.push({
-                id: getUid(wpEnd.object) + '#end',
-                name: (wpEnd.objectName || getTypeName(wpEnd.objectType)) + ' (обрыв)',
-                type: wpEnd.objectType,
-                object: wpEnd.object,
-                reserveM: 0,
-                port: null,
-                embeddedInHost: null,
-                fromSplitterOutput: null
-            });
-            segments.push({
-                kind: 'cable',
-                fromIdx: lastHostIdx,
-                toIdx: nodes.length - 1,
-                cableId: pendingCable.cableId,
-                cableName: pendingCable.cableName,
-                cable: pendingCable.cable,
-                lengthM: pendingCable.segmentLengthM,
-                tracedFiber: pendingCable.fiberNumber,
-                splitterOutputIndex: null
-            });
+        // Хвостовой кабель без следующего хоста: показать РЕАЛЬНОЕ место, куда ушёл кабель
+        // (дальний from/to или последняя точка маршрута), а не фейковую «кассету (обрыв)».
+        if (pendingCable && lastHostIdx >= 0) {
+            var dest = resolveSchematicCableDestination(
+                pendingCable.cable || findSchematicCableById(pendingCable.cableId),
+                lastHost && lastHost.object,
+                lastWaypointItem
+            );
+            if (dest && dest.object) {
+                var destUid = getUid(dest.object);
+                var already = destUid && nodes.some(function (n) {
+                    return n && n.object && getUid(n.object) === destUid;
+                });
+                if (!already) {
+                    var destIsWp = isWaypointType(dest.type);
+                    nodes.push({
+                        id: destUid ? (destUid + (destIsWp ? '#route-end' : '')) : ('end-' + nodes.length),
+                        name: dest.name,
+                        type: dest.type,
+                        object: dest.object,
+                        reserveM: 0,
+                        port: null,
+                        embeddedInHost: null,
+                        fromSplitterOutput: null,
+                        // Только опора/крепление/колодец — компактная «куда ушло»;
+                        // муфта/кросс/узел рисуются как обычный терминал.
+                        routeEnd: destIsWp
+                    });
+                    segments.push({
+                        kind: 'cable',
+                        fromIdx: lastHostIdx,
+                        toIdx: nodes.length - 1,
+                        cableId: pendingCable.cableId,
+                        cableName: pendingCable.cableName,
+                        cable: pendingCable.cable,
+                        lengthM: pendingCable.segmentLengthM,
+                        tracedFiber: pendingCable.fiberNumber,
+                        splitterOutputIndex: null,
+                        routeEnd: destIsWp
+                    });
+                }
+            }
         }
         return { nodes: nodes, segments: segments };
+    }
+
+    /**
+     * Куда реально уходит кабель от хоста: сначала far-end (from/to),
+     * иначе продолжение по points[] в сторону waypoint / последнего конца.
+     */
+    function resolveSchematicCableDestination(cable, fromHostObj, waypointItem) {
+        if (!cable || !cable.properties) return null;
+        var far = null;
+        if (typeof global.getOtherEndOfCable === 'function' && fromHostObj) {
+            try { far = global.getOtherEndOfCable(cable, fromHostObj); } catch (e) { far = null; }
+        }
+        if (!far && fromHostObj) {
+            var fromObj = cable.properties.get('from');
+            var toObj = cable.properties.get('to');
+            var fromUid = getUid(fromHostObj);
+            if (fromObj && getUid(fromObj) === fromUid) far = toObj;
+            else if (toObj && getUid(toObj) === fromUid) far = fromObj;
+        }
+        // Если far — waypoint или null, а на маршруте есть более дальняя точка в том же направлении — берём её
+        var pts = null;
+        if (typeof global.getCableRoutePoints === 'function') {
+            try { pts = global.getCableRoutePoints(cable); } catch (e2) { pts = null; }
+        }
+        if ((!pts || pts.length < 2) && Array.isArray(cable.properties.get('points'))) {
+            pts = cable.properties.get('points');
+        }
+        if (pts && pts.length >= 2 && fromHostObj) {
+            var hostIdx = findPointIndexOnRoute(pts, fromHostObj);
+            var wpIdx = waypointItem && waypointItem.object
+                ? findPointIndexOnRoute(pts, waypointItem.object)
+                : -1;
+            var destPt = null;
+            if (hostIdx >= 0) {
+                if (wpIdx > hostIdx) destPt = pts[pts.length - 1];
+                else if (wpIdx >= 0 && wpIdx < hostIdx) destPt = pts[0];
+                else if (hostIdx === 0) destPt = pts[pts.length - 1];
+                else if (hostIdx === pts.length - 1) destPt = pts[0];
+                else if (wpIdx >= 0) destPt = pts[wpIdx];
+            } else if (wpIdx >= 0) {
+                destPt = pts[wpIdx];
+            }
+            // Предпочитаем дальний конец маршрута, если он «сильнее» текущего far (хост > waypoint)
+            if (destPt && destPt.properties) {
+                var destType = destPt.properties.get('type');
+                var farType = far && far.properties ? far.properties.get('type') : null;
+                var destIsHost = destType && !isWaypointType(destType) && destType !== 'cable' && destType !== 'cableLabel';
+                var farIsHost = farType && !isWaypointType(farType) && farType !== 'cable' && farType !== 'cableLabel';
+                if (!far || (destIsHost && !farIsHost) || (isWaypointType(farType) && destPt !== far)) {
+                    // Если far уже хост — оставляем его; иначе берём destPt (куда реально уходит трасса)
+                    if (!farIsHost) far = destPt;
+                }
+            }
+        }
+        if (!far && waypointItem && waypointItem.object) far = waypointItem.object;
+        if (!far || !far.properties) return null;
+        if (fromHostObj && getUid(far) === getUid(fromHostObj)) return null;
+        var t = far.properties.get('type');
+        if (t === 'cable' || t === 'cableLabel') return null;
+        var nm = far.properties.get('name') || (waypointItem && waypointItem.objectName) || getTypeName(t);
+        return { object: far, type: t, name: nm };
     }
 
     function buildSchematicFiberRows(segment, toHost) {
@@ -2602,6 +2681,8 @@
     function isSchematicSinglePortEndpoint(node) {
         if (!node) return false;
         var t = node.type;
+        // Крепление / опора / колодец — куда физически ушёл кабель, не кассета сварок
+        if (node.routeEnd || isWaypointType(t)) return true;
         return t === 'onu' || t === 'mediaConverter' || t === 'radioBridge' || t === 'node';
     }
 
@@ -3382,7 +3463,10 @@
             onu: 'ONU',
             node: 'Узел',
             mediaConverter: 'МК',
-            radioBridge: 'РМ'
+            radioBridge: 'РМ',
+            attachment: 'Крепление',
+            support: 'Опора',
+            manhole: 'Колодец'
         };
         return map[type] || getTypeName(type);
     }
