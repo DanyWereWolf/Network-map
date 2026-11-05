@@ -3579,7 +3579,8 @@ wss.on('connection', (ws, req) => {
                     var state = getSyncStateForOrg(orgId, { forceFromDb: false });
                     if (state) {
                         var groupNames = syncGroupNamesByOrg[orgId] || syncGroupNames;
-                        var helloPayload = { type: 'map_refresh', organizationId: orgId };
+                        // reason=hello: клиент пропускает reload при коротком reconnect (иначе карта «мигает»).
+                        var helloPayload = { type: 'map_refresh', organizationId: orgId, reason: 'hello' };
                         if (groupNames && (groupNames.cross || groupNames.node)) helloPayload.groupNames = groupNames;
                         try { ws.send(JSON.stringify(helloPayload)); } catch (e) {}
                     }
@@ -3702,11 +3703,6 @@ wss.on('connection', (ws, req) => {
                 var state = getSyncStateForOrg(orgId);
                 if (!state) return;
                 var stateRegionId = msg.regionId != null ? String(msg.regionId).trim() : '';
-                var fp = fingerprintMapData(msg.data);
-                if (fp && syncStateFingerprintByOrg[orgId] === fp &&
-                    Array.isArray(state.data) && state.data.length === msg.data.length && !stateRegionId) {
-                    return;
-                }
                 var nextData;
                 if (stateRegionId && db.mapRegionsCore) {
                     try {
@@ -3754,6 +3750,16 @@ wss.on('connection', (ws, req) => {
                         return;
                     }
                 }
+                // Dedupe после merge (для regionId старый fp по slice никогда не совпадал с full → thrash map_refresh).
+                var nextFp = fingerprintMapData(nextData);
+                var prevFp = syncStateFingerprintByOrg[orgId];
+                if (!prevFp && Array.isArray(state.data)) {
+                    try { prevFp = fingerprintMapData(state.data); } catch (ePrevFp) { prevFp = null; }
+                }
+                if (nextFp && prevFp && nextFp === prevFp &&
+                    Array.isArray(state.data) && state.data.length === nextData.length) {
+                    return;
+                }
                 var validationFull = validateMapDataObjectLimit(orgId, nextData);
                 if (!validationFull.ok) {
                     try {
@@ -3767,7 +3773,7 @@ wss.on('connection', (ws, req) => {
                 }
                 state.data = nextData;
                 state.clientId = msg.clientId || clientId;
-                syncStateFingerprintByOrg[orgId] = fingerprintMapData(nextData);
+                syncStateFingerprintByOrg[orgId] = nextFp || fingerprintMapData(nextData);
                 if (msg.groupNames && typeof msg.groupNames === 'object') {
                     syncGroupNamesByOrg[orgId] = msg.groupNames;
                     try { db.setSettings({ groupNames: msg.groupNames }, orgId); } catch (e) {}

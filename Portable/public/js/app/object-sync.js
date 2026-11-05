@@ -703,11 +703,11 @@ function pushSaveDataToSync(opts) {
         else syncPushObjectUpdate(currentModalObject, !!opts.syncImmediate);
         return;
     }
-    if (typeof window.syncSendState === 'function') {
-        if (typeof window.syncShouldSendFullState === 'function' && !window.syncShouldSendFullState()) return;
-        window.syncSendState(getSerializedData());
-    }
+    // Голый saveData() без цели раньше слал полный state → у других map_refresh по кругу.
+    // Инкрементальные op уже ушли выше; полный state — только через opts.syncFull (обработан раньше).
 }
+
+
 
 function revertObjectDragToPreStart(obj, lockedBy) {
     if (!obj || !obj.properties) return;

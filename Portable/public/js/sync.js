@@ -27,6 +27,10 @@
     var remoteOpQueue = [];
     var remoteOpFlushTimer = null;
     var REMOTE_OP_BATCH_MS = 48;
+    var pendingOutgoingOps = [];
+    var MAX_PENDING_OUTGOING_OPS = 200;
+    var lastSyncDisconnectAt = 0;
+    var HELLO_REFRESH_CATCHUP_MS = 60000;
     var pendingLockRequests = {};
     var remoteObjectLocks = {};
     var lockHeartbeatTimer = null;
@@ -411,10 +415,12 @@
             try {
                 ws.send(JSON.stringify({ type: 'hello', displayName: displayName, userId: userId, token: token }));
             } catch (e) {}
+            flushPendingOutgoingOps();
             if (btn) btn.disabled = false;
             lockHeartbeatTick();
         };
         ws.onclose = function() {
+            lastSyncDisconnectAt = Date.now();
             ws = null;
             window.syncIsConnected = false;
             stopLockHeartbeat();
@@ -573,6 +579,19 @@
                     if (msg.groupNames && typeof window.applyGroupNames === 'function') {
                         try { window.applyGroupNames(msg.groupNames); } catch (e) {}
                     }
+                    // hello на каждый reconnect раньше всегда делал GET+merge → «карта мигает» и
+                    // сносит только что поставленное. Карта уже с /api/map; catch-up только после долгого обрыва.
+                    if (msg.reason === 'hello' && !msg.forceFull) {
+                        var mapReady = false;
+                        try {
+                            mapReady = !!(typeof window._mapDataReady !== 'undefined' && window._mapDataReady) &&
+                                !(typeof window._mapInitialLoadPending !== 'undefined' && window._mapInitialLoadPending);
+                        } catch (eReady) {}
+                        var disconnectedFor = lastSyncDisconnectAt ? (Date.now() - lastSyncDisconnectAt) : 0;
+                        if (mapReady && disconnectedFor < HELLO_REFRESH_CATCHUP_MS) {
+                            return;
+                        }
+                    }
                     if (typeof window.shouldSkipSyncMapRefresh === 'function' &&
                         window.shouldSkipSyncMapRefresh(msg.organizationId)) {
                         return;
@@ -582,7 +601,8 @@
                             organizationId: msg.organizationId,
                             immediate: true,
                             forceFull: !!msg.forceFull,
-                            regionId: msg.regionId != null ? msg.regionId : null
+                            regionId: msg.regionId != null ? msg.regionId : null,
+                            reason: msg.reason || null
                         });
                     }
                     return;
@@ -747,13 +767,32 @@
         }
     }
 
+    function flushPendingOutgoingOps() {
+        if (!ws || ws.readyState !== WebSocket.OPEN || !pendingOutgoingOps.length) return;
+        var queued = pendingOutgoingOps.slice();
+        pendingOutgoingOps = [];
+        for (var i = 0; i < queued.length; i++) {
+            try {
+                ws.send(JSON.stringify({ type: 'op', op: queued[i], clientId: myClientId }));
+                lastOpSendTime = Date.now();
+            } catch (eFlush) {
+                pendingOutgoingOps = queued.slice(i).concat(pendingOutgoingOps);
+                break;
+            }
+        }
+    }
+
     function sendOp(op) {
         if (!op || !op.type) return;
         lastOpSendTime = Date.now();
         if (ws && ws.readyState === WebSocket.OPEN) {
             try {
                 ws.send(JSON.stringify({ type: 'op', op: op, clientId: myClientId }));
-            } catch (e) {}
+            } catch (e) {
+                if (pendingOutgoingOps.length < MAX_PENDING_OUTGOING_OPS) pendingOutgoingOps.push(op);
+            }
+        } else if (pendingOutgoingOps.length < MAX_PENDING_OUTGOING_OPS) {
+            pendingOutgoingOps.push(op);
         }
     }
 

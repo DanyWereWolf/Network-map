@@ -1781,10 +1781,10 @@ var _mapApplyInProgress = false;
 /** Анти-дубль: sync hello шлёт map_refresh сразу после /api/map → карта грузилась дважды. */
 var _lastMapLoadedFromApiAt = 0;
 var _lastMapLoadedOrgId = null;
-var MAP_SYNC_RELOAD_DEDUP_MS = 2500;
+var MAP_SYNC_RELOAD_DEDUP_MS = 8000;
 /** uid → timestamp: локально созданные объекты, которых ещё может не быть в /api/map. */
 var _pendingLocalMapAdds = typeof Map !== 'undefined' ? new Map() : null;
-var PENDING_LOCAL_MAP_ADD_GRACE_MS = 12000;
+var PENDING_LOCAL_MAP_ADD_GRACE_MS = 120000;
 
 function notePendingLocalMapAdd(obj) {
     if (!obj || !obj.properties || !_pendingLocalMapAdds) return;

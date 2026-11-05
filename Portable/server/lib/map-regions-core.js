@@ -120,8 +120,9 @@ function assertRegionSliceNotDangerousShrink(previousFull, regionId, nextSlice, 
     var prevSlice = filterItemsByRegionId(previousFull, regionId);
     var prevLen = prevSlice.length;
     var nextLen = Array.isArray(nextSlice) ? nextSlice.length : 0;
-    var MAP_SHRINK_MIN_EXISTING = 50;
-    var MAP_SHRINK_RATIO = 0.5;
+    // Раньше порог 50 + ratio 0.5: малые регионы тихо вычищались неполным WS state.
+    var MAP_SHRINK_MIN_EXISTING = 5;
+    var MAP_SHRINK_RATIO = 0.9;
     if (prevLen >= MAP_SHRINK_MIN_EXISTING) {
         if (nextLen === 0 || nextLen < Math.floor(prevLen * MAP_SHRINK_RATIO)) {
             return {
