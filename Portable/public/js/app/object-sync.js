@@ -233,7 +233,8 @@ function updateObjectLockMapBadge(obj, locked, lockInfo) {
             cursor: 'default',
             hasBalloon: false,
             hasHint: true,
-            interactiveZIndex: true
+            interactive: false,
+            interactiveZIndex: false
         });
         try {
             if (badge.options && typeof badge.options.unset === 'function') {

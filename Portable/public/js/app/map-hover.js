@@ -677,7 +677,8 @@ function showHoverCircle(obj, e) {
                 strokeColor: '#3b82f6',
                 strokeWidth: 2,
                 strokeStyle: 'solid',
-                zIndex: 999
+                zIndex: 999,
+                interactive: false
             });
             
             myMap.geoObjects.add(hoverCircle);
@@ -712,7 +713,8 @@ function showHoverCircle(obj, e) {
             strokeColor: strokeColor,
             strokeWidth: strokeWidth,
             strokeStyle: 'solid',
-            zIndex: isGroup ? 9999 : 999
+            zIndex: isGroup ? 9999 : 999,
+            interactive: false
         });
         
         myMap.geoObjects.add(hoverCircle);

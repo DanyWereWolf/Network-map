@@ -523,6 +523,29 @@ function createObject(type, name, coords, options = {}) {
         updateMapLimitBanner();
     }
 
+    // Placement на ящик: cabinetId до syncSendOp, иначе remote получает add без membership.
+    if (objectPlacementMode && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) &&
+        !placemark.properties.get('cabinetId') && typeof findCabinetAtCoords === 'function') {
+        var cabAtPlace = findCabinetAtCoords(coords, placemark);
+        if (cabAtPlace) {
+            var cabUidPlace = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(cabAtPlace) : null;
+            if (cabUidPlace) {
+                placemark.properties.set('cabinetId', String(cabUidPlace));
+                placemarkProperties.cabinetId = String(cabUidPlace);
+                if (typeof getNextCabinetMemberOrder === 'function') {
+                    var ordPlace = getNextCabinetMemberOrder(cabUidPlace);
+                    placemark.properties.set('cabinetOrder', ordPlace);
+                    placemarkProperties.cabinetOrder = ordPlace;
+                }
+                try {
+                    if (cabAtPlace.geometry && typeof moveObjectToCoords === 'function') {
+                        moveObjectToCoords(placemark, cabAtPlace.geometry.getCoordinates());
+                    }
+                } catch (eCabMove) {}
+            }
+        }
+    }
+
     var groupScope = null;
     try {
         if ((type === 'cross' || type === 'node') && typeof groupKey === 'function' && placemark.geometry) {
@@ -534,7 +557,8 @@ function createObject(type, name, coords, options = {}) {
 
     // Члены ящика (в т.ч. кросс/узел): сначала скрыть + обновить подпись со счётчиком.
     // Иначе ветки cross/node ниже пропускали updateCabinetAfterMemberChange.
-    if (placemarkProperties.cabinetId && typeof updateCabinetAfterMemberChange === 'function') {
+    if ((placemarkProperties.cabinetId || placemark.properties.get('cabinetId')) &&
+        typeof updateCabinetAfterMemberChange === 'function') {
         updateCabinetAfterMemberChange(placemark);
     } else if (type === 'cross') {
         updateCrossDisplay(groupScope);
@@ -591,7 +615,9 @@ function createObject(type, name, coords, options = {}) {
         setTimeout(deferCreateSideEffects, 0);
     }
 
-    if (objectPlacementMode && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) && typeof finishMemberCabinetPlacement === 'function' && !placemarkProperties.cabinetId) {
+    if (objectPlacementMode && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) &&
+        typeof finishMemberCabinetPlacement === 'function' &&
+        !(typeof getObjectCabinetId === 'function' ? getObjectCabinetId(placemark) : placemark.properties.get('cabinetId'))) {
         finishMemberCabinetPlacement(placemark);
     }
     logAction(ActionTypes.CREATE_OBJECT, {

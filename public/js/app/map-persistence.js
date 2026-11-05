@@ -2325,10 +2325,31 @@ function applyRemoteStateMerged(data) {
     });
 }
 
+function refreshOpenCabinetModalForMember(member) {
+    if (!member || !member.properties || !currentModalObject || !currentModalObject.properties) return;
+    if (currentModalObject.properties.get('type') !== 'cabinet') return;
+    var cabId = typeof getObjectCabinetId === 'function' ? getObjectCabinetId(member) : member.properties.get('cabinetId');
+    if (!cabId) return;
+    var openUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(currentModalObject) : currentModalObject.properties.get('uniqueId');
+    if (String(openUid) !== String(cabId)) return;
+    if (typeof refreshObjectModal === 'function') {
+        try { refreshObjectModal(currentModalObject); } catch (eCabModal) {}
+    }
+}
+
 function refreshRemoteObjectVisuals(obj) {
     if (!obj || !obj.properties) return;
+    try {
+        if (typeof clearHoverHighlight === 'function' && typeof hoveredObject !== 'undefined' && hoveredObject === obj) {
+            clearHoverHighlight();
+        }
+    } catch (eHov) {}
     var type = obj.properties.get('type');
-    if (type === 'cross') {
+    var inCabinet = typeof getObjectCabinetId === 'function' && !!getObjectCabinetId(obj);
+    // Члены ящика (в т.ч. cross/node): сначала кабинет — иначе remote не видит добавление.
+    if (inCabinet && typeof updateCabinetAfterMemberChange === 'function') {
+        updateCabinetAfterMemberChange(obj);
+    } else if (type === 'cross') {
         updateCrossDisplay(groupKey(obj.geometry.getCoordinates()));
     } else if (type === 'node') {
         updateNodeDisplay(groupKey(obj.geometry.getCoordinates()));
@@ -2347,12 +2368,27 @@ function refreshRemoteObjectVisuals(obj) {
     }
     var name = obj.properties.get('name') || '';
     updateObjectLabel(obj, name);
-    var label = obj.properties.get('label');
-    if (label) {
-        try {
-            if (!isGeoObjectOnMap(label)) myMap.geoObjects.add(label);
-        } catch (e) {}
+    if (typeof ensureObjectLabelOnMap === 'function') {
+        try { ensureObjectLabelOnMap(obj); } catch (eLbl) {}
+    } else if (!inCabinet) {
+        var label = obj.properties.get('label');
+        if (label) {
+            try {
+                if (!isGeoObjectOnMap(label)) myMap.geoObjects.add(label);
+            } catch (e) {}
+        }
     }
+    // После remount remote-update восстановить selected-иконку (иначе «не выделяется»).
+    try {
+        if (typeof selectedObjects !== 'undefined' && selectedObjects && selectedObjects.indexOf(obj) >= 0) {
+            if (!(typeof isEditMode !== 'undefined' && isEditMode && type !== 'crossGroup' && type !== 'nodeGroup')) {
+                if (typeof applyMapPlacemarkIcon === 'function') {
+                    applyMapPlacemarkIcon(obj, type, 'selected', obj);
+                }
+            }
+            if (typeof updateSelectionPulsePosition === 'function') updateSelectionPulsePosition(obj);
+        }
+    } catch (eSel) {}
     var lockUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(obj) : null;
     if (lockUid && typeof isObjectLockedByOther === 'function' && isObjectLockedByOther(lockUid) &&
         typeof updateObjectLockMapBadge === 'function') {
@@ -2360,6 +2396,7 @@ function refreshRemoteObjectVisuals(obj) {
         updateObjectLockMapBadge(obj, true, lockInfo);
     }
     scheduleConnectionLinesUpdate(getObjectUniqueId(obj));
+    refreshOpenCabinetModalForMember(obj);
 }
 
 function applyOperationToMap(op) {
@@ -2373,6 +2410,11 @@ function applyOperationToMap(op) {
                 return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === addUid;
             });
             if (existingAdd) {
+                // Повторный add / add без cabinetId + поздний payload — дотянуть membership.
+                if (op.data) {
+                    populatePlacemarkFromSerializedData(existingAdd, op.data);
+                    refreshRemoteObjectVisuals(existingAdd);
+                }
                 return;
             }
         }
@@ -2392,7 +2434,10 @@ function applyOperationToMap(op) {
         });
         objects.splice(objCount, 0, newObj);
         mapPerfRegister(newObj);
-        if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node') mapGeoAdd(newObj);
+        var newInCab = typeof getObjectCabinetId === 'function' && getObjectCabinetId(newObj);
+        if (newObj.properties.get('type') !== 'cross' && newObj.properties.get('type') !== 'node' && !newInCab) {
+            mapGeoAdd(newObj);
+        }
         refreshRemoteObjectVisuals(newObj);
         updateStats();
         return;
