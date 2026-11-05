@@ -102,6 +102,9 @@ function deleteObject(obj, opts) {
     const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
     const objUniqueId = obj.properties.get('uniqueId');
+    if (objUniqueId != null && typeof clearPendingLocalMapAdd === 'function') {
+        try { clearPendingLocalMapAdd(objUniqueId); } catch (ePendDel) {}
+    }
     if (typeof AppMotion !== 'undefined' && AppMotion.celebrateRemove && !(opts && opts.skipSync && opts.remoteOp)) {
         try { AppMotion.celebrateRemove(obj); } catch (eMotionDel) {}
     }

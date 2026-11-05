@@ -451,9 +451,10 @@ function findObjectByUniqueId(uid) {
 
 function getManholeDisplayLabel(uid) {
     var o = findObjectByUniqueId(uid);
-    if (!o) return 'колодец';
+    if (!o || !o.properties) return 'точка';
     var name = o.properties.get('name');
-    return name ? name : getObjectTypeName('manhole');
+    if (name) return name;
+    return getObjectTypeName(o.properties.get('type'));
 }
 
 function removeUndergroundEditPreview() {
@@ -661,7 +662,12 @@ function setupUndergroundEditBar() {
             if (uid && typeof confirmAndDeleteCable === 'function') confirmAndDeleteCable(uid);
         });
     }
-    window.onUndergroundSpanClick = function(cable, spanIndex) {
+    window.onUndergroundSpanClick = function(cable, spanIndex, coords) {
+        if (Date.now() < undergroundSleeveSplitLockUntil) return;
+        if (cableSplitMode && cableSplitData && typeof splitCableAtUndergroundSpan === 'function') {
+            splitCableAtUndergroundSpan(cable, spanIndex, coords);
+            return;
+        }
         if (!isEditMode) {
             if (typeof showWarning === 'function') showWarning('Включите режим редактирования.', 'Карта');
             return;
@@ -877,19 +883,19 @@ function findFiberCablesNearPoint(coords, maxDistance) {
     return findCablesNearPoint(coords, maxDistance, { fiberOnly: true }).map(function(x) { return x.cable; });
 }
 
-/** Нельзя вставлять опору/крепление внутрь подземного участка (колодец → колодец). */
+/** Нельзя вставлять опору/крепление внутрь подземного участка. */
 function isCableSegmentUnderground(cable, afterIndex) {
     var points = getCableRoutePoints(cable);
     if (!points || afterIndex < 0 || afterIndex >= points.length - 1) return false;
+    var spans = cable.properties.get('undergroundSpans') || [];
+    if (!spans.length) return false;
+    if (window.CableUnderground && typeof CableUnderground.isUndergroundLegBetween === 'function') {
+        return !!CableUnderground.isUndergroundLegBetween(points, afterIndex, spans);
+    }
     var a = points[afterIndex];
     var b = points[afterIndex + 1];
     if (!a || !b || !a.properties || !b.properties) return false;
     if (a.properties.get('type') !== 'manhole' || b.properties.get('type') !== 'manhole') return false;
-    var spans = cable.properties.get('undergroundSpans') || [];
-    if (!spans.length) return false;
-    if (window.CableUnderground && typeof CableUnderground.findSpanBetweenManholes === 'function') {
-        return !!CableUnderground.findSpanBetweenManholes(spans, getObjectUniqueId(a), getObjectUniqueId(b));
-    }
     return true;
 }
 
@@ -1404,8 +1410,28 @@ function splitCableAt(cable, splitOptions) {
     var coordsA;
     var coordsB;
     var waypointIndex = -1;
+    var undergroundPrep = null;
 
-    if (splitOptions.waypointObj) {
+    if (splitOptions.underground && window.CableUnderground && typeof CableUnderground.splitSpanForSleeve === 'function') {
+        var ugOpt = splitOptions.underground || {};
+        var ugSpansNow = cable.properties.get('undergroundSpans') || [];
+        var ugSpan = ugSpansNow[ugOpt.spanIndex];
+        undergroundPrep = CableUnderground.splitSpanForSleeve(points, ugSpan, ugOpt.clickCoords);
+        if (!undergroundPrep) {
+            showError('Не удалось определить точку на подземном участке. Кликните по красному пунктиру.', 'Разрез кабеля');
+            return false;
+        }
+        if (undergroundPrep.fraction < 0.03 || undergroundPrep.fraction > 0.97) {
+            showError('Слишком близко к концу подземного участка. Выберите точку ближе к середине.', 'Разрез кабеля');
+            return false;
+        }
+        if (undergroundPrep.toIndex !== undergroundPrep.fromIndex + 1) {
+            showError('Подземный участок должен соединять соседние точки маршрута.', 'Разрез кабеля');
+            return false;
+        }
+        splitCoords = undergroundPrep.splitCoords;
+        splitAfterIndex = undergroundPrep.fromIndex;
+    } else if (splitOptions.waypointObj) {
         var wpIdx = getPointIndexOnCableRoute(points, splitOptions.waypointObj);
         if (wpIdx <= 0 || wpIdx >= points.length - 1) {
             showError('Муфту можно установить только на промежуточной точке маршрута (опора или крепление), не на концах кабеля.', 'Разрез кабеля');
@@ -1455,7 +1481,25 @@ function splitCableAt(cable, splitOptions) {
     }
 
     var routes;
-    if (waypointIndex > 0) {
+    var ugSpanA = null;
+    var ugSpanB = null;
+    if (undergroundPrep) {
+        var sleeveUid = newSleeve.properties.get('uniqueId');
+        routes = {
+            pointsA: points.slice(0, undergroundPrep.fromIndex + 1).concat([newSleeve]),
+            pointsB: [newSleeve].concat(points.slice(undergroundPrep.toIndex))
+        };
+        ugSpanA = {
+            entryManholeId: undergroundPrep.fromId,
+            exitManholeId: sleeveUid,
+            pathCoords: undergroundPrep.pathA || []
+        };
+        ugSpanB = {
+            entryManholeId: sleeveUid,
+            exitManholeId: undergroundPrep.toId,
+            pathCoords: undergroundPrep.pathB || []
+        };
+    } else if (waypointIndex > 0) {
         routes = {
             pointsA: points.slice(0, waypointIndex + 1).concat([newSleeve]),
             pointsB: [newSleeve].concat(points.slice(waypointIndex))
@@ -1476,6 +1520,8 @@ function splitCableAt(cable, splitOptions) {
     var splitSpans = window.CableUnderground
         ? CableUnderground.splitSpansForRoute(oldSpans, routes.pointsA, routes.pointsB)
         : { spansA: [], spansB: [] };
+    if (ugSpanA) splitSpans.spansA.push(ugSpanA);
+    if (ugSpanB) splitSpans.spansB.push(ugSpanB);
     var okA = createCableFromPoints(routes.pointsA, cableType, idA, null, true, true, null, splitSpans.spansA);
     var okB = createCableFromPoints(routes.pointsB, cableType, idB, null, true, true, null, splitSpans.spansB);
     if (!okA || !okB) {
@@ -1485,7 +1531,7 @@ function splitCableAt(cable, splitOptions) {
 
     var cableA = objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === idA; });
     var cableB = objects.find(function(o) { return o.properties && o.properties.get('uniqueId') === idB; });
-    if (waypointIndex > 0) {
+    if (waypointIndex > 0 || undergroundPrep) {
         if (cableA) syncCableGeometryFromRoutePoints(cableA);
         if (cableB) syncCableGeometryFromRoutePoints(cableB);
     } else {
@@ -1516,10 +1562,15 @@ function splitCableAt(cable, splitOptions) {
         cableType: getCableDescription(cableType),
         from: fromName,
         to: toName,
-        note: 'Разрез кабеля, муфта на маршруте'
+        note: undergroundPrep ? 'Разрез кабеля, муфта на подземном участке' : 'Разрез кабеля, муфта на маршруте'
     });
 
-    showSuccess('Кабель разделён на два сегмента. Муфта установлена на маршруте.', 'Разрез кабеля');
+    showSuccess(
+        undergroundPrep
+            ? 'Кабель разделён. Муфта установлена на подземном участке.'
+            : 'Кабель разделён на два сегмента. Муфта установлена на маршруте.',
+        'Разрез кабеля'
+    );
     showObjectInfo(newSleeve);
     return true;
 }
@@ -1561,7 +1612,7 @@ function startCableSplitPickOnCable(cable, sleeveOptions) {
     var modal = document.getElementById('infoModal');
     if (modal) modal.style.display = 'none';
     var typeHint = sleeveOptions && sleeveOptions.sleeveType ? sleeveOptions.sleeveType : 'SNR-FOSC-L';
-    showInfo('Кликните по линии кабеля в месте установки муфты. Тип муфты: ' + typeHint + '. Escape — отмена.', 'Установка муфты');
+    showInfo('Кликните по линии кабеля или по красному пунктиру подземного участка в месте установки муфты. Тип муфты: ' + typeHint + '. Escape — отмена.', 'Установка муфты');
     if (myMap && myMap.container) {
         var mapEl = myMap.container.getElement();
         mapEl.style.cursor = 'crosshair';
@@ -1576,8 +1627,34 @@ function splitCableAtWaypoint(waypointObj, cable, sleeveOptions) {
     return splitCableAt(cable, mergeCableSplitSleeveOptions({ waypointObj: waypointObj }, sleeveOptions));
 }
 
+var undergroundSleeveSplitLockUntil = 0;
+
+function splitCableOnUndergroundSpan(cable, spanIndex, coords, sleeveOptions) {
+    if (!cable) return false;
+    undergroundSleeveSplitLockUntil = Date.now() + 500;
+    return splitCableAt(cable, mergeCableSplitSleeveOptions({
+        underground: { spanIndex: spanIndex, clickCoords: coords }
+    }, sleeveOptions));
+}
+
+function splitCableAtUndergroundSpan(cable, spanIndex, coords) {
+    if (!cableSplitMode || !cableSplitData || !cable) return false;
+    if (Date.now() < undergroundSleeveSplitLockUntil) return true;
+    if ((!coords || coords.length < 2) && window.lastMapClickCoords && window.lastMapClickCoords.length >= 2) {
+        coords = window.lastMapClickCoords;
+    }
+    if (!coords || coords.length < 2) {
+        showError('Не удалось определить точку клика. Кликните по красному пунктиру ещё раз.', 'Разрез кабеля');
+        return false;
+    }
+    var savedSleeveOpts = cableSplitData.sleeveOptions;
+    cancelCableSplitMode();
+    return splitCableOnUndergroundSpan(cable, spanIndex, coords, savedSleeveOpts);
+}
+
 function handleCableSplitMapClick(coords, clickedCableObj) {
     if (!cableSplitMode || !cableSplitData) return false;
+    if (Date.now() < undergroundSleeveSplitLockUntil) return true;
     cableSplitSuppressInfoUntil = Date.now() + 600;
     var splitData = cableSplitData;
     var savedSleeveOpts = splitData.sleeveOptions;
@@ -1586,6 +1663,24 @@ function handleCableSplitMapClick(coords, clickedCableObj) {
         return false;
     }
     var preferId = splitData.cableUniqueId;
+    var ugHit = (window.CableUnderground && typeof CableUnderground.findSpanNearPoint === 'function')
+        ? CableUnderground.findSpanNearPoint(coords, 0.0004, preferId || null)
+        : null;
+    if (ugHit) {
+        var aerialCloser = false;
+        if (clickedCableObj && clickedCableObj.geometry) {
+            var aerialGeom = clickedCableObj.geometry.getCoordinates();
+            var aerialProj = aerialGeom && aerialGeom.length >= 2
+                ? projectPointOntoPolyline(coords, aerialGeom)
+                : null;
+            if (aerialProj && aerialProj.distance + 1e-12 < ugHit.distance) aerialCloser = true;
+        }
+        if (!aerialCloser) {
+            cancelCableSplitMode();
+            splitCableOnUndergroundSpan(ugHit.cable, ugHit.spanIndex, coords, savedSleeveOpts);
+            return true;
+        }
+    }
     if (clickedCableObj && clickedCableObj.properties) {
         var clickedId = clickedCableObj.properties.get('uniqueId');
         if (!preferId || clickedId === preferId) {
@@ -1626,13 +1721,20 @@ function updateCableSplitPreview(cursorCoords) {
     var cable = cableSplitData.cable;
     if (!cable || !cable.geometry) return;
     var geom = cable.geometry.getCoordinates();
-    if (!geom || geom.length < 2) return;
-    var proj = projectPointOntoPolyline(cursorCoords, geom);
-    if (!proj) return;
+    var proj = geom && geom.length >= 2 ? projectPointOntoPolyline(cursorCoords, geom) : null;
+    var bestPoint = proj ? proj.point : null;
+    var bestDist = (proj && isFinite(proj.distance)) ? proj.distance : Infinity;
+    if (window.CableUnderground && typeof CableUnderground.projectOntoCableSpans === 'function') {
+        var ugPrev = CableUnderground.projectOntoCableSpans(cable, cursorCoords);
+        if (ugPrev && ugPrev.proj && ugPrev.distance < bestDist && ugPrev.proj.fraction > 0.03 && ugPrev.proj.fraction < 0.97) {
+            bestPoint = ugPrev.proj.point;
+        }
+    }
+    if (!bestPoint) return;
     if (cableSplitPreviewLine) {
         try { myMap.geoObjects.remove(cableSplitPreviewLine); } catch (e) {}
     }
-    cableSplitPreviewLine = new ymaps.Polyline([proj.point], {}, {
+    cableSplitPreviewLine = new ymaps.Polyline([bestPoint], {}, {
         strokeColor: getCableSplitPreviewStroke(),
         strokeWidth: 10,
         strokeOpacity: getCableSplitPreviewOpacity()

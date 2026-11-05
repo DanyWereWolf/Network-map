@@ -83,6 +83,10 @@ function syncCableRoutePlacemarkUids(points) {
     return changed;
 }
 
+function isUndergroundSpanEndpointType(type) {
+    return type === 'manhole' || type === 'sleeve' || type === 'spliceCassette';
+}
+
 function createCableFromPoints(points, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false, copperMeta = null, undergroundSpans = null) {
     if (!points || points.length < 2) return false;
     points = dedupeSupportAttachmentInCablePoints(points);
@@ -152,7 +156,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                 var ptA = points[pi];
                 var ptB = points[pi + 1];
                 if (!ptA || !ptB || !ptA.properties || !ptB.properties) continue;
-                if (ptA.properties.get('type') !== 'manhole' || ptB.properties.get('type') !== 'manhole') continue;
+                if (!isUndergroundSpanEndpointType(ptA.properties.get('type')) || !isUndergroundSpanEndpointType(ptB.properties.get('type'))) continue;
                 var u0 = getObjectUniqueId(ptA);
                 var u1 = getObjectUniqueId(ptB);
                 if ((u0 === eId && u1 === xId) || (u0 === xId && u1 === eId)) {
@@ -161,7 +165,7 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
                 }
             }
             if (!pairOk) {
-                if (!skipSync) showError('Подземный участок — два колодца подряд на маршруте (вход и выход).', 'Маршрут кабеля');
+                if (!skipSync) showError('Подземный участок должен соединять соседние точки маршрута (колодец или муфта).', 'Маршрут кабеля');
                 return false;
             }
         }
@@ -171,6 +175,9 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     if (!isCopperCableType(cableType) && window.CableUnderground && spansForCable.length) {
         coords = CableUnderground.buildAerialCableCoordsFromRoute(points);
         totalDistance = CableUnderground.computeRouteDistance(points, spansForCable);
+        if (!coords || coords.length < 2) {
+            coords = CableUnderground.buildCableCoordsFromRoute(points, spansForCable);
+        }
     } else {
         coords = points.map(function (obj) { return obj.geometry.getCoordinates(); });
     }

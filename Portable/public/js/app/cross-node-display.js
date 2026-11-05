@@ -158,7 +158,25 @@ function collectTypedObjectsNearGroupKeys(type, keys) {
             for (var j = 0; j < near.length; j++) consider(near[j]);
         }
     }
-    if (!usedSpatial || !out.length) {
+    var needFallback = !usedSpatial || !out.length;
+    if (!needFallback) {
+        // Spatial мог вернуть соседние объекты, но пропустить только что созданный на ключе.
+        var coveredKeys = Object.create(null);
+        for (var oi = 0; oi < out.length; oi++) {
+            try {
+                if (!out[oi] || !out[oi].geometry) continue;
+                var ck = groupKey(out[oi].geometry.getCoordinates());
+                if (keySet[ck]) coveredKeys[ck] = true;
+            } catch (eCov) {}
+        }
+        for (var mk in keySet) {
+            if (!coveredKeys[mk]) {
+                needFallback = true;
+                break;
+            }
+        }
+    }
+    if (needFallback) {
         objects.forEach(considerIfKeyMatch);
     }
     return out;

@@ -93,16 +93,12 @@
 
             if (i > 0) {
                 var prev = points[i - 1];
-                var ta = prev.properties ? prev.properties.get('type') : null;
-                var tb = p.properties ? p.properties.get('type') : null;
-                if (ta === 'manhole' && tb === 'manhole') {
-                    var span = findSpanBetweenManholes(spans, getUid(prev), getUid(p));
-                    if (span) {
-                        flush();
-                        current = [];
-                        pushCoord(c);
-                        continue;
-                    }
+                var span = findSpanBetweenManholes(spans, getUid(prev), getUid(p));
+                if (span) {
+                    flush();
+                    current = [];
+                    pushCoord(c);
+                    continue;
                 }
             }
             pushCoord(c);
@@ -110,6 +106,7 @@
         flush();
 
         if (!segments.length) {
+            if (spans.length) return [];
             var fallback = buildAerialCableCoordsFromRoute(points);
             return fallback.length >= 2 ? [fallback] : [];
         }
@@ -226,14 +223,10 @@
             var ca = a && a.geometry ? a.geometry.getCoordinates() : null;
             var cb = b && b.geometry ? b.geometry.getCoordinates() : null;
             if (!ca || !cb) continue;
-            var ta = a.properties ? a.properties.get('type') : null;
-            var tb = b.properties ? b.properties.get('type') : null;
             if (out.length === 0) out.push(ca);
-            if (ta === 'manhole' && tb === 'manhole') {
-                var span = findSpanBetweenManholes(spans, getUid(a), getUid(b));
-                if (span && span.pathCoords && span.pathCoords.length) {
-                    for (var j = 0; j < span.pathCoords.length; j++) out.push(span.pathCoords[j]);
-                }
+            var span = findSpanBetweenManholes(spans, getUid(a), getUid(b));
+            if (span && span.pathCoords && span.pathCoords.length) {
+                for (var j = 0; j < span.pathCoords.length; j++) out.push(span.pathCoords[j]);
             }
             out.push(cb);
         }
@@ -367,8 +360,10 @@
                     var orig = evt.get && evt.get('originalEvent');
                     if (orig && orig.stopPropagation) orig.stopPropagation();
                 } catch (e) {}
+                var clickCoords = null;
+                try { clickCoords = evt && evt.get ? evt.get('coords') : null; } catch (eCoords) {}
                 if (typeof global.onUndergroundSpanClick === 'function') {
-                    global.onUndergroundSpanClick(cable, spanIndex);
+                    global.onUndergroundSpanClick(cable, spanIndex, clickCoords);
                 }
                 return false;
             });
@@ -388,17 +383,13 @@
             var a = points[i];
             var b = points[i + 1];
             if (!a || !b || !a.geometry || !b.geometry) continue;
-            var ta = a.properties ? a.properties.get('type') : null;
-            var tb = b.properties ? b.properties.get('type') : null;
-            if (ta === 'manhole' && tb === 'manhole') {
-                var span = findSpanBetweenManholes(spans, getUid(a), getUid(b));
-                if (span) {
-                    var oc = getSpanOverlayCoords(span, points);
-                    for (var j = 0; j < oc.length - 1; j++) {
-                        total += calc(oc[j], oc[j + 1]);
-                    }
-                    continue;
+            var span = findSpanBetweenManholes(spans, getUid(a), getUid(b));
+            if (span) {
+                var oc = getSpanOverlayCoords(span, points);
+                for (var j = 0; j < oc.length - 1; j++) {
+                    total += calc(oc[j], oc[j + 1]);
                 }
+                continue;
             }
             var ca = a.geometry.getCoordinates();
             var cb = b.geometry.getCoordinates();
@@ -424,17 +415,14 @@
 
         if (!segments.length && hasUnderground) {
             removeCableAerialOverlays(cable);
-            var stubCoords = buildAerialCableCoordsFromRoute(pts);
-            if (cable.geometry && stubCoords.length >= 2) {
-                try { cable.geometry.setCoordinates(stubCoords); } catch (eStub) {}
-            } else if (cable.geometry && pts && pts.length) {
+            if (cable.geometry && pts && pts.length) {
                 try {
                     var c0 = pts[0] && pts[0].geometry ? pts[0].geometry.getCoordinates() : null;
                     if (c0) cable.geometry.setCoordinates([c0, c0]);
                 } catch (eStub2) {}
             }
             if (cable.options) {
-                try { cable.options.set('strokeOpacity', stubCoords.length >= 2 ? 0.8 : 0); } catch (eOp) {}
+                try { cable.options.set('strokeOpacity', 0); } catch (eOp) {}
             }
         } else if (segments.length >= 1 && cable.geometry) {
             try { cable.geometry.setCoordinates(segments[0]); } catch (eSet) {}
@@ -550,9 +538,13 @@
     }
 
     function getManholeDisplayName(obj) {
-        if (!obj || !obj.properties) return 'Колодец';
+        if (!obj || !obj.properties) return 'Точка';
         var name = obj.properties.get('name');
-        return (name && String(name).trim()) ? String(name).trim() : 'Колодец';
+        if (name && String(name).trim()) return String(name).trim();
+        var typeName = typeof global.getObjectTypeName === 'function'
+            ? global.getObjectTypeName(obj.properties.get('type'))
+            : '';
+        return typeName || 'Точка';
     }
 
     function getSpanDistanceMeters(span, points) {
@@ -594,14 +586,118 @@
         if (!Array.isArray(routePoints) || legIndex < 0 || legIndex >= routePoints.length - 1) return null;
         var a = routePoints[legIndex];
         var b = routePoints[legIndex + 1];
-        if (!a || !b || !a.properties || !b.properties) return null;
-        if (a.properties.get('type') !== 'manhole' || b.properties.get('type') !== 'manhole') return null;
+        if (!a || !b) return null;
         var idA = getUid(a);
         var idB = getUid(b);
         if (!idA || !idB) return null;
         var spanIdx = findSpanIndexBetweenManholes(spans, idA, idB);
         if (spanIdx < 0) return null;
         return { spanIndex: spanIdx, span: spans[spanIdx] };
+    }
+
+    function routeIndexByUid(points, uid) {
+        if (!uid || !Array.isArray(points)) return -1;
+        for (var i = 0; i < points.length; i++) {
+            if (getUid(points[i]) === uid) return i;
+        }
+        return -1;
+    }
+
+    function objectCoords(obj) {
+        if (!obj || !obj.geometry) return null;
+        try {
+            var c = obj.geometry.getCoordinates();
+            return (c && c.length >= 2) ? [c[0], c[1]] : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /** Полилиния подземного участка в порядке маршрута (от более ранней точки к более поздней). */
+    function orderedSpanPolyline(span, routePoints) {
+        var n = normalizeSpanRecord(span);
+        if (!n || !n.entryManholeId || !n.exitManholeId || !Array.isArray(routePoints)) return null;
+        var iE = routeIndexByUid(routePoints, n.entryManholeId);
+        var iX = routeIndexByUid(routePoints, n.exitManholeId);
+        if (iE < 0 || iX < 0 || iE === iX) return null;
+        var fromIdx = iE < iX ? iE : iX;
+        var toIdx = iE < iX ? iX : iE;
+        var fromObj = routePoints[fromIdx];
+        var toObj = routePoints[toIdx];
+        var c0 = objectCoords(fromObj);
+        var c1 = objectCoords(toObj);
+        if (!c0 || !c1) return null;
+        var mids = (n.pathCoords || []).slice();
+        if (getUid(fromObj) !== n.entryManholeId) mids.reverse();
+        return {
+            coords: [c0].concat(mids, [c1]),
+            fromIndex: fromIdx,
+            toIndex: toIdx,
+            fromId: getUid(fromObj),
+            toId: getUid(toObj)
+        };
+    }
+
+    /**
+     * Разрез подземного участка в точке клика.
+     * pathA/pathB — промежуточные точки без концов (концы — объекты маршрута).
+     */
+    function splitSpanForSleeve(routePoints, span, clickCoords) {
+        if (!span || !clickCoords || clickCoords.length < 2) return null;
+        if (typeof global.projectPointOntoPolyline !== 'function' || typeof global.splitPolylineCoords !== 'function') return null;
+        var ordered = orderedSpanPolyline(span, routePoints);
+        if (!ordered || !ordered.coords || ordered.coords.length < 2) return null;
+        var proj = global.projectPointOntoPolyline(clickCoords, ordered.coords);
+        if (!proj || !proj.point) return null;
+        var split = global.splitPolylineCoords(ordered.coords, proj.point, proj);
+        if (!split || !split.coordsA || !split.coordsB) return null;
+        return {
+            splitCoords: proj.point,
+            fraction: proj.fraction,
+            distance: proj.distance,
+            fromIndex: ordered.fromIndex,
+            toIndex: ordered.toIndex,
+            fromId: ordered.fromId,
+            toId: ordered.toId,
+            pathA: normalizePathCoords(split.coordsA.slice(1, -1)),
+            pathB: normalizePathCoords(split.coordsB.slice(1, -1))
+        };
+    }
+
+    function projectOntoCableSpans(cable, coords) {
+        if (!cable || !cable.properties || !coords || typeof global.projectPointOntoPolyline !== 'function') return null;
+        var spans = cable.properties.get('undergroundSpans') || [];
+        var points = cable.properties.get('points') || [];
+        var best = null;
+        for (var i = 0; i < spans.length; i++) {
+            var ordered = orderedSpanPolyline(spans[i], points);
+            if (!ordered) continue;
+            var proj = global.projectPointOntoPolyline(coords, ordered.coords);
+            if (!proj) continue;
+            if (!best || proj.distance < best.distance) {
+                best = { spanIndex: i, proj: proj, distance: proj.distance };
+            }
+        }
+        return best;
+    }
+
+    function findSpanNearPoint(coords, maxDistance, preferCableId) {
+        if (!coords || coords.length < 2 || !global.objects) return null;
+        maxDistance = maxDistance != null ? maxDistance : 0.0004;
+        var best = null;
+        var list = global.objects;
+        for (var i = 0; i < list.length; i++) {
+            var cable = list[i];
+            if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') continue;
+            if (preferCableId && cable.properties.get('uniqueId') !== preferCableId) continue;
+            var hit = projectOntoCableSpans(cable, coords);
+            if (!hit || hit.distance > maxDistance) continue;
+            if (!hit.proj || hit.proj.fraction < 0.03 || hit.proj.fraction > 0.97) continue;
+            if (!best || hit.distance < best.distance) {
+                best = { cable: cable, spanIndex: hit.spanIndex, distance: hit.distance, proj: hit.proj };
+            }
+        }
+        return best;
     }
 
     function getUndergroundDistanceMeters(cable) {
@@ -708,6 +804,9 @@
         cloneSpans: cloneSpans,
         ensureAdjacentManholeUndergroundSpans: ensureAdjacentManholeUndergroundSpans,
         splitSpansForRoute: splitSpansForRoute,
+        splitSpanForSleeve: splitSpanForSleeve,
+        projectOntoCableSpans: projectOntoCableSpans,
+        findSpanNearPoint: findSpanNearPoint,
         setOverlaysVisible: setOverlaysVisible,
         ensureRouteIncludesUndergroundManholes: ensureRouteIncludesUndergroundManholes,
         findRoutePointByUid: findRoutePointByUid,

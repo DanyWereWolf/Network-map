@@ -175,6 +175,9 @@ function handleMapClick(e) {
         handleCableSplitMapClick(coords, resolveCableFromMapTarget(target));
         return;
     }
+    if (typeof undergroundSleeveSplitLockUntil !== 'undefined' && Date.now() < undergroundSleeveSplitLockUntil) {
+        return;
+    }
 
     // Размещение объекта важнее открытия карточки кабеля
     if (objectPlacementMode) {

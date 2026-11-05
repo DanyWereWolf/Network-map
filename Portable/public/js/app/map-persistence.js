@@ -947,18 +947,34 @@ function saveData(opts) {
     // Инкрементальный save: НЕ форсировать полный getSerializedData (это и был фриз 1–3с на первом move).
     flushPendingRemoteSnapshot(false);
     // Инкрементальный add: без полной сериализации и deep-clone всей карты (критично для INP).
-    if (opts.addObject && !inUndoRedo && Array.isArray(lastSavedState) &&
-        lastSavedState.length === objects.length - 1) {
+    if (opts.addObject && !inUndoRedo) {
         var addItem = serializeMapItemFromObject(opts.addObject);
         if (addItem) {
-            var addHadIndex = _lastSavedUidIndex && _lastSavedUidIndexRef === lastSavedState;
-            pushUndoSnapshot(lastSavedState, opts);
-            lastSavedState = lastSavedState.concat([cloneMapSnapshot(addItem)]);
-            if (addHadIndex) {
-                _lastSavedUidIndexRef = lastSavedState;
-                updateLastSavedUidIndexForItems([addItem]);
-            } else {
-                invalidateLastSavedUidIndex();
+            var addUidKey = addItem.uniqueId != null && addItem.uniqueId !== '' ? String(addItem.uniqueId) : '';
+            var alreadyInSnap = false;
+            if (addUidKey && Array.isArray(lastSavedState)) {
+                if (_lastSavedUidIndex && _lastSavedUidIndexRef === lastSavedState && _lastSavedUidIndex.has(addUidKey)) {
+                    alreadyInSnap = true;
+                } else {
+                    for (var ai = 0; ai < lastSavedState.length; ai++) {
+                        if (lastSavedState[ai] && String(lastSavedState[ai].uniqueId) === addUidKey) {
+                            alreadyInSnap = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!alreadyInSnap) {
+                var addBase = Array.isArray(lastSavedState) ? lastSavedState : [];
+                var addHadIndex = _lastSavedUidIndex && _lastSavedUidIndexRef === lastSavedState;
+                if (addBase.length) pushUndoSnapshot(addBase, opts);
+                lastSavedState = addBase.concat([cloneMapSnapshot(addItem)]);
+                if (addHadIndex) {
+                    _lastSavedUidIndexRef = lastSavedState;
+                    updateLastSavedUidIndexForItems([addItem]);
+                } else {
+                    invalidateLastSavedUidIndex();
+                }
             }
             if (!opts.skipSync) pushSaveDataToSync(opts);
             if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
@@ -1766,6 +1782,46 @@ var _mapApplyInProgress = false;
 var _lastMapLoadedFromApiAt = 0;
 var _lastMapLoadedOrgId = null;
 var MAP_SYNC_RELOAD_DEDUP_MS = 2500;
+/** uid → timestamp: локально созданные объекты, которых ещё может не быть в /api/map. */
+var _pendingLocalMapAdds = typeof Map !== 'undefined' ? new Map() : null;
+var PENDING_LOCAL_MAP_ADD_GRACE_MS = 12000;
+
+function notePendingLocalMapAdd(obj) {
+    if (!obj || !obj.properties || !_pendingLocalMapAdds) return;
+    var uid = obj.properties.get('uniqueId');
+    if (uid == null || uid === '') return;
+    _pendingLocalMapAdds.set(String(uid), Date.now());
+}
+window.notePendingLocalMapAdd = notePendingLocalMapAdd;
+
+function clearPendingLocalMapAdd(uid) {
+    if (!_pendingLocalMapAdds || uid == null || uid === '') return;
+    _pendingLocalMapAdds.delete(String(uid));
+}
+
+function pruneExpiredPendingLocalMapAdds(now) {
+    if (!_pendingLocalMapAdds || !_pendingLocalMapAdds.size) return;
+    now = now || Date.now();
+    _pendingLocalMapAdds.forEach(function(ts, uid) {
+        if (!ts || (now - ts) > PENDING_LOCAL_MAP_ADD_GRACE_MS) {
+            _pendingLocalMapAdds.delete(uid);
+        }
+    });
+}
+
+function isPendingLocalMapAdd(obj, now) {
+    if (!obj || !obj.properties) return false;
+    now = now || Date.now();
+    var uid = obj.properties.get('uniqueId');
+    if (uid != null && uid !== '' && _pendingLocalMapAdds) {
+        var ts = _pendingLocalMapAdds.get(String(uid));
+        if (ts && (now - ts) <= PENDING_LOCAL_MAP_ADD_GRACE_MS) return true;
+        if (ts) _pendingLocalMapAdds.delete(String(uid));
+    }
+    var justAt = obj.properties.get('justPlacedAt');
+    if (justAt && (now - Number(justAt)) <= PENDING_LOCAL_MAP_ADD_GRACE_MS) return true;
+    return false;
+}
 
 function shouldSkipSyncMapRefresh(organizationId) {
     // Импортёр сам делает location.reload после POST /api/map — не гоняем forceFull apply.
@@ -2002,21 +2058,33 @@ function applyRemoteStateMerged(data) {
         if (existing) {
             populatePlacemarkFromSerializedData(existing, item);
             refs.push(existing);
+            clearPendingLocalMapAdd(item.uniqueId);
         } else {
             created = createObjectFromData(item);
             if (created) {
                 refs.push(created);
                 indexPlacemark(created);
+                clearPendingLocalMapAdd(item.uniqueId);
             }
         }
         refIndexByDataIndex[i] = refs.length - 1;
     }
 
     var refsSet = new Set(refs);
+    var mergeNow = Date.now();
+    pruneExpiredPendingLocalMapAdds(mergeNow);
+    // Не вычищать только что созданные локально объекты: /api/map или чужой state
+    // часто ещё без их uid → иначе placemark мигает и пропадает («карта перезагрузилась»).
     var toRemoveObjs = objects.filter(function(o) {
         var t = o.properties && o.properties.get('type');
         if (!t || t === 'cable' || t === 'cableLabel') return false;
-        return !refsSet.has(o);
+        if (refsSet.has(o)) return false;
+        if (isPendingLocalMapAdd(o, mergeNow)) {
+            refs.push(o);
+            refsSet.add(o);
+            return false;
+        }
+        return true;
     });
     var toRemoveObjSet = new Set(toRemoveObjs);
     var toRemoveCables = objects.filter(function(o) {
@@ -5432,6 +5500,7 @@ function clearMap(opts) {
         if (window.CameraPlayer && CameraPlayer.stopStreamMonitor) CameraPlayer.stopStreamMonitor();
     }
     const count = objects.length;
+    if (_pendingLocalMapAdds) _pendingLocalMapAdds.clear();
     if (myMap && myMap.geoObjects) myMap.geoObjects.removeAll();
     objects = [];
     if (!opts.preserveUiState) {

@@ -2822,6 +2822,18 @@ function closeInfoModal(opts) {
     }
 }
 
+function startSleeveOnCableFromCard(cableUniqueId) {
+    var cable = objects.find(function (obj) {
+        return obj && obj.properties && obj.properties.get('type') === 'cable' &&
+            obj.properties.get('uniqueId') === cableUniqueId;
+    });
+    if (!cable || !isEditMode || !canEdit()) return;
+    var root = document.getElementById('modalInfo');
+    var sleeveOpts = typeof readCableSplitSleeveOptions === 'function' ? readCableSplitSleeveOptions(root) : null;
+    if (typeof startCableSplitPickOnCable === 'function') startCableSplitPickOnCable(cable, sleeveOpts);
+}
+window.startSleeveOnCableFromCard = startSleeveOnCableFromCard;
+
 function relayoutUndergroundSpanFromCableCard(cableUniqueId, spanIndex) {
     var cable = objects.find(function (obj) {
         return obj && obj.properties && obj.properties.get('type') === 'cable' &&
@@ -2843,7 +2855,7 @@ function buildCableInfoUndergroundHtml(cable, uniqueId) {
     html += '<div class="cable-info-underground-block" style="margin-bottom: 16px; padding: 12px; background: rgba(220, 38, 38, 0.06); border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.25);">';
     html += '<h4 style="margin: 0 0 10px 0; color: #dc2626; font-size: 0.875rem; font-weight: 600;">🕳 Подземные участки (' + spansInfo.length + ')</h4>';
     html += '<p style="margin: 0 0 12px 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.45;">';
-    html += 'Между колодцами кабель идёт под землёй (красный пунктир на карте). Воздушный зелёный участок на этом отрезке не отображается.';
+    html += 'Между колодцами кабель идёт под землёй (красный пунктир на карте). Муфту можно поставить кликом по этому пунктиру.';
     html += '</p>';
 
     spansInfo.forEach(function (sp) {
@@ -2861,6 +2873,7 @@ function buildCableInfoUndergroundHtml(cable, uniqueId) {
         }
         if (modalIsEditMode() && !cableUndergroundEditMode) {
             html += '<button type="button" class="btn-secondary btn-compact" style="margin-top: 10px; width: 100%;" onclick="relayoutUndergroundSpanFromCableCard(\'' + uniqueId + '\', ' + sp.index + ')">Переложить участок на карте</button>';
+            html += '<button type="button" class="btn-secondary btn-compact" style="margin-top: 6px; width: 100%;" onclick="startSleeveOnCableFromCard(\'' + uniqueId + '\')">Установить муфту на участке</button>';
         }
         html += '</div>';
     });
@@ -2870,7 +2883,7 @@ function buildCableInfoUndergroundHtml(cable, uniqueId) {
     html += '</div>';
 
     if (modalIsEditMode() && !cableUndergroundEditMode) {
-        html += '<p class="object-card-hint" style="margin: 12px 0 0 0; font-size: 0.75rem;">Либо кликните по <strong>красному пунктиру</strong> на карте — откроется перепрокладка с теми же колодцами.</p>';
+        html += '<p class="object-card-hint" style="margin: 12px 0 0 0; font-size: 0.75rem;">Клик по <strong>красному пунктиру</strong> перекладывает участок. Чтобы поставить муфту — «Установить муфту на участке» и клик по пунктиру.</p>';
     }
 
     html += '</div>';

@@ -239,7 +239,8 @@ function handleFileImport(e) {
     const fileInput = e.target;
     const nedMode = isNedImportFile(file);
 
-    async function persistImportedMapToApi(serialized) {
+    async function persistImportedMapToApi(serialized, persistOpts) {
+        persistOpts = persistOpts || {};
         var base = typeof getApiBase === 'function' ? getApiBase() : '';
         var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
         if (!base || !token) {
@@ -248,6 +249,9 @@ function handleFileImport(e) {
         var regionId = (typeof getCurrentMapRegionId === 'function' && getCurrentMapRegionId())
             || (typeof window !== 'undefined' && window.currentMapRegionId) || '';
         var payload = { data: serialized };
+        // Явная замена карты (confirm в UI) — иначе MAP_DANGEROUS_SHRINK отклоняет POST,
+        // а локальный importData уже нарисован → после F5 импорт «пропадает».
+        if (persistOpts.allowShrink) payload.allowShrink = true;
         if (regionId) {
             payload.regionId = String(regionId);
             serialized.forEach(function (it) {
@@ -289,6 +293,8 @@ function handleFileImport(e) {
         }
         var opts = Object.assign({ skipSave: true, skipHistory: true }, importOpts || {});
         if (bulkImport) opts.bulkImport = true;
+        // replace (не merge) — осознанная замена региона/карты после confirm.
+        var allowShrinkOnPersist = !(importOpts && importOpts.merge);
         await new Promise(function(resolve, reject) {
             importData(data, opts, function(err) {
                 if (err) {
@@ -302,22 +308,27 @@ function handleFileImport(e) {
                 requestAnimationFrame(function() {
                     (async function() {
                         try {
-                            // skipSync: полный state уйдёт через POST /api/map (как восстановление),
-                            // иначе debounce WS + reload может сохранить/прочитать устаревший кэш.
-                            if (typeof saveData === 'function') {
-                                saveData({ syncFull: true, skipSync: true });
-                            }
-                            var serialized = (typeof lastSavedState !== 'undefined' && Array.isArray(lastSavedState))
-                                ? lastSavedState
-                                : (typeof getSerializedData === 'function' ? getSerializedData() : null);
+                            // Всегда свежий снимок с карты: saveData может no-op (модал/view-session),
+                            // а lastSavedState останется доимпортным → POST «успех» со старыми данными.
+                            var serialized = typeof getSerializedData === 'function' ? getSerializedData() : null;
                             if (!Array.isArray(serialized)) {
                                 throw new Error('Не удалось сериализовать карту для сохранения');
                             }
+                            try {
+                                if (typeof lastSavedState !== 'undefined') {
+                                    lastSavedState = typeof cloneMapSnapshot === 'function'
+                                        ? cloneMapSnapshot(serialized)
+                                        : JSON.parse(JSON.stringify(serialized));
+                                }
+                                if (typeof invalidateLastSavedUidIndex === 'function') {
+                                    invalidateLastSavedUidIndex();
+                                }
+                            } catch (eSnap) {}
                             if (typeof setMapLoadingOverlayText === 'function') {
                                 setMapLoadingOverlayText('Сохранение на сервер…');
                             }
                             try { window._skipMapRefreshUntilReload = true; } catch (eSkip) {}
-                            await persistImportedMapToApi(serialized);
+                            await persistImportedMapToApi(serialized, { allowShrink: allowShrinkOnPersist });
                             logAction(ActionTypes.IMPORT_DATA, { count: data.length, source: logSource || 'json' });
                             if (typeof setMapLoadingOverlayText === 'function') {
                                 setMapLoadingOverlayText('Перезагрузка карты…');
@@ -332,6 +343,16 @@ function handleFileImport(e) {
                         } catch (saveErr) {
                             try { window._skipMapRefreshUntilReload = false; } catch (eClear) {}
                             hideImportOverlay();
+                            // Локальная карта уже заменена importData — без успешного POST откатываем F5.
+                            try {
+                                showError(
+                                    (saveErr && saveErr.message ? saveErr.message : 'Не удалось сохранить импорт') +
+                                    '. Страница будет перезагружена — карта вернётся к сохранённой версии.',
+                                    'Импорт'
+                                );
+                            } catch (eShow) {}
+                            setTimeout(function() { window.location.reload(); }, 1600);
+                            if (saveErr && typeof saveErr === 'object') saveErr._importPersistHandled = true;
                             reject(saveErr);
                         }
                     })();
@@ -355,12 +376,14 @@ function handleFileImport(e) {
             await runImportData(data, {}, 'Карта импортирована (' + data.length + ' объектов)', 'json');
         } catch (error) {
             console.error('Ошибка при импорте файла:', error);
-            showError(
-                error && error.message
-                    ? ('Ошибка импорта: ' + error.message)
-                    : 'Ошибка при чтении файла. Проверьте, что выбран корректный JSON или .ned файл.',
-                'Импорт'
-            );
+            if (!(error && error._importPersistHandled)) {
+                showError(
+                    error && error.message
+                        ? ('Ошибка импорта: ' + error.message)
+                        : 'Ошибка при чтении файла. Проверьте, что выбран корректный JSON или .ned файл.',
+                    'Импорт'
+                );
+            }
         } finally {
             fileInput.value = '';
         }
@@ -416,10 +439,12 @@ function handleFileImport(e) {
         } catch (error) {
             try { sessionStorage.removeItem(MAP_FOCUS_ONCE_KEY); } catch (eClear) { /* ignore */ }
             console.error('Ошибка импорта NeD:', error);
-            showError(
-                error && error.message ? error.message : 'Не удалось импортировать .ned',
-                'Импорт NeD'
-            );
+            if (!(error && error._importPersistHandled)) {
+                showError(
+                    error && error.message ? error.message : 'Не удалось импортировать .ned',
+                    'Импорт NeD'
+                );
+            }
         } finally {
             fileInput.value = '';
         }

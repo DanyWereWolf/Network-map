@@ -215,6 +215,12 @@ function createObject(type, name, coords, options = {}) {
     if (!placemarkProperties.uniqueId) {
         placemarkProperties.uniqueId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
+    try {
+        if (!placemarkProperties.mapRegionId && typeof getCurrentMapRegionId === 'function') {
+            var createMapRid = getCurrentMapRegionId();
+            if (createMapRid) placemarkProperties.mapRegionId = String(createMapRid);
+        }
+    } catch (eMapRidCreate) {}
     const placemark = new ymaps.Placemark(coords, placemarkProperties, placemarkOptions);
     if (typeof disableNativePlacemarkBalloon === 'function') disableNativePlacemarkBalloon(placemark);
     if (type === 'olt' && typeof window.buildOltPorts === 'function') {
@@ -540,9 +546,19 @@ function createObject(type, name, coords, options = {}) {
         if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
     }
 
+    if (typeof notePendingLocalMapAdd === 'function') notePendingLocalMapAdd(placemark);
+    if (typeof MapPerf !== 'undefined' && MapPerf.pinObject) {
+        try { MapPerf.pinObject(placemark); } catch (ePin) {}
+        setTimeout(function() {
+            try { if (MapPerf.unpinObject) MapPerf.unpinObject(placemark); } catch (eUnpin) {}
+        }, 4000);
+    }
     if (typeof window.syncSendOp === 'function') {
         var data = serializeOneObject(placemark);
         if (data) {
+            if (!data.mapRegionId && placemarkProperties.mapRegionId) {
+                data.mapRegionId = String(placemarkProperties.mapRegionId);
+            }
             window.syncSendOp({ type: 'add_object', data: data });
             if (typeof bumpMapRevisionAfterSyncAdd === 'function') bumpMapRevisionAfterSyncAdd(placemark);
         }

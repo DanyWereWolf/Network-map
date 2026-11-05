@@ -831,7 +831,9 @@ app.post('/api/map', (req, res) => {
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
-        var allowShrink = !!(req.body && req.body.allowShrink && isGlobalAdmin(user));
+        // Org-admin (единственный, кто может POST /api/map): allowShrink для явного импорта/замены.
+        // Раньше требовали isGlobalAdmin — а глобальному админу сохранение карты запрещено → флаг был мёртвый.
+        var allowShrink = !!(req.body && req.body.allowShrink);
         var replaceAll = !!(req.body && req.body.replaceAll);
         var regionId = req.body && req.body.regionId != null ? String(req.body.regionId).trim() : '';
         if (!replaceAll && !regionId) {
