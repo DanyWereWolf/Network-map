@@ -532,15 +532,17 @@ function createObject(type, name, coords, options = {}) {
 
     if (typeof applyMapFilterForObject === 'function') applyMapFilterForObject(placemark);
 
-    if (type === 'cross') {
+    // Члены ящика (в т.ч. кросс/узел): сначала скрыть + обновить подпись со счётчиком.
+    // Иначе ветки cross/node ниже пропускали updateCabinetAfterMemberChange.
+    if (placemarkProperties.cabinetId && typeof updateCabinetAfterMemberChange === 'function') {
+        updateCabinetAfterMemberChange(placemark);
+    } else if (type === 'cross') {
         updateCrossDisplay(groupScope);
     } else if (type === 'node') {
         updateNodeDisplay(groupScope);
     } else if (type === 'cabinet') {
         mapGeoAdd(placemark);
         if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);
-    } else if (placemarkProperties.cabinetId) {
-        if (typeof updateCabinetAfterMemberChange === 'function') updateCabinetAfterMemberChange(placemark);
     } else {
         mapGeoAdd(placemark);
         if (typeof ensureObjectLabelOnMap === 'function') ensureObjectLabelOnMap(placemark);

@@ -1424,31 +1424,44 @@
                     );
                     if (row.traced && row.fate.kind === 'free') {
                         if (nextCableId) {
-                            row.fate = { kind: 'continue', label: 'трасса →', peerCableId: nextCableId };
+                            var peerFree = nextSeg && nextSeg.tracedFiber != null
+                                ? nextSeg.tracedFiber
+                                : row.number;
+                            row.fate = {
+                                kind: 'continue',
+                                label: '→ ж' + peerFree,
+                                peerCableId: nextCableId,
+                                peerFiber: peerFree
+                            };
                         } else if (toHost && toHost.type === 'node') {
                             row.fate = { kind: 'end', label: 'узел сети' };
                         } else {
                             row.fate = { kind: 'end', label: 'конец трассы' };
                         }
                     }
-                    // Трасса через кросс/муфту на следующий кабель — всегда continue,
-                    // даже если fate=end/branch (ложный peer из группы сварок / NeD)
+                    // Трасса через кросс/муфту на следующий кабель — continue,
+                    // но branch на ДРУГОЙ кабель не затираем (иначе теряется боковая сварка).
                     if (row.traced && nextCableId && row.fate &&
                         (row.fate.kind === 'end' || row.fate.kind === 'free' || row.fate.kind === 'branch')) {
-                        var peerF = nextSeg && nextSeg.tracedFiber != null
-                            ? nextSeg.tracedFiber
-                            : row.number;
                         if (row.fate.kind === 'branch' && row.fate.peerCableId &&
-                            String(row.fate.peerCableId) === String(nextCableId) &&
-                            row.fate.peerFiber != null) {
-                            peerF = row.fate.peerFiber;
+                            String(row.fate.peerCableId) !== String(nextCableId)) {
+                            // оставляем branch как есть
+                        } else {
+                            var peerF = nextSeg && nextSeg.tracedFiber != null
+                                ? nextSeg.tracedFiber
+                                : row.number;
+                            if (row.fate.kind === 'branch' && row.fate.peerCableId &&
+                                String(row.fate.peerCableId) === String(nextCableId) &&
+                                row.fate.peerFiber != null) {
+                                peerF = row.fate.peerFiber;
+                            }
+                            row.fate = {
+                                kind: 'continue',
+                                label: '→ ж' + peerF,
+                                peerCableId: nextCableId,
+                                peerFiber: peerF
+                            };
                         }
-                        row.fate = {
-                            kind: 'continue',
-                            label: '→ ж' + peerF,
-                            peerCableId: nextCableId,
-                            peerFiber: peerF
-                        };
                     }
                     // На кроссе, если волокно уходит на узел (nodeConnections) — явно пометить
                     if (row.traced && toHost && toHost.type === 'cross' && row.fate && row.fate.kind === 'end' &&
@@ -3076,15 +3089,35 @@
             var outRibbon = null;
             var outSeg = null;
             if (patch) {
+                var fatePeerCab = null;
+                if (seg && seg._fiberRows) {
+                    for (var fri = 0; fri < seg._fiberRows.length; fri++) {
+                        var fr = seg._fiberRows[fri];
+                        if (fr && fr.traced && fr.fate && fr.fate.peerCableId) {
+                            fatePeerCab = String(fr.fate.peerCableId);
+                            break;
+                        }
+                    }
+                }
+                var bestOut = null;
+                var bestOutScore = -1;
                 for (var oi = 0; oi < (model.segments || []).length; oi++) {
                     var os = model.segments[oi];
                     // Синтезированная геометрия бокового кабеля (_synth) — не «исходящая кассета»
-                    if (os && os.fromIdx === ti && os._ribbonGeom && !os._ribbonGeom._synth &&
-                        (os.kind !== 'nodeLink' || os.cableId)) {
-                        outSeg = os;
-                        outRibbon = os._ribbonGeom;
-                        break;
+                    if (!(os && os.fromIdx === ti && os._ribbonGeom && !os._ribbonGeom._synth &&
+                        (os.kind !== 'nodeLink' || os.cableId))) continue;
+                    var osc = 0;
+                    if (os.onTracePath !== false && os.tracedFiber != null) osc += 100;
+                    if (fatePeerCab && os.cableId && String(os.cableId) === fatePeerCab) osc += 200;
+                    if (os.tracedFiber != null) osc += 20;
+                    if (osc > bestOutScore) {
+                        bestOutScore = osc;
+                        bestOut = os;
                     }
+                }
+                if (bestOut) {
+                    outSeg = bestOut;
+                    outRibbon = bestOut._ribbonGeom;
                 }
             }
 
@@ -3795,7 +3828,10 @@
             var to = model.nodes[s.toIdx];
             if (to && (to.type === 'splitter' || to.type === 'sleeve' || to.type === 'cross' ||
                 to.type === 'spliceCassette')) score += 5;
-            if (s.tracedFiber != null) score += 1;
+            // Трассируемый сегмент важнее «толстого» чужого кабеля — иначе cyan на неверной кассете.
+            if (s.onTracePath !== false && s.tracedFiber != null) score += 250;
+            else if (s.tracedFiber != null) score += 80;
+            if (s.onTracePath === false || s.invented) score -= 120;
             if (s.lengthM != null) score += 2;
             return score;
         }
@@ -4132,6 +4168,15 @@
                     if (s.kind === 'nodeLink' && !s.cableId && nodeIsUnit[s.toIdx] && !fromIsSplitter &&
                         !s.patchLink) {
                         return false;
+                    }
+                    // Исходящий «на узел» с той же жN, что primaryOut — не вторая cyan-линия (вилка).
+                    // Входящий fromNode оставляем (сквозная линия узел→хост→кабель).
+                    if (nodeIsUnit[fi] && s.kind === 'nodeLink' && !s.fromNode && s.tracedFiber != null) {
+                        var primFiberSeg = primaryOut(fi);
+                        if (primFiberSeg && primFiberSeg !== s && primFiberSeg.tracedFiber != null &&
+                            Number(primFiberSeg.tracedFiber) === Number(s.tracedFiber)) {
+                            return false;
+                        }
                     }
                     // Сплиттер→муфта/кросс: не ствол в центр — посадка на жN в терминале
                     if (fromPorts && s.cableId && model.nodes[s.toIdx] &&
@@ -5101,13 +5146,18 @@
                 if (j === lastObjIdx) continue;
                 var p = path[j];
                 if (!p) continue;
-                if (p.type === 'object' && p.object && !isWaypointType(p.objectType)) {
+                if ((p.type === 'object' || p.type === 'start') && p.object && !isWaypointType(p.objectType)) {
                     var uid = getUid(p.object);
                     if (uid) { ids[uid] = ids[uid] || {}; ids[uid][pathIdx] = true; }
                 }
                 if (p.type === 'splitterConnection' && p.splitter) {
                     var su = getUid(p.splitter);
                     if (su) { ids[su] = ids[su] || {}; ids[su][pathIdx] = true; }
+                }
+                // Узел как mid (fromNode / проход) — тоже continuable для отсечения stub «только на узел».
+                if (p.type === 'nodeConnection' && p.node) {
+                    var nu = getUid(p.node);
+                    if (nu) { ids[nu] = ids[nu] || {}; ids[nu][pathIdx] = true; }
                 }
             }
         });
@@ -5136,10 +5186,17 @@
     /** Префикс другого пути (обрыв на кроссе/сплиттере, дальше по сети есть продолжение). */
     function isPrefixOnlyTracePath(path, continuableIds, ownIdx) {
         if (!path || !continuableIds) return false;
-        var st = analyzePathStatus(path);
-        if (st.status === 'complete') return false;
         var key = pathSchematicTerminalId(path);
         var uid = terminalUidFromKey(key);
+        var st = analyzePathStatus(path);
+        // Complete «только на узел», если узел — mid другого (сквозного) пути → stub, не отдельная ветка.
+        if (st.status === 'complete') {
+            if (key && String(key).indexOf('node:') === 0 && uid &&
+                continuableByOtherPath(continuableIds, uid, ownIdx)) {
+                return true;
+            }
+            return false;
+        }
         // «Префикс» — только если через этот объект проходит ДРУГОЙ путь
         if (uid && continuableByOtherPath(continuableIds, uid, ownIdx)) return true;
         return false;
@@ -5958,11 +6015,27 @@
 
     function prependNodePrefixToPath(path, nodeObj, crossObj, cableId, fiberNumber, nodeConn) {
         if (!path || !path.length || !nodeObj || !crossObj) return path;
-        var crossName = crossObj.properties.get('name') || 'Кросс';
+        // Уже склеено (fold / повторный вызов) — не дублировать узел→хост.
+        if (path[0] && path[0].object === nodeObj) return path;
+        if (path[0] && path[0].objectType === 'node' && path[0].object &&
+            getUid(path[0].object) === getUid(nodeObj)) return path;
+        if (path[1] && path[1].type === 'nodeConnection' && path[1].fromNode &&
+            path[1].node === nodeObj) return path;
+        var hostType = (crossObj.properties && crossObj.properties.get('type')) || 'cross';
+        var crossName = crossObj.properties.get('name') ||
+            (hostType === 'sleeve' || hostType === 'spliceCassette' ? 'Муфта' : 'Кросс');
         var nodeName = nodeObj.properties.get('name') || 'Узел сети';
-        var port = (crossObj.properties.get('fiberPorts') || {})[cableId + '-' + fiberNumber] || null;
+        var fiberKey = cableId + '-' + fiberNumber;
+        if (nodeConn && nodeConn.cableId != null && nodeConn.fiberNumber != null) {
+            fiberKey = nodeConn.cableId + '-' + nodeConn.fiberNumber;
+        }
+        var port = (crossObj.properties.get('fiberPorts') || {})[fiberKey] || null;
         var rest = path.slice();
         if (rest[0] && rest[0].type === 'start') {
+            rest = rest.slice(1);
+        }
+        // Убрать ведущий object хоста — заменим явным object после nodeConnection.
+        if (rest[0] && rest[0].type === 'object' && rest[0].object === crossObj) {
             rest = rest.slice(1);
         }
         return [
@@ -5976,7 +6049,7 @@
                 node: nodeObj,
                 fromNode: true
             },
-            { type: 'object', objectType: 'cross', objectName: crossName, object: crossObj, port: port }
+            { type: 'object', objectType: hostType, objectName: crossName, object: crossObj, port: port }
         ].concat(rest);
     }
 

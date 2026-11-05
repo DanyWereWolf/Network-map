@@ -1661,16 +1661,93 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
     return { path, error: null };
 }
 
+/** Локальный путь start→узел (без ONU/сплиттера) — кандидат на склейку с кабельным путём. */
+function isNodeOnlyLocalTerminalPath(path) {
+    if (!path || path.length < 2) return false;
+    var hasNodeConn = false;
+    for (var i = 1; i < path.length; i++) {
+        var it = path[i];
+        if (!it) continue;
+        var t = it.type;
+        if (t === 'nodeConnection') {
+            hasNodeConn = true;
+            continue;
+        }
+        if (t === 'object' && it.objectType === 'node') continue;
+        if (t === 'connection') continue;
+        return false;
+    }
+    return hasNodeConn;
+}
+
+function extractNodeFromLocalTerminalPath(path) {
+    if (!path) return null;
+    for (var i = 0; i < path.length; i++) {
+        if (path[i] && path[i].type === 'nodeConnection' && path[i].node) {
+            return { node: path[i].node, conn: path[i] };
+        }
+    }
+    return null;
+}
+
+/** Кабельный обход уходит с хоста дальше (не короткий local-only). */
+function pathLeavesHostBeyondLocal(path, hostObj) {
+    if (!path || path.length < 2 || !hostObj) return false;
+    for (var i = 1; i < path.length; i++) {
+        var it = path[i];
+        if (!it) continue;
+        if (it.type === 'cable' || it.type === 'waypoint' || it.type === 'connection') return true;
+        if (it.type === 'object' && it.object && it.object !== hostObj) {
+            if (it.objectType === 'node' || it.objectType === 'onu' || it.objectType === 'mediaConverter' ||
+                it.objectType === 'radioBridge') continue;
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Узел на том же волокне, что и кабель — не отдельная вилка «на узел» + «по кабелю»,
+ * а сквозная линия: узел —жN— кросс —кабель— …
+ */
+function foldLocalNodeIntoCablePaths(paths, startObject, cableId, fiberNumber, localTerminalPath) {
+    if (!paths || !paths.length || !localTerminalPath) return false;
+    if (!isNodeOnlyLocalTerminalPath(localTerminalPath)) return false;
+    var info = extractNodeFromLocalTerminalPath(localTerminalPath);
+    if (!info || !info.node) return false;
+    var prependFn = (typeof window !== 'undefined' && window.FiberTrace && FiberTrace.prependNodePrefixToPath)
+        ? FiberTrace.prependNodePrefixToPath
+        : null;
+    if (!prependFn) return false;
+    var folded = false;
+    for (var i = 0; i < paths.length; i++) {
+        var p = paths[i];
+        if (!p || p.length < 2) continue;
+        if (p === localTerminalPath) continue;
+        if (!p[0]) continue;
+        if (p[0].objectType === 'node') continue;
+        // Старт на хосте (start/object) или путь уже с хоста после среза start.
+        var startsAtHost = p[0].object === startObject ||
+            (p[0].type === 'object' && p[0].object === startObject);
+        if (!startsAtHost) continue;
+        if (!pathLeavesHostBeyondLocal(p, startObject)) continue;
+        paths[i] = prependFn(p, info.node, startObject, cableId, fiberNumber, info.conn);
+        folded = true;
+    }
+    return folded;
+}
+
 function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumber, traceOptions) {
     traceOptions = traceOptions || {};
     const first = traceFiberPathFromObject(startObject, startCableId, startFiberNumber, traceOptions);
     if (first.error) return { paths: [], error: first.error };
     var paths = [ first.path ];
     var startType = startObject.properties ? startObject.properties.get('type') : '';
+    var deferredLocalTerminalPath = null;
     if (isFiberHostType(startType)) {
         var localTerminalPath = buildHostLocalTerminalPath(startObject, startCableId, startFiberNumber);
         if (localTerminalPath && localTerminalPath.length > 1) {
-            paths.unshift(localTerminalPath);
+            deferredLocalTerminalPath = localTerminalPath;
         }
         if (isCrossLikeHostType(startType) && typeof applyCrossPortPatchTraceContinuation === 'function') {
             var startPortForPatch = (typeof getCrossPortForFiber === 'function')
@@ -1783,6 +1860,25 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                         initialPreviousObject: altPos.forward
                     }));
                     if (!altRev.error && altRev.path.length > 0) paths.push(altRev.path);
+                }
+            }
+        }
+        // После всех кабельных веток: узел на той же жиле → префикс, а не вторая исходящая линия.
+        if (deferredLocalTerminalPath) {
+            var foldedNode = foldLocalNodeIntoCablePaths(
+                paths, startObject, startCableId, startFiberNumber, deferredLocalTerminalPath
+            );
+            if (!foldedNode) {
+                // Есть кабельный обход — не добавлять stub «кросс→узел» (вилка с одной жилы).
+                var hasCableBranch = false;
+                for (var hci = 0; hci < paths.length; hci++) {
+                    if (pathLeavesHostBeyondLocal(paths[hci], startObject)) {
+                        hasCableBranch = true;
+                        break;
+                    }
+                }
+                if (!hasCableBranch || !isNodeOnlyLocalTerminalPath(deferredLocalTerminalPath)) {
+                    paths.unshift(deferredLocalTerminalPath);
                 }
             }
         }

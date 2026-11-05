@@ -1672,7 +1672,13 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
             var highlightPaths = sortedPaths;
             if (startNodeObj && window.FiberTrace && FiberTrace.prependNodePrefixToPath) {
                 displayPaths = sortedPaths.map(function(p) {
-                    return FiberTrace.prependNodePrefixToPath(p, startNodeObj, startCrossObj, cableId, fiberNumber, nodeConnMeta);
+                    // foldLocalNodeIntoCablePaths уже мог вшить узел — не prepend повторно.
+                    if (p && p[0] && (p[0].object === startNodeObj || p[0].objectType === 'node')) {
+                        return p;
+                    }
+                    return FiberTrace.prependNodePrefixToPath(
+                        p, startNodeObj, startCrossObj, cableId, fiberNumber, nodeConnMeta
+                    );
                 });
                 highlightPaths = displayPaths;
             }
