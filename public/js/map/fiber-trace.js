@@ -2815,6 +2815,10 @@
             xb: xb,
             boxL: boxX,
             boxR: boxX + boxW,
+            boxY: boxY,
+            boxH: boxH,
+            bandTop: yTop,
+            bandBot: yTop + bandH,
             yMid: yMid,
             laneY: laneMap,
             fromIdx: seg.fromIdx,
@@ -2922,9 +2926,25 @@
         return Math.min(420, bandH) + 24 + 16; // pad + caption
     }
 
-    /** Оценка высоты кассеты исходящего кабеля. */
+    /** Оценка высоты кассеты исходящего кабеля (+ запас под скругление карточки). */
     function estimateTreeFiberBandH(seg, toNode, nextCableId) {
-        return estimateTreeFiberRibbonH(seg, toNode, nextCableId);
+        return estimateTreeFiberRibbonH(seg, toNode, nextCableId) + 16;
+    }
+
+    function clampSchematicRibbonLaneY(g, y) {
+        if (y == null || !isFinite(y)) return g && g.yMid != null ? g.yMid : 0;
+        if (!g) return y;
+        var top = g.bandTop != null ? g.bandTop : y;
+        var bot = g.bandBot != null ? g.bandBot : y;
+        // Не в скругление карточки: держим выход на «плоском» правом краю
+        var rx = g.unitRx != null ? g.unitRx : 12;
+        var sw = 4;
+        if (g.unitY != null && g.unitH != null) {
+            top = Math.max(top, g.unitY + rx + sw);
+            bot = Math.min(bot, g.unitY + g.unitH - rx - sw);
+        }
+        if (bot < top) return (top + bot) / 2;
+        return Math.max(top, Math.min(bot, y));
     }
 
     /** Имя хоста на карточке схемы — шире панель, меньше «…». */
@@ -2995,7 +3015,8 @@
         var name = schematicFitHostName(fullName, Math.max(18, Math.floor((w - 28) / 7.2)));
 
         var ribbonH = estimateTreeFiberRibbonH(outSeg, toNode, nextCableId);
-        var h = headH + ribbonH + 6;
+        // estimateTreeFiberBandH = ribbon + запас снизу (скругление / толстый cyan)
+        var h = headH + estimateTreeFiberBandH(outSeg, toNode, nextCableId);
         var rx = 12;
 
         parts.push('<g class="trace-sch-tree-unit">');
@@ -3023,7 +3044,9 @@
                 schematicSvgEsc(String(node.fromSplitterOutput)) + '</text>');
         }
 
-        var yMid = y + headH + ribbonH / 2;
+        // Кассета чуть выше центра тела — воздух до нижнего скругления
+        var bodyH = h - headH;
+        var yMid = y + headH + Math.min(ribbonH / 2, bodyH / 2 - 4);
         var meta = null;
         if (outSeg) {
             meta = appendTreeFiberRibbon(
@@ -3036,6 +3059,7 @@
                 outSeg._ribbonGeom.unitH = h;
                 outSeg._ribbonGeom.unitR = x + w;
                 outSeg._ribbonGeom.unitL = x;
+                outSeg._ribbonGeom.unitRx = rx;
             }
         }
         parts.push('</g>');
@@ -3423,18 +3447,50 @@
             return schematicNormalizeFiberColor(fiber && fiber.color);
         }
 
-        function drawCurve(x1, y1, x2, y2, stroke, sw, opac, dash, traced, markerEnd) {
+        function drawCurve(x1, y1, x2, y2, stroke, sw, opac, dash, traced, markerEnd, extraCls) {
             if (!(x2 > x1 + 6)) return false;
-            // Почти горизонтально — короткая дуга; иначе S-кривая без разлёта
-            var dx = Math.max(16, (x2 - x1) * 0.4);
+            var dy = Math.abs(y2 - y1);
             var markerAttr = markerEnd ? ' marker-end="url(#' + markerEnd + ')"' : '';
-            parts.push('<path class="trace-sch-tree-splice' + (traced ? ' trace-sch-tree-splice--traced' : '') +
-                '" d="M ' + x1 + ' ' + y1 +
-                ' C ' + (x1 + dx) + ' ' + y1 + ', ' +
-                (x2 - dx) + ' ' + y2 + ', ' +
-                x2 + ' ' + y2 +
+            var cls = 'trace-sch-tree-splice' + (traced ? ' trace-sch-tree-splice--traced' : '') +
+                (extraCls || '');
+            var d;
+            // Одинаковая высота / почти — прямая, без «волны» между кассетами
+            if (dy < 2.5) {
+                d = 'M ' + x1 + ' ' + y1 + ' L ' + x2 + ' ' + y2;
+            } else if (dy < 18) {
+                // Лёгкий сдвиг: почти прямая с короткими рычагами
+                var dxSoft = Math.max(12, (x2 - x1) * 0.22);
+                d = 'M ' + x1 + ' ' + y1 +
+                    ' C ' + (x1 + dxSoft) + ' ' + y1 + ', ' +
+                    (x2 - dxSoft) + ' ' + y2 + ', ' +
+                    x2 + ' ' + y2;
+            } else {
+                // Заметный remap: ортогональный локоть, не S-волна
+                var midX = x1 + Math.max(18, (x2 - x1) * 0.45);
+                var r = Math.min(10, dy * 0.35, Math.abs(midX - x1) * 0.5, Math.abs(x2 - midX) * 0.5);
+                if (r < 3) {
+                    d = 'M ' + x1 + ' ' + y1 + ' L ' + midX + ' ' + y1 +
+                        ' L ' + midX + ' ' + y2 + ' L ' + x2 + ' ' + y2;
+                } else {
+                    var sy = y2 > y1 ? 1 : -1;
+                    d = 'M ' + x1 + ' ' + y1 +
+                        ' L ' + (midX - r) + ' ' + y1 +
+                        ' Q ' + midX + ' ' + y1 + ' ' + midX + ' ' + (y1 + sy * r) +
+                        ' L ' + midX + ' ' + (y2 - sy * r) +
+                        ' Q ' + midX + ' ' + y2 + ' ' + (midX + r) + ' ' + y2 +
+                        ' L ' + x2 + ' ' + y2;
+                }
+            }
+            // Сначала мягкое свечение (без CSS filter — иначе Chromium кладёт path ПОД панель)
+            if (traced) {
+                parts.push('<path class="trace-sch-tree-splice-glow" d="' + d +
+                    '" fill="none" stroke="#22d3ee" stroke-width="' + (sw + 4) +
+                    '" stroke-opacity="0.22" stroke-linecap="round" stroke-linejoin="round"/>');
+            }
+            parts.push('<path class="' + cls + '" d="' + d +
                 '" fill="none" stroke="' + stroke + '" stroke-width="' + sw +
-                '" stroke-opacity="' + opac + '" stroke-linecap="round"' + (dash || '') + markerAttr + '/>');
+                '" stroke-opacity="' + opac + '" stroke-linecap="round" stroke-linejoin="round"' +
+                (dash || '') + markerAttr + '/>');
             return true;
         }
 
@@ -3695,54 +3751,64 @@
                 opts = opts || {};
                 var isPathOnly = !!opts.pathOnly;
                 var y1 = g.laneY[Number(fiber.number)];
+                if (y1 == null && isTraced && seg.tracedFiber != null) {
+                    y1 = g.laneY[Number(seg.tracedFiber)];
+                }
                 if (y1 == null) y1 = g.yMid;
+                y1 = clampSchematicRibbonLaneY(g, y1);
                 var y2;
                 if (fiberOutRibbon && fiberOutRibbon.laneY) {
                     y2 = fiberOutRibbon.laneY[peerFiber];
-                    if (y2 == null) {
-                        // Нет lane на исходящей кассете — всё равно тянем горизонталь от истока
-                        y2 = y1;
-                    }
+                    if (y2 == null) y2 = y1;
                 } else {
                     y2 = y1;
+                }
+                y2 = clampSchematicRibbonLaneY(fiberOutRibbon || g, y2);
+                var sameFiber = Number(peerFiber) === Number(fiber.number);
+                // Сквозное жN→жN / pathOnly: не «волна» из‑за разного LOD кассет —
+                // мост горизонтальный на y1, короткая посадка на lane цели.
+                var bridgeY2 = y2;
+                if ((isPathOnly || sameFiber) && Math.abs(y2 - y1) > 2.5) {
+                    bridgeY2 = y1;
                 }
                 var stroke = fiberStroke(fiber, isTraced);
                 var sw = isPathOnly ? (isTraced ? 2.15 : 1.35) : (isTraced ? 2.85 : 1.55);
                 var opac = isPathOnly ? (isTraced ? 0.72 : 0.5) : (isTraced ? 1 : 0.82);
                 var dashAttr = isPathOnly ? ' stroke-dasharray="5 4"' : '';
                 var spliceExtraCls = isPathOnly ? ' trace-sch-tree-splice--pathonly' : '';
-                // Всегда выходим с конца жилы в кассете (g.xb), иначе мост «висит» без истока
+                // Выходим строго с конца жилы (g.xb), не с угла карточки (unitR) —
+                // иначе толстый cyan «уходит под панель» через нижнее скругление.
                 var leaveX = (g.xb != null) ? g.xb : xLeave;
-                if (g.xb != null && xLeave > g.xb + 4) {
-                    parts.push('<path d="M ' + g.xb + ' ' + y1 + ' L ' + xLeave + ' ' + y1 +
-                        '" fill="none" stroke="' + stroke +
-                        '" stroke-width="' + (isTraced ? (isPathOnly ? 1.8 : 2.4) : 1.4) +
-                        '" stroke-opacity="' + opac + '" stroke-linecap="butt"' + dashAttr + '/>');
-                    leaveX = xLeave;
+                if (isTraced) {
+                    parts.push('<circle cx="' + leaveX + '" cy="' + y1 + '" r="2.4" fill="' + stroke +
+                        '" stroke="#06b6d4" stroke-width="1.05"/>');
                 }
-                // drawCurve не знает pathOnly-класс — рисуем вручную при pathOnly
-                if (isPathOnly) {
-                    if (!(fiberXEnter > leaveX + 6)) return false;
-                    var dxPo = Math.max(16, (fiberXEnter - leaveX) * 0.4);
-                    parts.push('<path class="trace-sch-tree-splice' + (isTraced ? ' trace-sch-tree-splice--traced' : '') +
-                        spliceExtraCls + '" d="M ' + leaveX + ' ' + y1 +
-                        ' C ' + (leaveX + dxPo) + ' ' + y1 + ', ' +
-                        (fiberXEnter - dxPo) + ' ' + y2 + ', ' +
-                        fiberXEnter + ' ' + y2 +
-                        '" fill="none" stroke="' + stroke + '" stroke-width="' + sw +
-                        '" stroke-opacity="' + opac + '" stroke-linecap="round"' + dashAttr + '/>');
-                } else if (!drawCurve(leaveX, y1, fiberXEnter, y2, stroke, sw, opac, '', isTraced)) {
+                if (!drawCurve(leaveX, y1, fiberXEnter, bridgeY2, stroke, sw, opac, dashAttr, isTraced,
+                    null, spliceExtraCls)) {
                     return false;
+                }
+                // Доводка до реальной lane цели, если мост шёл горизонтально на y1
+                if (Math.abs(bridgeY2 - y2) > 1.5) {
+                    var stubX = fiberXEnter + Math.min(10, Math.max(4, ((fiberOutRibbon && fiberOutRibbon.xb != null)
+                        ? fiberOutRibbon.xb : fiberXEnter + 12) - fiberXEnter) * 0.35);
+                    parts.push('<path d="M ' + fiberXEnter + ' ' + bridgeY2 +
+                        ' L ' + fiberXEnter + ' ' + y2 +
+                        ' L ' + stubX + ' ' + y2 +
+                        '" fill="none" stroke="' + stroke + '" stroke-width="' + sw +
+                        '" stroke-opacity="' + opac + '" stroke-linecap="round" stroke-linejoin="round"' +
+                        dashAttr + '/>');
                 }
                 var xOnFiber = fiberXEnter;
                 if (fiberOutRibbon) {
                     xOnFiber = Math.min(fiberXEnter + 12, (fiberOutRibbon.xb != null ? fiberOutRibbon.xb : fiberXEnter + 12));
-                    parts.push('<path d="M ' + fiberXEnter + ' ' + y2 + ' L ' + xOnFiber + ' ' + y2 +
-                        '" fill="none" stroke="' + stroke + '" stroke-width="' + sw +
-                        '" stroke-opacity="' + opac + '" stroke-linecap="butt"' + dashAttr + '/>');
+                    if (Math.abs(bridgeY2 - y2) <= 1.5) {
+                        parts.push('<path d="M ' + fiberXEnter + ' ' + y2 + ' L ' + xOnFiber + ' ' + y2 +
+                            '" fill="none" stroke="' + stroke + '" stroke-width="' + sw +
+                            '" stroke-opacity="' + opac + '" stroke-linecap="butt"' + dashAttr + '/>');
+                    }
                 }
                 // Точки посадки — у трассы и переназначений (не у каждой сквозной)
-                var isRemap = Number(peerFiber) !== Number(fiber.number);
+                var isRemap = !sameFiber;
                 if ((isTraced || isRemap) && !isPathOnly) {
                     var landX = fiberOutRibbon ? Math.min(fiberXEnter + 3, xOnFiber) : fiberXEnter;
                     parts.push('<circle cx="' + landX + '" cy="' + y2 + '" r="' + (isTraced ? 2.7 : 2) +
@@ -3752,7 +3818,7 @@
                     parts.push('<circle cx="' + fiberXEnter + '" cy="' + y2 + '" r="2.1" fill="none" stroke="' +
                         stroke + '" stroke-width="1.2" stroke-opacity="' + opac + '"/>');
                 }
-                curveMaxY = Math.max(curveMaxY, y1, y2);
+                curveMaxY = Math.max(curveMaxY, y1, y2, bridgeY2);
                 if (isTraced && isRemap && !isPathOnly) {
                     labelItems.push({
                         text: 'ж' + fiber.number + '→ж' + peerFiber,
@@ -3908,12 +3974,15 @@
                 }
             });
 
-            // Сквозные: сначала обычные, cyan последней
+            // Сквозные: по умолчанию только трасса — иначе пучок кривых слева/справа кассеты.
+            // Соседние жN→жN и remap — при «Все волокна».
             thruList.sort(function (a, b) {
                 return (a.isTraced ? 1 : 0) - (b.isTraced ? 1 : 0) ||
                     (Number(a.fiber.number) - Number(b.fiber.number));
             });
+            var expandThru = !!(activeSchematicRenderOpts && activeSchematicRenderOpts.expandAllFibers);
             thruList.forEach(function (t) {
+                if (!t.isTraced && !expandThru) return;
                 drawOneBridge(t.fiber, t.isTraced, t.peerFiber, t.ribbon, t.xEnter, {
                     pathOnly: t.pathOnly
                 });
@@ -4583,7 +4652,7 @@
             var outSeg = primaryOut(ni);
             if (!outSeg) return;
             var toNode = model.nodes[outSeg.toIdx];
-            var h = headH + estimateTreeFiberBandH(outSeg, toNode, nextCableAfter(outSeg.toIdx)) + 6;
+            var h = headH + estimateTreeFiberBandH(outSeg, toNode, nextCableAfter(outSeg.toIdx));
             if (h > maxUnitH) maxUnitH = h;
         });
 
@@ -4651,7 +4720,7 @@
             nodeIsSplitterPorts[i] = false;
             if (isUnit) {
                 var tn = model.nodes[out0.toIdx];
-                nodeUnitH[i] = headH + estimateTreeFiberBandH(out0, tn, nextCableAfter(out0.toIdx)) + 6;
+                nodeUnitH[i] = headH + estimateTreeFiberBandH(out0, tn, nextCableAfter(out0.toIdx));
                 nodeUnitW[i] = blockW;
             } else {
                 var inSegH = null;
@@ -5302,8 +5371,9 @@
         });
         var termNodeSet = {};
         termOrder.forEach(function (tid) { termNodeSet[tid] = true; });
-        // Мосты в терминал — после ВСЕХ панелей, чтобы соседний терминал не перекрыл кривую
+        // Мосты/жилы терминала — после ВСЕХ непрозрачных панелей (иначе cyan снова под заливкой)
         var deferredTermBridges = [];
+        var deferredTermFibers = [];
 
         function synthesizeOutRibbonGeom(hostIdx, termX0, termW0, yTop0, yBot0) {
             var outC = primaryOut(hostIdx);
@@ -5594,15 +5664,40 @@
                 drawnBridgeKeys[key] = true;
                 tapByFiber[tap] = tapByFiber[tap] || [];
                 if (!(xLeave < entryX - 6)) xLeave = entryX - 36;
-                var dx = Math.max(28, (entryX - xLeave) * 0.45);
+                var dyTerm = Math.abs(y2 - yLeave);
+                var dTerm;
+                if (dyTerm < 2.5) {
+                    dTerm = 'M ' + xLeave + ' ' + yLeave + ' L ' + entryX + ' ' + y2 +
+                        ' L ' + portX + ' ' + y2;
+                } else if (dyTerm < 18) {
+                    var dxSoft = Math.max(14, (entryX - xLeave) * 0.22);
+                    dTerm = 'M ' + xLeave + ' ' + yLeave +
+                        ' C ' + (xLeave + dxSoft) + ' ' + yLeave + ', ' +
+                        (entryX - dxSoft) + ' ' + y2 + ', ' +
+                        entryX + ' ' + y2 +
+                        ' L ' + portX + ' ' + y2;
+                } else {
+                    var midXT = xLeave + Math.max(18, (entryX - xLeave) * 0.45);
+                    var rT = Math.min(10, dyTerm * 0.35);
+                    var syT = y2 > yLeave ? 1 : -1;
+                    if (rT < 3) {
+                        dTerm = 'M ' + xLeave + ' ' + yLeave + ' L ' + midXT + ' ' + yLeave +
+                            ' L ' + midXT + ' ' + y2 + ' L ' + entryX + ' ' + y2 +
+                            ' L ' + portX + ' ' + y2;
+                    } else {
+                        dTerm = 'M ' + xLeave + ' ' + yLeave +
+                            ' L ' + (midXT - rT) + ' ' + yLeave +
+                            ' Q ' + midXT + ' ' + yLeave + ' ' + midXT + ' ' + (yLeave + syT * rT) +
+                            ' L ' + midXT + ' ' + (y2 - syT * rT) +
+                            ' Q ' + midXT + ' ' + y2 + ' ' + (midXT + rT) + ' ' + y2 +
+                            ' L ' + entryX + ' ' + y2 +
+                            ' L ' + portX + ' ' + y2;
+                    }
+                }
                 // В deferred — поверх всех терминальных панелей
-                deferredTermBridges.push('<path class="trace-sch-tree-splice trace-sch-tree-splice--traced" d="M ' +
-                    xLeave + ' ' + yLeave +
-                    ' C ' + (xLeave + dx) + ' ' + yLeave + ', ' +
-                    (entryX - dx) + ' ' + y2 + ', ' +
-                    entryX + ' ' + y2 +
-                    ' L ' + portX + ' ' + y2 +
-                    '" fill="none" stroke="#06b6d4" stroke-width="2.4" stroke-linecap="butt"/>');
+                deferredTermBridges.push('<path class="trace-sch-tree-splice trace-sch-tree-splice--traced" d="' +
+                    dTerm +
+                    '" fill="none" stroke="#06b6d4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>');
                 // Кружок порта рисует ряд жил терминала — без второго «окончания» на мосту.
                 if (badgeText) {
                     pushTreeEdgeBadge(badgeParts, entryX - 58, entryX - 6, y2, badgeText, null, '');
@@ -5635,8 +5730,10 @@
                 var ig = iseg._ribbonGeom;
                 if (!ig) return;
                 yLeave = (tap != null && ig.laneY && ig.laneY[tap] != null) ? ig.laneY[tap] : ig.yMid;
-                xLeave = nodeRight[iseg.fromIdx] != null ? nodeRight[iseg.fromIdx]
-                    : (ig.unitR != null ? ig.unitR : ig.xb);
+                yLeave = clampSchematicRibbonLaneY(ig, yLeave);
+                // С конца жилы кассеты, не с угла предыдущей панели
+                xLeave = (ig.xb != null) ? ig.xb
+                    : (nodeRight[iseg.fromIdx] != null ? nodeRight[iseg.fromIdx] : entryX - 40);
                 if (drawTermBridge(xLeave, yLeave, tap, null) && tap != null) {
                     tapByFiber[tap].push({ iseg: iseg });
                 }
@@ -5671,6 +5768,8 @@
                 });
             });
 
+            // Жилы терминала — отдельным слоем ПОСЛЕ заливки, но мосты будут ещё выше
+            var termFiberParts = [];
             var drawOrder = sorted.slice().sort(function (a, b) {
                 var at = tapByFiber[Number(a.number)] ? 1 : 0;
                 var bt = tapByFiber[Number(b.number)] ? 1 : 0;
@@ -5691,20 +5790,20 @@
                 // Все жилы — один xRight. Трассируемая не длиннее и без «хвоста» за панель.
                 var xRight = termX + termW - 14;
                 var hasOut = !!primaryOut(ti);
-                parts.push('<path d="M ' + portX + ' ' + y2 + ' L ' + xRight + ' ' + y2 +
+                termFiberParts.push('<path d="M ' + portX + ' ' + y2 + ' L ' + xRight + ' ' + y2 +
                     '" fill="none" stroke="' + stroke + '" stroke-width="' + sw +
                     '" stroke-opacity="' + opac + '" stroke-linecap="butt"' + dash + '/>');
-                parts.push('<circle cx="' + portX + '" cy="' + y2 + '" r="' + (isTraced ? 2.4 : 2) +
+                termFiberParts.push('<circle cx="' + portX + '" cy="' + y2 + '" r="' + (isTraced ? 2.4 : 2) +
                     '" fill="' + stroke + '" fill-opacity="' + opac + '"' +
                     (isTraced ? ' stroke="#06b6d4" stroke-width="1"' : '') + '/>');
                 // Правый маркер только у листа без исходящего (реальное окончание на этой панели).
                 if (isTraced && !hasOut && !isFree) {
-                    parts.push('<circle cx="' + xRight + '" cy="' + y2 + '" r="2.2" fill="#06b6d4"/>');
+                    termFiberParts.push('<circle cx="' + xRight + '" cy="' + y2 + '" r="2.2" fill="#06b6d4"/>');
                 } else if (isFree) {
-                    parts.push('<circle cx="' + xRight + '" cy="' + y2 + '" r="1.6" fill="none" stroke="' +
+                    termFiberParts.push('<circle cx="' + xRight + '" cy="' + y2 + '" r="1.6" fill="none" stroke="' +
                         stroke + '" stroke-width="1" stroke-opacity="0.45"/>');
                 }
-                parts.push('<text class="trace-sch-fiber-num' + (isTraced ? ' trace-sch-fiber-num--traced' : '') +
+                termFiberParts.push('<text class="trace-sch-fiber-num' + (isTraced ? ' trace-sch-fiber-num--traced' : '') +
                     '" x="' + (portX + 9) + '" y="' + (y2 + 2.8) + '">' + fiber.number + '</text>');
             });
 
@@ -5716,39 +5815,64 @@
             if (n > 1) capBits.push(n + 'F');
             if (seg.lengthM != null) capBits.push(seg.lengthM + ' м');
             if (capBits.length) {
-                parts.push('<text class="trace-sch-tree-fiber-caption" x="' + (termX + termW / 2) +
+                termFiberParts.push('<text class="trace-sch-tree-fiber-caption" x="' + (termX + termW / 2) +
                     '" y="' + (termY + termH - 6) + '" text-anchor="middle">' +
                     schematicSvgEsc(capBits.join(' · ')) + '</text>');
             }
+            // Закрываем только оболочку терминала (заливка+шапка). Жилы — позже, мосты — ещё позже.
             parts.push('</g>');
+            deferredTermFibers.push(
+                '<g class="trace-sch-tree-term-fibers" data-term="' + ti + '">' +
+                termFiberParts.join('') + '</g>'
+            );
 
             // Геометрия исходящего кабеля с правого края — для следующего терминала
             synthesizeOutRibbonGeom(ti, termX, termW, yTopPorts, yTopPorts + bandH);
         }
 
-        // Мосты в терминалы — поверх всех панелей
-        if (deferredTermBridges.length) {
-            parts.push('<g class="trace-sch-tree-term-bridges">');
-            for (var dbi = 0; dbi < deferredTermBridges.length; dbi++) {
-                parts.push(deferredTermBridges[dbi]);
+        yield { hint: 'Рисуем связи', pct: null, waitMs: 0 };
+        // Слои строго: панели (уже в parts) → жилы терминалов → стволы/бейджи → мосты сверху.
+        // Иначе правая конечная панель снова перекрывает cyan (как раньше).
+        parts.push('<g class="trace-sch-tree-overlays">');
+        if (deferredTermFibers.length) {
+            parts.push('<g class="trace-sch-tree-term-fiber-layer">');
+            for (var dfi = 0; dfi < deferredTermFibers.length; dfi++) {
+                parts.push(deferredTermFibers[dfi]);
             }
             parts.push('</g>');
         }
-
-        yield { hint: 'Рисуем связи', pct: null, waitMs: 0 };
-        // Стволы после терминалов — иначе панель перекрывает жилу
+        // Стволы / бейджи под мостами
         drawTreeTrunkEdges();
 
         yield { hint: 'Сварки и подписи', pct: null, waitMs: 0 };
         flushTreeEdgeBadges(parts, badgeParts);
 
-        // Сварки / мосты между unit-блоками (OLT→кросс и т.п.)
+        // Мосты в терминалы — поверх заливки И поверх стволов/бейджей
+        if (deferredTermBridges.length) {
+            parts.push('<g class="trace-sch-tree-term-bridges">');
+            for (var dbi = 0; dbi < deferredTermBridges.length; dbi++) {
+                var br = deferredTermBridges[dbi];
+                // Мягкое свечение без CSS filter (filter уводил path под панель)
+                if (br.indexOf('trace-sch-tree-splice--traced') >= 0 && br.indexOf(' d="') >= 0) {
+                    var dMatch = br.match(/\sd="([^"]+)"/);
+                    if (dMatch) {
+                        parts.push('<path class="trace-sch-tree-splice-glow" d="' + dMatch[1] +
+                            '" fill="none" stroke="#22d3ee" stroke-width="6.5" stroke-opacity="0.22" stroke-linecap="round" stroke-linejoin="round"/>');
+                    }
+                }
+                parts.push(br);
+            }
+            parts.push('</g>');
+        }
+
+        // Сварки / мосты между unit-блоками — самый верхний слой
         paintSchematicSplitterInheritedColors(model);
         var spliceNodeH = Math.max(smallNodeH, Math.min(maxUnitH, 160));
         appendTreeFiberSplices(
             parts, model, nodeCX, nodeCY, nodeLeft, nodeRight,
             spliceNodeH, nodeIsUnit, nodeUnitH, nodeIsSplitterPorts, markerId
         );
+        parts.push('</g>');
 
         parts.push('</svg>');
         return parts.join('');

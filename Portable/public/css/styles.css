@@ -18319,7 +18319,7 @@ html.cable-split-mode-active #map {
     stroke: #22d3ee;
     stroke-width: 3.1;
     opacity: 1;
-    filter: drop-shadow(0 0 3px rgba(34, 211, 238, 0.45));
+    /* без CSS filter: в SVG drop-shadow поднимает слой и линия уходит ПОД панель */
 }
 .trace-sch-tree-port--traced {
     fill: #22d3ee;
@@ -18355,7 +18355,7 @@ html.cable-split-mode-active #map {
     pointer-events: none;
 }
 .trace-sch-tree-splice--traced {
-    filter: drop-shadow(0 0 3px rgba(6, 182, 212, 0.55));
+    /* glow рисуем второй path в JS — CSS filter уводит жилу под непрозрачную панель */
 }
 .trace-sch-tree-splice-dot {
     pointer-events: none;
@@ -18612,6 +18612,12 @@ html.cable-split-mode-active #map {
     pointer-events: none;
 }
 .trace-sch-tree-unit {
+    pointer-events: none;
+}
+.trace-sch-tree-overlays {
+    pointer-events: none;
+}
+.trace-sch-tree-splice-glow {
     pointer-events: none;
 }
 .trace-sch-tree-unit-shadow {
