@@ -3971,6 +3971,15 @@ function showObjectInfoBody(obj) {
     if (!isObjectOnMap(obj)) return;
     currentModalObject = obj;
     const type = obj.properties.get('type');
+    // Ящик имеет отдельную карточку со «Составом» — не подменять пустым «Объект».
+    if (type === 'cabinet') {
+        if (typeof paintCabinetModalBody === 'function') {
+            paintCabinetModalBody(obj, { openShell: false });
+        } else if (typeof showCabinetInfo === 'function') {
+            showCabinetInfo(obj);
+        }
+        return;
+    }
     const name = obj.properties.get('name') || '';
     const cableSourceObj = (obj._embedded && obj._host) ? obj._host : obj;
 

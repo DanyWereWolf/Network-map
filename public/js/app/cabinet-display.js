@@ -917,6 +917,8 @@ function clearObjectCabinetId(obj) {
     if (typeof obj.properties.unset === 'function') obj.properties.unset('cabinetId');
     else obj.properties.set('cabinetId', '');
     clearCabinetMemberOrder(obj);
+    // Чтобы serialize отправил cabinetId:null (иначе update без ключа оставит membership у remote).
+    obj.properties.set('_syncClearCabinetId', true);
 }
 
 function hidePlacemarkFromMap(obj) {
@@ -1791,37 +1793,53 @@ function bindCabinetCardControls(root, cabinet) {
     bindCabinetMemberDragReorder(root, cabinet);
 }
 
-function showCabinetInfo(cabinet) {
-    if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode) return;
-    if (!cabinet || !cabinet.properties || cabinet.properties.get('type') !== 'cabinet') return;
-    applyModalEditModeForObject(cabinet, function() {
-        currentModalObject = cabinet;
-        var name = (cabinet.properties.get('name') || '').trim();
-        document.getElementById('modalTitle').textContent = name ? ('Ящик: ' + name) : 'Ящик';
-        if (typeof updateInfoModalChrome === 'function') updateInfoModalChrome('cabinet', name);
+/** Перерисовать тело модалки ящика без повторного lock (состав не должен стираться). */
+function paintCabinetModalBody(cabinet, opts) {
+    opts = opts || {};
+    if (!cabinet || !cabinet.properties || cabinet.properties.get('type') !== 'cabinet') return false;
+    currentModalObject = cabinet;
+    var name = (cabinet.properties.get('name') || '').trim();
+    var titleEl = document.getElementById('modalTitle');
+    if (titleEl) titleEl.textContent = name ? ('Ящик: ' + name) : 'Ящик';
+    if (typeof updateInfoModalChrome === 'function') updateInfoModalChrome('cabinet', name);
 
-        var modalInfoEl = document.getElementById('modalInfo');
-        modalInfoEl.innerHTML = buildCabinetCardContent(cabinet, modalIsEditMode());
-        bindCabinetCardControls(modalInfoEl, cabinet);
-        if (typeof bindObjectGalleryModal === 'function') bindObjectGalleryModal(modalInfoEl, cabinet);
-        if (typeof initDeviceComboboxes === 'function') initDeviceComboboxes(modalInfoEl);
-
-        resetInfoModalFiberLayout();
-        var modal = document.getElementById('infoModal');
-        setupEditAndDeleteListeners();
+    var modalInfoEl = document.getElementById('modalInfo');
+    if (!modalInfoEl || typeof buildCabinetCardContent !== 'function') return false;
+    var editOn = typeof modalIsEditMode === 'function' ? modalIsEditMode() : !!infoModalEditMode;
+    modalInfoEl.innerHTML = buildCabinetCardContent(cabinet, editOn);
+    if (typeof bindCabinetCardControls === 'function') bindCabinetCardControls(modalInfoEl, cabinet);
+    if (typeof bindObjectGalleryModal === 'function') bindObjectGalleryModal(modalInfoEl, cabinet);
+    if (typeof initDeviceComboboxes === 'function') initDeviceComboboxes(modalInfoEl);
+    if (typeof attachObjectCoordsSectionHandlers === 'function') {
         attachObjectCoordsSectionHandlers(modalInfoEl);
+    }
+    if (opts.openShell !== false) {
+        if (typeof resetInfoModalFiberLayout === 'function') resetInfoModalFiberLayout();
+        if (typeof setupEditAndDeleteListeners === 'function') setupEditAndDeleteListeners();
+        var modal = document.getElementById('infoModal');
         if (modal) {
             modal.style.display = 'flex';
             modal.classList.add('modal--centered');
             modal.classList.remove('fiber-management-modal-open', 'fiber-management-modal-open--edit', 'fiber-management-modal-open--view');
             var modalContent = modal.querySelector('.modal-content');
             if (modalContent) modalContent.classList.remove('fiber-management-modal');
-            updateModalLockBanner(getObjectUniqueId(cabinet));
-            applyObjectLocksToMapDraggable();
+            if (typeof updateModalLockBanner === 'function') updateModalLockBanner(getObjectUniqueId(cabinet));
+            if (typeof applyObjectLocksToMapDraggable === 'function') applyObjectLocksToMapDraggable();
             if (typeof window.initPanelPlexusCanvases === 'function') {
                 requestAnimationFrame(function () { window.initPanelPlexusCanvases(modal); });
             }
         }
+    } else if (typeof updateModalLockBanner === 'function') {
+        updateModalLockBanner(getObjectUniqueId(cabinet));
+    }
+    return true;
+}
+
+function showCabinetInfo(cabinet) {
+    if (typeof objectPlacementMode !== 'undefined' && objectPlacementMode) return;
+    if (!cabinet || !cabinet.properties || cabinet.properties.get('type') !== 'cabinet') return;
+    applyModalEditModeForObject(cabinet, function() {
+        paintCabinetModalBody(cabinet, { openShell: true });
     });
 }
 

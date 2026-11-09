@@ -585,6 +585,14 @@ function createObject(type, name, coords, options = {}) {
             if (!data.mapRegionId && placemarkProperties.mapRegionId) {
                 data.mapRegionId = String(placemarkProperties.mapRegionId);
             }
+            // Гарантируем membership в add_object (сериализация не должна терять cabinetId).
+            var cabIdSync = placemark.properties.get('cabinetId') || placemarkProperties.cabinetId;
+            if (cabIdSync) {
+                data.cabinetId = String(cabIdSync);
+                var cabOrdSync = placemark.properties.get('cabinetOrder');
+                if (cabOrdSync == null || cabOrdSync === '') cabOrdSync = placemarkProperties.cabinetOrder;
+                if (cabOrdSync != null && cabOrdSync !== '') data.cabinetOrder = Number(cabOrdSync);
+            }
             window.syncSendOp({ type: 'add_object', data: data });
             if (typeof bumpMapRevisionAfterSyncAdd === 'function') bumpMapRevisionAfterSyncAdd(placemark);
         }

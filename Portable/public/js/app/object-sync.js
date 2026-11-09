@@ -99,7 +99,11 @@ function applyModalEditModeForObject(obj, callback) {
             if (paintedEarly && (window._objectModalOpenGen || 0) === openGenAtStart &&
                 currentModalObject && getObjectUniqueId(currentModalObject) === uid) {
                 infoModalEditMode = true;
-                if (typeof showObjectInfoBody === 'function') {
+                var upType = obj.properties && obj.properties.get('type');
+                // Ящик: showObjectInfoBody не умеет «Состав» — перерисовываем карточку ящика.
+                if (upType === 'cabinet' && typeof paintCabinetModalBody === 'function') {
+                    try { paintCabinetModalBody(obj, { openShell: false }); } catch (eCabUp) {}
+                } else if (typeof showObjectInfoBody === 'function') {
                     try { showObjectInfoBody(obj); } catch (eUp) {}
                 }
             } else {

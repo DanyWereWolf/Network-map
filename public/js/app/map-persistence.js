@@ -300,14 +300,39 @@ function serializeMapItemFromObject(obj) {
             if (props.serialNumber) result.serialNumber = props.serialNumber;
             if (props.ipAddress) result.ipAddress = props.ipAddress;
         }
-        if (props.cabinetId) {
-            result.cabinetId = props.cabinetId;
-            if (props.cabinetOrder != null && props.cabinetOrder !== '') {
-                result.cabinetOrder = Number(props.cabinetOrder);
-            }
+        // getAll() иногда не отдаёт cabinetId — берём через get()/getObjectCabinetId,
+        // иначе update уходит с cabinetId:null и у остальных стирается состав (у автора в памяти ещё есть).
+        var cabIdSer = '';
+        if (typeof getObjectCabinetId === 'function') {
+            cabIdSer = getObjectCabinetId(obj) || '';
         }
-        else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(props.type)) {
-            result.cabinetId = null;
+        if (!cabIdSer) {
+            var cabRaw = obj.properties.get('cabinetId');
+            if (cabRaw != null && cabRaw !== '') cabIdSer = String(cabRaw);
+            else if (props.cabinetId) cabIdSer = String(props.cabinetId);
+        }
+        var clearCabFlag = !!(obj.properties.get('_syncClearCabinetId') || props._syncClearCabinetId);
+        if (cabIdSer) {
+            result.cabinetId = cabIdSer;
+            var cabOrdSer = null;
+            if (typeof getCabinetMemberOrder === 'function') cabOrdSer = getCabinetMemberOrder(obj);
+            if (cabOrdSer === null || cabOrdSer === undefined) {
+                var ordRaw = obj.properties.get('cabinetOrder');
+                if (ordRaw == null || ordRaw === '') ordRaw = props.cabinetOrder;
+                if (ordRaw != null && ordRaw !== '') cabOrdSer = Number(ordRaw);
+            }
+            if (cabOrdSer != null && cabOrdSer !== '' && !isNaN(Number(cabOrdSer))) {
+                result.cabinetOrder = Number(cabOrdSer);
+            }
+            if (typeof obj.properties.unset === 'function') obj.properties.unset('_syncClearCabinetId');
+            else obj.properties.set('_syncClearCabinetId', false);
+        } else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(props.type)) {
+            // null только при явном извлечении; иначе ключ не шлём — Object.assign на сервере сохранит cur.cabinetId.
+            if (clearCabFlag) {
+                result.cabinetId = null;
+                if (typeof obj.properties.unset === 'function') obj.properties.unset('_syncClearCabinetId');
+                else obj.properties.set('_syncClearCabinetId', false);
+            }
         }
         if (props.type === 'node') {
             if (props.nodeKind) result.nodeKind = props.nodeKind;
@@ -2332,8 +2357,13 @@ function refreshOpenCabinetModalForMember(member) {
     if (!cabId) return;
     var openUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(currentModalObject) : currentModalObject.properties.get('uniqueId');
     if (String(openUid) !== String(cabId)) return;
+    // Soft-refresh: без showCabinetInfo/refreshObjectModal (повторный lock + showObjectInfoBody стирали «Состав»).
+    if (typeof paintCabinetModalBody === 'function') {
+        try { paintCabinetModalBody(currentModalObject, { openShell: false }); } catch (eCabModal) {}
+        return;
+    }
     if (typeof refreshObjectModal === 'function') {
-        try { refreshObjectModal(currentModalObject); } catch (eCabModal) {}
+        try { refreshObjectModal(currentModalObject); } catch (eCabModal2) {}
     }
 }
 
