@@ -672,10 +672,104 @@ function setupUndergroundEditBar() {
             if (typeof showWarning === 'function') showWarning('Включите режим редактирования.', 'Карта');
             return;
         }
+        if (typeof showUndergroundSpanActionDialog === 'function') {
+            showUndergroundSpanActionDialog(cable, spanIndex, coords);
+            return;
+        }
         if (typeof closeInfoModal === 'function') closeInfoModal();
         startUndergroundSpanRelayout(cable, spanIndex);
     };
 }
+
+/**
+ * Клик по красному пунктиру: поставить муфту в точке клика или переложить участок.
+ */
+function showUndergroundSpanActionDialog(cable, spanIndex, coords) {
+    if (!cable || !cable.properties || !isEditMode || (typeof canEdit === 'function' && !canEdit())) return;
+    if (typeof isCopperCableType === 'function' && isCopperCableType(cable.properties.get('cableType'))) {
+        if (typeof showWarning === 'function') showWarning('Муфту ВОЛС нельзя поставить на медный кабель.', 'Подземный участок');
+        return;
+    }
+    if ((!coords || coords.length < 2) && window.lastMapClickCoords && window.lastMapClickCoords.length >= 2) {
+        coords = window.lastMapClickCoords;
+    }
+    var modal = document.getElementById('infoModal');
+    var modalTitle = document.getElementById('modalTitle');
+    var modalContent = document.getElementById('modalInfo');
+    if (!modal || !modalContent) return;
+
+    var cableLabel = (typeof getCableSplitLabel === 'function')
+        ? getCableSplitLabel(cable)
+        : (cable.properties.get('cableName') || 'Кабель');
+    var spanLabel = 'Участок ' + (Number(spanIndex) + 1);
+    try {
+        var spansInfo = window.CableUnderground && CableUnderground.getUndergroundSpansInfo
+            ? CableUnderground.getUndergroundSpansInfo(cable)
+            : [];
+        if (spansInfo[spanIndex]) {
+            spanLabel = (spansInfo[spanIndex].entryName || 'вход') + ' → ' + (spansInfo[spanIndex].exitName || 'выход');
+        }
+    } catch (eSpanLabel) {}
+
+    if (modalTitle) modalTitle.textContent = 'Подземный участок';
+    var html = '<div class="info-section cable-split-dialog underground-span-action-dialog">';
+    html += '<p class="cable-split-dialog__lead"><strong>' + escapeHtml(cableLabel) + '</strong><br>' +
+        escapeHtml(spanLabel) + '. Выберите действие для точки клика на красном пунктире.</p>';
+    html += buildCableSplitSleeveFieldsHtml();
+    html += '<div class="cable-split-pick-list" style="margin-top: 10px;">';
+    html += '<button type="button" id="ugSpanInstallSleeve" class="btn-cable-split-start">🔴 Установить муфту здесь</button>';
+    html += '<button type="button" id="ugSpanRelayout" class="btn-secondary btn-cable-split-pick">Переложить участок</button>';
+    html += '<button type="button" id="ugSpanOpenCable" class="btn-secondary btn-cable-split-pick">Открыть карточку кабеля</button>';
+    html += '</div>';
+    html += '<button type="button" id="ugSpanCancel" class="btn-secondary cable-split-dialog-cancel">Отмена</button>';
+    html += '</div>';
+    modalContent.innerHTML = html;
+    currentModalObject = cable;
+    if (typeof presentInfoCard === 'function') {
+        presentInfoCard({ workspace: false, title: 'Подземный участок' });
+    } else {
+        modal.style.display = 'block';
+    }
+    bindCableSplitSleeveFields(modalContent);
+
+    var installBtn = modalContent.querySelector('#ugSpanInstallSleeve');
+    if (installBtn) {
+        installBtn.addEventListener('click', function() {
+            var sleeveOpts = readCableSplitSleeveOptions(modalContent);
+            if (typeof closeInfoModal === 'function') closeInfoModal();
+            else modal.style.display = 'none';
+            if (!coords || coords.length < 2) {
+                if (typeof showError === 'function') {
+                    showError('Не удалось определить точку клика. Кликните по пунктиру ещё раз.', 'Разрез кабеля');
+                }
+                return;
+            }
+            splitCableOnUndergroundSpan(cable, spanIndex, coords, sleeveOpts);
+        });
+    }
+    var relayoutBtn = modalContent.querySelector('#ugSpanRelayout');
+    if (relayoutBtn) {
+        relayoutBtn.addEventListener('click', function() {
+            if (typeof closeInfoModal === 'function') closeInfoModal();
+            else modal.style.display = 'none';
+            startUndergroundSpanRelayout(cable, spanIndex);
+        });
+    }
+    var openCableBtn = modalContent.querySelector('#ugSpanOpenCable');
+    if (openCableBtn) {
+        openCableBtn.addEventListener('click', function() {
+            if (typeof showCableInfo === 'function') showCableInfo(cable);
+        });
+    }
+    var cancelBtn = modalContent.querySelector('#ugSpanCancel');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            if (typeof closeInfoModal === 'function') closeInfoModal();
+            else modal.style.display = 'none';
+        });
+    }
+}
+window.showUndergroundSpanActionDialog = showUndergroundSpanActionDialog;
 
 window.setupUndergroundEditBar = setupUndergroundEditBar;
 

@@ -349,7 +349,7 @@
                 cursor: 'pointer',
                 hasBalloon: false,
                 hasHint: true,
-                hintContent: 'Клик — проложить подземный участок заново'
+                hintContent: 'Клик — установить муфту или переложить участок'
             });
             line.properties.set('type', 'cableUndergroundOverlay');
             line.properties.set('parentCableId', cable.properties.get('uniqueId'));
