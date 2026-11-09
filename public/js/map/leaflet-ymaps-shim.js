@@ -647,8 +647,11 @@
         var center = state.center || [54.66, 86.16];
         var zoom = state.zoom != null ? state.zoom : 16;
 
-        var bootType = (state && state.type) || global.VolsmapBootBasemapType || 'leaflet#orthophoto';
-        if (String(bootType).indexOf('leaflet#') !== 0) bootType = 'leaflet#orthophoto';
+        var bootType = (state && state.type) || global.VolsmapBootBasemapType || 'leaflet#none';
+        if (bootType === 'leaflet#orthophoto') bootType = 'leaflet#none';
+        if (String(bootType).indexOf('leaflet#') !== 0 && String(bootType).indexOf('yandex#') !== 0) {
+            bootType = 'leaflet#none';
+        }
         this._type = bootType;
         this._basemapLayer = null; // legacy alias → первый слой стека
         this._altLayer = null;
@@ -883,8 +886,8 @@
         this._lastManifest = manifest;
         this._packId = manifest.packId;
         try { global._volsmapHasActiveBasemap = true; } catch (eFlag) {}
-        // Пакет ортофото только запоминаем, если сейчас другой слой — не навязываем
-        if (this._type && this._type !== 'leaflet#orthophoto') {
+        // Веб: ортофото не включаем даже при наличии пакета на сервере
+        if (this._type !== 'leaflet#orthophoto') {
             return;
         }
         var nativeMin = manifest.minZoom != null ? Number(manifest.minZoom) : 0;
@@ -931,22 +934,10 @@
     };
 
     MapShim.prototype._applyBasemapType = function (type) {
-        var next = type || 'leaflet#orthophoto';
-        if (next === 'leaflet#orthophoto') {
-            this._basemapLoadId = (this._basemapLoadId || 0) + 1;
-            this._type = 'leaflet#orthophoto';
-            this._clearBasemapStack();
-            if (this._lastManifest && this._lastManifest.packId) {
-                this._showNoBasemapBanner(false);
-                this.setBasemapPack(this._lastManifest);
-                return;
-            }
-            // Ручной выбор слоя — можно показать подсказку, если пакета ещё нет.
-            this._loadBasemap({ silent: false });
-            this.events.fire('typechange', { target: this });
-            return;
-        }
-        // Все остальные типы — независимые фабрики VolsmapBasemapStack
+        var next = type || 'leaflet#none';
+        // Облачная веб-версия: ортофото отключено (остаётся в Portable)
+        if (next === 'leaflet#orthophoto') next = 'leaflet#none';
+        // Все типы — фабрики VolsmapBasemapStack (без GeoTIFF-пакетов)
         this._setBasemapStack(next, {});
     };
 

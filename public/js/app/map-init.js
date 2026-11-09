@@ -119,7 +119,7 @@ function init() {
     // Прогрев opposite — только после markMapDataReady (map-loading.js), чтобы не конкурировать с первой загрузкой.
 }
 
-/** On-prem (mapEngine=leaflet): доступны и Яндекс, и ортофото — независимо. */
+/** Dual (mapEngine=leaflet): Яндекс / OSM / пустая подложка. Ортофото — только Portable. */
 function isBasemapDualMode() {
     try {
         if (typeof MapEngine !== 'undefined' && MapEngine.isDualMode) return !!MapEngine.isDualMode();
@@ -216,10 +216,11 @@ function setupMapLayerSelector() {
         var fallback = 'yandex#map';
         try {
             if (typeof MapEngine !== 'undefined' && MapEngine.isLeaflet && MapEngine.isLeaflet()) {
-                fallback = 'leaflet#orthophoto';
+                fallback = 'leaflet#none';
             }
         } catch (eFb) {}
         var key = type || (myMap.getType && myMap.getType()) || fallback;
+        if (key === 'leaflet#orthophoto') key = 'yandex#map';
         for (var j = 0; j < items.length; j++) {
             var item = items[j];
             if (item.hasAttribute('hidden')) continue;

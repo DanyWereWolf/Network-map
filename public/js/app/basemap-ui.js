@@ -8,19 +8,17 @@
     var pollTimer = null;
     var escapeHandler = null;
     var prefsNetBound = false;
-    // Онлайн по умолчанию — Яндекс; без сети — ортофото (GeoTIFF) или пустая подложка.
+    // Облако: онлайн — Яндекс; без сети — пустая подложка (ортофото только в Portable).
     var cachedPreferredType = 'yandex#map';
-    var cachedOfflineType = 'leaflet#orthophoto';
+    var cachedOfflineType = 'leaflet#none';
     var ALLOWED_TYPES = {
         'yandex#map': 1,
         'yandex#satellite': 1,
         'yandex#hybrid': 1,
-        'leaflet#orthophoto': 1,
         'leaflet#osm': 1,
         'leaflet#none': 1
     };
     var ALLOWED_OFFLINE = {
-        'leaflet#orthophoto': 1,
         'leaflet#none': 1
     };
 
@@ -72,6 +70,7 @@
 
     function normalizePreferredType(value) {
         var s = value == null ? '' : String(value).trim();
+        if (s === 'leaflet#orthophoto') return 'yandex#map';
         if (ALLOWED_TYPES[s]) return s;
         // Dual (mapEngine=leaflet): при наличии сети предпочитаем Яндекс.
         return 'yandex#map';
@@ -79,8 +78,9 @@
 
     function normalizeOfflineType(value) {
         var s = value == null ? '' : String(value).trim();
+        if (s === 'leaflet#orthophoto') return 'leaflet#none';
         if (ALLOWED_OFFLINE[s]) return s;
-        return 'leaflet#orthophoto';
+        return 'leaflet#none';
     }
 
     function basemapNeedsInternet(type) {
@@ -119,11 +119,10 @@
 
     function resolveOfflineFallback(offlineType) {
         offlineType = normalizeOfflineType(offlineType);
-        if (offlineType === 'leaflet#none') return 'leaflet#none';
-        return hasOrthophotoReady() ? 'leaflet#orthophoto' : 'leaflet#none';
+        return 'leaflet#none';
     }
 
-    /** Итоговый слой: онлайн → Яндекс (если ключ есть); офлайн / без ключа → GeoTIFF или пустая. */
+    /** Итоговый слой: онлайн → Яндекс (если ключ есть); офлайн / без ключа → пустая подложка. */
     function resolveBasemapType(preferred, offlineType) {
         preferred = normalizePreferredType(preferred);
         offlineType = normalizeOfflineType(offlineType);
@@ -226,7 +225,7 @@
         if (hint) {
             hint.textContent = admin
                 ? 'Без интернета слои Яндекса/OSM недоступны — сработает запасной вариант ниже.'
-                : 'Меняет администратор организации. Без интернета: ортофото или пустой фон.';
+                : 'Меняет администратор организации. Без интернета — пустой фон карты.';
         }
     }
 
@@ -413,7 +412,6 @@
             '    <div class="form-group">' +
             '      <label for="basemapDefaultType">Базовый слой при входе</label>' +
             '      <select id="basemapDefaultType" class="form-select">' +
-            '        <option value="leaflet#orthophoto">Ортофото</option>' +
             '        <option value="yandex#map">Яндекс · Схема</option>' +
             '        <option value="yandex#satellite">Яндекс · Спутник</option>' +
             '        <option value="yandex#hybrid">Яндекс · Гибрид</option>' +
@@ -424,7 +422,6 @@
             '    <div class="form-group">' +
             '      <label for="basemapOfflineType">Если нет интернета</label>' +
             '      <select id="basemapOfflineType" class="form-select">' +
-            '        <option value="leaflet#orthophoto">Ортофото (если загружено)</option>' +
             '        <option value="leaflet#none">Без подложки</option>' +
             '      </select>' +
             '    </div>' +
@@ -762,23 +759,9 @@
     }
 
     function openBasemapAdminModal() {
-        if (!isLeafletEngine()) {
-            if (typeof showInfo === 'function') {
-                showInfo('Управление ортофото доступно при mapEngine=leaflet в server-config.json', 'Подложка');
-            }
-            return;
+        if (typeof showInfo === 'function') {
+            showInfo('Загрузка ортофото доступна только в Portable-версии', 'Подложка');
         }
-        var modal = ensureModal();
-        modal.style.display = 'flex';
-        modal.classList.add('basemap-admin-modal--open');
-        if (!escapeHandler) {
-            escapeHandler = function (e) {
-                if (e.key === 'Escape') closeBasemapAdminModal();
-            };
-            document.addEventListener('keydown', escapeHandler);
-        }
-        refreshStatus();
-        refreshPacks();
     }
 
     function closeBasemapAdminModal() {

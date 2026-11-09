@@ -112,8 +112,10 @@
             '  <div class="modal-header map-region-picker-header">' +
             '    <div class="map-region-picker-header__main">' +
             '      <div class="map-region-picker-header__icon" aria-hidden="true">' +
-            '        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-            '          <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>' +
+            '        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '          <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon>' +
+            '          <line x1="9" y1="3" x2="9" y2="18"></line>' +
+            '          <line x1="15" y1="6" x2="15" y2="21"></line>' +
             '        </svg>' +
             '      </div>' +
             '      <div class="map-region-picker-header__text">' +
@@ -121,6 +123,7 @@
             '        <p class="map-region-picker-header__sub" id="mapRegionPickerSub">Карта загружается по регионам</p>' +
             '      </div>' +
             '    </div>' +
+            '    <span class="close" id="mapRegionPickerClose" role="button" tabindex="0" aria-label="Закрыть" hidden>&times;</span>' +
             '  </div>' +
             '  <div class="modal-body map-region-picker-body">' +
             '    <p class="map-region-picker-hint">До ~10&nbsp;000 объектов в каждом. Выберите регион — карта откроется только с его данными.</p>' +
@@ -187,8 +190,10 @@
                 }
                 btn.innerHTML =
                     '<span class="map-region-picker-item__icon" aria-hidden="true">' +
-                    '  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-                    '    <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>' +
+                    '  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon>' +
+                    '    <line x1="9" y1="3" x2="9" y2="18"></line>' +
+                    '    <line x1="15" y1="6" x2="15" y2="21"></line>' +
                     '  </svg>' +
                     '</span>' +
                     '<span class="map-region-picker-item__info">' +
@@ -222,6 +227,38 @@
         el._renderList = renderList;
         el._getSelectedId = function () { return selectedId; };
         el._setSelectedId = function (id) { selectedId = id; };
+        el._allowDismiss = false;
+
+        function dismissPicker() {
+            if (!el._allowDismiss) return;
+            hidePicker();
+            if (_pickerResolve) {
+                var resolve = _pickerResolve;
+                _pickerResolve = null;
+                var cur = getCurrentMapRegionId();
+                resolve(cur || selectedId);
+            }
+        }
+        el._dismissPicker = dismissPicker;
+
+        var closeBtn = document.getElementById('mapRegionPickerClose');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', dismissPicker);
+            closeBtn.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    dismissPicker();
+                }
+            });
+        }
+        el.addEventListener('click', function (e) {
+            if (e.target === el) dismissPicker();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape') return;
+            if (!el || el.style.display === 'none') return;
+            dismissPicker();
+        });
 
         document.getElementById('mapRegionPickerOpenBtn').addEventListener('click', function () {
             var id = selectedId;
@@ -292,6 +329,13 @@
         var sub = document.getElementById('mapRegionPickerSub');
         if (sub) {
             sub.textContent = opts.subtitle || 'Карта загружается по регионам';
+        }
+        var allowDismiss = !!opts.allowDismiss;
+        el._allowDismiss = allowDismiss;
+        var closeBtn = document.getElementById('mapRegionPickerClose');
+        if (closeBtn) {
+            if (allowDismiss) closeBtn.removeAttribute('hidden');
+            else closeBtn.setAttribute('hidden', '');
         }
         if (payload && payload.defaultMapRegionId) el._setSelectedId(String(payload.defaultMapRegionId));
         el._renderList(payload || { regions: [] });
@@ -366,7 +410,11 @@
                     }
                     switchToMapRegion(id).then(function () { resolve(true); }).catch(function () { resolve(false); });
                 };
-                showPicker(payload, { title: 'Сменить регион', subtitle: 'Откроется карта выбранного региона' });
+                showPicker(payload, {
+                    title: 'Сменить регион',
+                    subtitle: 'Откроется карта выбранного региона',
+                    allowDismiss: true
+                });
             });
         });
     }
@@ -588,11 +636,18 @@
             if (!chip.querySelector('.map-region-current-chip__icon')) {
                 chip.innerHTML =
                     '<span class="map-region-current-chip__icon" aria-hidden="true">' +
-                    '  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-                    '    <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>' +
+                    '  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon>' +
+                    '    <line x1="9" y1="3" x2="9" y2="18"></line>' +
+                    '    <line x1="15" y1="6" x2="15" y2="21"></line>' +
                     '  </svg>' +
                     '</span>' +
-                    '<span class="map-region-current-chip__label">Регион</span>';
+                    '<span class="map-region-current-chip__label">Регион</span>' +
+                    '<span class="map-region-current-chip__chevron" aria-hidden="true">' +
+                    '  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">' +
+                    '    <polyline points="6 9 12 15 18 9"></polyline>' +
+                    '  </svg>' +
+                    '</span>';
             }
             chip.addEventListener('click', function () {
                 switchMapRegionInteractive();

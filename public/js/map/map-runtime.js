@@ -857,6 +857,8 @@
     function applyBasemapType(mapType, done, opts) {
         opts = opts || {};
         var type = String(mapType || '');
+        // Облачная веб-версия: ортофото отключено (остаётся в Portable)
+        if (type === 'leaflet#orthophoto') type = 'yandex#map';
         var want = desiredRuntimeForType(type);
         if (!want) {
             if (typeof done === 'function') done();
