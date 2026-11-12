@@ -18194,6 +18194,47 @@ html.cable-split-mode-active #map {
     font-weight: 650;
     fill: #fbbf24;
 }
+.trace-sch-side-leaf-line {
+    fill: none;
+    stroke: #f59e0b;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+}
+.trace-sch-side-leaf-dot {
+    fill: #f59e0b;
+}
+.trace-sch-side-leaf-card {
+    stroke: rgba(245, 158, 11, 0.6);
+}
+.trace-sch-side-leaf-accent {
+    fill: #f59e0b;
+}
+.trace-sch-side-leaf-kind {
+    font-size: 9px;
+    font-weight: 750;
+    fill: #fbbf24;
+    letter-spacing: 0.03em;
+}
+.trace-sch-side-leaf-meta {
+    font-size: 10px;
+    font-weight: 650;
+    fill: #cbd5e1;
+}
+.trace-sch-tree-cable-title {
+    font-size: 9px;
+    font-weight: 700;
+    fill: #94a3b8;
+}
+.trace-sch-tree-inner-splice {
+    fill: none;
+    stroke: #f59e0b;
+    stroke-width: 1.5;
+    stroke-dasharray: 3 2;
+    stroke-linecap: round;
+}
+.trace-sch-tree-inner-splice-dot {
+    fill: #f59e0b;
+}
 [data-theme="light"] .trace-sch-tree-side-summary-bg,
 :root:not([data-theme="dark"]) .trace-sch-tree-side-summary-bg {
     fill: rgba(245, 158, 11, 0.08);
