@@ -18356,6 +18356,11 @@ html.cable-split-mode-active #map {
     stroke: #06b6d4;
     stroke-width: 2.6;
 }
+.trace-sch-tree-edge--device {
+    stroke: #a78bfa;
+    stroke-width: 1.7;
+    opacity: 0.95;
+}
 .trace-sch-tree-edge--traced {
     stroke: #22d3ee;
     stroke-width: 3.1;
