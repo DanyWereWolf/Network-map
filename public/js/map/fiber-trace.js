@@ -2282,6 +2282,23 @@
             return schematicNodeTypeRank(model.nodes[a].type) - schematicNodeTypeRank(model.nodes[b].type);
         });
 
+        // Сплиттер внутри муфты не занимает колонку: его выход — следующий столбец после муфты.
+        function depthAfter(seg) {
+            var base = depth[seg.fromIdx] || 0;
+            var fromNode = model.nodes[seg.fromIdx];
+            if (fromNode && fromNode.type === 'splitter') {
+                var host = null;
+                model.segments.forEach(function (s) {
+                    if (!s || s.toIdx !== seg.fromIdx || s.fromIdx == null || s.deviceBranch) return;
+                    var ht = model.nodes[s.fromIdx] && model.nodes[s.fromIdx].type;
+                    if (ht !== 'sleeve' && ht !== 'cross' && ht !== 'spliceCassette' && ht !== 'olt') return;
+                    if (host == null || (s.kind === 'nodeLink' && !s.cableId)) host = s.fromIdx;
+                });
+                if (host != null) base = depth[host] || 0;
+            }
+            return base + 1;
+        }
+
         // Длиннейший путь по рёбрам: каскад сплиттер→муфта уходит вправо, не в ту же колонку
         var depth = [];
         for (i = 0; i < n; i++) depth[i] = 0;
@@ -2292,7 +2309,7 @@
             model.segments.forEach(function (seg) {
                 if (!seg || seg.fromIdx == null || seg.toIdx == null) return;
                 if (seg.fromIdx === seg.toIdx) return;
-                var nd = (depth[seg.fromIdx] || 0) + 1;
+                var nd = depthAfter(seg);
                 if (nd > (depth[seg.toIdx] || 0)) {
                     depth[seg.toIdx] = nd;
                     depthChanged = true;
@@ -2311,7 +2328,7 @@
             model.segments.forEach(function (seg) {
                 if (!seg || seg.fromIdx == null || seg.toIdx == null) return;
                 if (seg.fromIdx === seg.toIdx) return;
-                var nd = (depth[seg.fromIdx] || 0) + 1;
+                var nd = depthAfter(seg);
                 if (nd > (depth[seg.toIdx] || 0)) {
                     depth[seg.toIdx] = nd;
                     depthChanged = true;
@@ -2948,6 +2965,16 @@
         return h;
     }
 
+    /** Высота секции сплиттера внутри карточки муфты/кросса. */
+    function embeddedSplittersExtraH(node) {
+        var list = (node && node._embeddedSplitters) || [];
+        var extra = 0;
+        for (var i = 0; i < list.length; i++) {
+            extra += 10 + 28 + estimateTreeSplitterPortsH(schematicSplitterRatio(list[i])) + 6;
+        }
+        return extra;
+    }
+
     function clampSchematicRibbonLaneY(g, y) {
         if (y == null || !isFinite(y)) return g && g.yMid != null ? g.yMid : 0;
         if (!g) return y;
@@ -3041,6 +3068,8 @@
         var multi = cables.length > 1;
         var h = headH + estimateHostCableStackH(cables);
         if (!cables.length) h = headH + 36;
+        var embedExtra = embeddedSplittersExtraH(node);
+        h += embedExtra;
         var rx = 12;
 
         parts.push('<g class="trace-sch-tree-unit">');
@@ -3073,7 +3102,17 @@
 
         var cursor = y + headH;
         var meta = null;
-        var drawn = [];
+        var spliceSegs = [];
+        function paintGeomBox(g) {
+            if (!g) return;
+            g.unitX = x;
+            g.unitW = w;
+            g.unitY = y;
+            g.unitH = h;
+            g.unitR = x + w;
+            g.unitL = x;
+            g.unitRx = rx;
+        }
         cables.forEach(function (entry, idx) {
             if (idx) cursor += 10;
             var seg = entry.seg;
@@ -3081,40 +3120,43 @@
             if (multi) {
                 var far = entry.toNode;
                 var farName = far ? String(far.name || getTypeName(far.type) || '') : '';
-                var title = farName ? ('→ ' + farName) : (seg.cableName || 'кабель');
-                if (seg.sideLeaf) title = 'отдельный кабель → ' + (farName || 'конец');
+                var title = entry.title || (farName ? ('→ ' + farName) : (seg.cableName || 'кабель'));
+                if (seg.sideLeaf && !entry.title) title = 'отдельный кабель → ' + (farName || 'конец');
                 title = schematicFitHostName(title, Math.max(16, Math.floor((w - 24) / 6.4)));
                 parts.push('<text class="trace-sch-tree-cable-title" x="' + (x + 12) + '" y="' + (cursor + 11) +
                     '">' + schematicSvgEsc(title) + '</text>');
                 cursor += 14;
             }
             var yMid = cursor + ribbonH / 2;
+            var prevGeom = entry.incoming ? seg._ribbonGeom : null;
             var one = appendTreeFiberRibbon(
                 parts, x + 4, x + w - 4, yMid, seg, entry.toNode, entry.nextCableId, true
             );
             if (!meta) meta = one;
-            if (seg._ribbonGeom) {
-                seg._ribbonGeom.unitX = x;
-                seg._ribbonGeom.unitW = w;
-                seg._ribbonGeom.unitY = y;
-                seg._ribbonGeom.unitH = h;
-                seg._ribbonGeom.unitR = x + w;
-                seg._ribbonGeom.unitL = x;
-                seg._ribbonGeom.unitRx = rx;
+            if (entry.incoming) {
+                // Лента этого кабеля в муфте-приёмнике. Геометрия выхода с предыдущей
+                // карточки остаётся в _ribbonGeom.
+                if (seg._ribbonGeom) {
+                    seg._destRibbonGeom = seg._ribbonGeom;
+                    paintGeomBox(seg._destRibbonGeom);
+                }
+                seg._ribbonGeom = prevGeom;
+            } else {
+                paintGeomBox(seg._ribbonGeom);
             }
-            drawn.push(seg);
+            if (!entry.noSplice) spliceSegs.push(seg);
             cursor += estimateTreeFiberBandH(seg, entry.toNode, entry.nextCableId);
         });
 
-        // Сварка внутри муфты: жила одного кабеля — не жила другого.
-        if (drawn.length > 1) {
-            var primary = drawn[0];
-            var pg = primary && primary._ribbonGeom;
+        // Сварка внутри муфты только у кабелей маршрута: жила одного — не жила другого.
+        if (spliceSegs.length > 1) {
+            var primary = spliceSegs[0];
+            var pg = primary && (primary._destRibbonGeom || primary._ribbonGeom);
             var pNum = primary && primary.tracedFiber != null ? Number(primary.tracedFiber) : null;
             var py = pg && pNum != null && pg.laneY ? pg.laneY[pNum] : null;
-            for (var si = 1; si < drawn.length; si++) {
-                var other = drawn[si];
-                var og = other && other._ribbonGeom;
+            for (var si = 1; si < spliceSegs.length; si++) {
+                var other = spliceSegs[si];
+                var og = other && (other._destRibbonGeom || other._ribbonGeom);
                 var oNum = other && other.tracedFiber != null ? Number(other.tracedFiber) : null;
                 var oy = og && oNum != null && og.laneY ? og.laneY[oNum] : null;
                 if (py == null || oy == null) continue;
@@ -3124,6 +3166,18 @@
                 parts.push('<circle class="trace-sch-tree-inner-splice-dot" cx="' + sx + '" cy="' + py + '" r="2.2"/>');
                 parts.push('<circle class="trace-sch-tree-inner-splice-dot" cx="' + sx + '" cy="' + oy + '" r="2.2"/>');
             }
+        }
+        if (node && node._embeddedSplitters && node._embeddedSplitters.length) {
+            var ey = cursor + 6;
+            node._embeddedSplitters.forEach(function (sp) {
+                var sh = 28 + estimateTreeSplitterPortsH(schematicSplitterRatio(sp)) + 6;
+                appendTreeSplitterPortsUnit(
+                    parts, x + 8, ey, Math.max(120, w - 16), sp,
+                    sp._usedOuts || {},
+                    sp._splitterInheritColor || '#06b6d4'
+                );
+                ey += sh + 10;
+            });
         }
         parts.push('</g>');
         return { h: h, meta: meta, headH: headH };
@@ -3847,6 +3901,17 @@
             }
 
             function resolvePeerForFiber(fiber, isTraced) {
+                // Кабель дорисован своей лентой в следующей муфте — садимся на неё,
+                // а не на чужой исходящий кабель.
+                if (seg._destRibbonGeom && seg._destRibbonGeom.laneY && fiber && fiber.number != null) {
+                    return {
+                        ok: true,
+                        peerFiber: Number(fiber.number),
+                        ribbon: seg._destRibbonGeom,
+                        xEnter: seg._destRibbonGeom.xa != null ? seg._destRibbonGeom.xa : xEnter,
+                        outCableId: seg.cableId
+                    };
+                }
                 var fate = fiber.fate;
                 var fiberOutSeg = outSeg;
                 var fiberOutRibbon = outRibbon;
@@ -4305,7 +4370,7 @@
         if (counts.splitter && kindN === 1) return 'Сплиттер';
         if ((counts.cross || counts.sleeve || counts.spliceCassette) && kindN === 1) return 'Кросс / муфта';
         if (counts.onu && kindN === 1) return 'ONU';
-        if (counts.splitter && (counts.onu || counts.cross || counts.node)) return 'Сплиттер и далее';
+        if (counts.splitter && (counts.sleeve || counts.spliceCassette || counts.cross || counts.onu || counts.node)) return 'Сплиттер и далее';
         if (counts.onu || counts.node || counts.mediaConverter || counts.radioBridge) return 'Окончания';
         if (kindN > 1) return 'Узлы';
         return '';
@@ -4711,27 +4776,50 @@
 
         /** Кабели, выходящие из муфты: у каждого своя кассета, основной ход сверху. */
         function unitCableEntries(ni) {
-            var prim = primaryOut(ni);
-            if (!prim || !prim.cableId) return [];
-            var list = [{
-                seg: prim,
-                toNode: model.nodes[prim.toIdx],
-                nextCableId: nextCableAfter(prim.toIdx)
-            }];
+            var list = [];
             var seen = {};
-            seen[String(prim.cableId) + ':' + prim.toIdx] = true;
-            (outsByNode[ni] || []).forEach(function (s) {
-                if (!s || s === prim || !s.cableId) return;
-                if (s.invented || s.onTracePath === false) return;
+            function add(s, incoming, noSplice, title) {
+                if (!s || !s.cableId || s.invented) return;
                 if (s.kind === 'nodeLink') return;
-                var key = String(s.cableId) + ':' + s.toIdx;
+                var key = String(s.cableId);
                 if (seen[key]) return;
                 seen[key] = true;
                 list.push({
                     seg: s,
-                    toNode: model.nodes[s.toIdx],
-                    nextCableId: nextCableAfter(s.toIdx)
+                    toNode: incoming ? model.nodes[ni] : model.nodes[s.toIdx],
+                    nextCableId: incoming ? null : nextCableAfter(s.toIdx),
+                    incoming: !!incoming,
+                    noSplice: !!noSplice,
+                    title: title || null
                 });
+            }
+            function incomingTitle(s) {
+                var fr = model.nodes[s.fromIdx];
+                var fromName = fr ? String(fr.name || '') : '';
+                var title = s.cableName || 'Кабель';
+                if (fromName) title += ' · ' + fromName;
+                return title;
+            }
+            var prim = primaryOut(ni);
+            if (prim && prim.cableId && !prim.invented && prim.kind !== 'nodeLink') {
+                add(prim, false, false, null);
+            }
+            (outsByNode[ni] || []).forEach(function (s) {
+                if (!s || s === prim) return;
+                add(s, false, s.onTracePath === false, null);
+            });
+            var routeIn = null;
+            (model.segments || []).forEach(function (s) {
+                if (!s || s.toIdx !== ni || !s.cableId || s.invented || s.kind === 'nodeLink') return;
+                if (s.onTracePath === false || s.tracedFiber == null) return;
+                var fr = model.nodes[s.fromIdx];
+                if (fr && fr.type === 'splitter') return;
+                if (!routeIn) routeIn = s;
+            });
+            if (routeIn) add(routeIn, true, false, incomingTitle(routeIn));
+            (model.segments || []).forEach(function (s) {
+                if (!s || s.toIdx !== ni) return;
+                add(s, true, s !== routeIn, incomingTitle(s));
             });
             return list;
         }
@@ -4818,18 +4906,23 @@
                 if (nodeUnitH[i] > maxUnitH) maxUnitH = nodeUnitH[i];
                 nodeUnitW[i] = blockW;
             } else {
-                var inSegH = null;
+                var inListH = [];
+                var seenInH = {};
                 for (var s0 = 0; s0 < (model.segments || []).length; s0++) {
                     var sg0 = model.segments[s0];
-                    if (sg0 && sg0.kind !== 'nodeLink' && sg0.toIdx === i && primaryOut(sg0.fromIdx)) {
-                        inSegH = sg0;
-                        break;
-                    }
+                    if (!sg0 || sg0.kind === 'nodeLink' || sg0.toIdx !== i || !sg0.cableId || sg0.invented) continue;
+                    var inKey = String(sg0.cableId);
+                    if (seenInH[inKey]) continue;
+                    seenInH[inKey] = true;
+                    inListH.push({ seg: sg0, toNode: model.nodes[i], nextCableId: null });
                 }
-                if (inSegH) {
+                if (inListH.length > 1) {
+                    nodeUnitH[i] = headH + estimateHostCableStackH(inListH);
+                    nodeUnitW[i] = blockW;
+                } else if (inListH.length === 1) {
                     nodeUnitH[i] = Math.max(
                         smallNodeH,
-                        headH + estimateTreeFiberBandH(inSegH, model.nodes[i], null) + 8
+                        headH + estimateTreeFiberBandH(inListH[0].seg, model.nodes[i], null) + 8
                     );
                     nodeUnitW[i] = Math.max(smallNodeW, 118);
                 } else {
@@ -4948,6 +5041,7 @@
                 if (s && s.toIdx === dhj) incHang.push(s);
             });
             if (!incHang.length) continue;
+            if (model.nodes[dhj] && model.nodes[dhj].type === 'splitter') continue;
             var routeOut = (model.segments || []).some(function (s) {
                 return s && s.fromIdx === dhj && !s.deviceBranch;
             });
@@ -4972,8 +5066,32 @@
                 return laneOf(a) - laneOf(b);
             });
         });
+        // Сплиттер живёт внутри карточки муфты/кросса, отдельную колонку не занимает.
+        for (var ei = 0; ei < model.nodes.length; ei++) {
+            var en = model.nodes[ei];
+            if (!en || en.type !== 'splitter' || nodeIsSideLeaf[ei]) continue;
+            var hostEi = null;
+            (model.segments || []).forEach(function (s) {
+                if (!s || s.toIdx !== ei || s.fromIdx == null || s.deviceBranch) return;
+                if (hostEi == null || (s.kind === 'nodeLink' && !s.cableId)) hostEi = s.fromIdx;
+            });
+            if (hostEi == null) continue;
+            var hostTypeEi = model.nodes[hostEi] && model.nodes[hostEi].type;
+            if (hostTypeEi !== 'sleeve' && hostTypeEi !== 'cross' &&
+                hostTypeEi !== 'spliceCassette' && hostTypeEi !== 'olt') continue;
+            en._embedInHost = hostEi;
+            en._usedOuts = schematicSplitterUsedOutIndices(en, model, ei);
+            var hostNodeEi = model.nodes[hostEi];
+            if (!hostNodeEi._embeddedSplitters) hostNodeEi._embeddedSplitters = [];
+            hostNodeEi._embeddedSplitters.push(en);
+            nodeUnitH[hostEi] = (nodeUnitH[hostEi] || smallNodeH) +
+                embeddedSplittersExtraH({ _embeddedSplitters: [en] });
+            nodeUnitW[hostEi] = Math.max(nodeUnitW[hostEi] || 0, blockW);
+        }
         Object.keys(byDepthIdx).forEach(function (dk) {
-            byDepthIdx[dk] = byDepthIdx[dk].filter(function (ni) { return !nodeIsDeviceHang[ni]; });
+            byDepthIdx[dk] = byDepthIdx[dk].filter(function (ni) {
+                return !nodeIsDeviceHang[ni] && !(model.nodes[ni] && model.nodes[ni]._embedInHost != null);
+            });
         });
 
         var liveDepths = Object.keys(byDepthIdx).map(Number).filter(function (d) {
@@ -5043,7 +5161,8 @@
 
         function directRouteKids(ni) {
             return (layout.children[ni] || []).filter(function (k) {
-                return !nodeIsDeviceHang[k] && !nodeIsSideLeaf[k];
+                return !nodeIsDeviceHang[k] && !nodeIsSideLeaf[k] &&
+                    !(model.nodes[k] && model.nodes[k]._embedInHost != null);
             }).sort(function (a, b) {
                 return (layout.y[a] - layout.y[b]) || (a - b);
             });
@@ -5094,6 +5213,26 @@
             });
         }
 
+        function syncEmbeddedSplitterAnchors(list) {
+            (list || []).forEach(function (ni) {
+                var emb = model.nodes[ni] && model.nodes[ni]._embeddedSplitters;
+                if (!emb || !emb.length) return;
+                var cursorBottom = nodeCY[ni] + cardH(ni) / 2 - 6;
+                for (var s = emb.length - 1; s >= 0; s--) {
+                    var sp = emb[s];
+                    var sh = 28 + estimateTreeSplitterPortsH(schematicSplitterRatio(sp)) + 6;
+                    var cy = cursorBottom - sh / 2;
+                    for (var spi = 0; spi < model.nodes.length; spi++) {
+                        if (model.nodes[spi] !== sp) continue;
+                        nodeCX[spi] = nodeCX[ni];
+                        nodeCY[spi] = cy;
+                        break;
+                    }
+                    cursorBottom -= sh + 10;
+                }
+            });
+        }
+
         var colCount = layout.maxDepth;
         for (var col = 0; col <= colCount; col++) {
             var list = (packedIdx[col] || []).slice();
@@ -5110,6 +5249,7 @@
             } else {
                 placeGroups(groupList(list));
             }
+            syncEmbeddedSplitterAnchors(list);
             byDepth[col] = list.map(function (ni) { return model.nodes[ni]; });
         }
 
@@ -5155,56 +5295,201 @@
             nodeCY[hi] = topHang + cardHHang / 2;
         }
 
-        // Устройство чужой жилы — во следующей колонке, над её верхней карточкой.
-        Object.keys(hangsOf).map(Number).sort(function (a, b) {
-            return (nodeCX[a] || 0) - (nodeCX[b] || 0);
-        }).forEach(function (src) {
-            var hangs = hangsOf[src] || [];
-            if (!hangs.length) return;
-            var nextCx = Infinity;
-            var j;
-            for (j = 0; j < model.nodes.length; j++) {
-                if (nodeIsDeviceHang[j] || nodeIsSideLeaf[j]) continue;
-                if (nodeCX[j] > nodeCX[src] + 40) nextCx = Math.min(nextCx, nodeCX[j]);
-            }
-            if (!isFinite(nextCx)) return;
-            var stack = 10;
-            hangs.forEach(function (hi, i) {
-                if (i) stack += 8;
-                stack += cardH(hi);
+        // Сплиттер и устройства жилы — в следующем столбце.
+        // Верх / середина / низ столбца — по тому, где жила на кассете.
+        function fiberCapAt(src) {
+            var cap = 0;
+            (model.segments || []).forEach(function (s) {
+                if (!s || !s.cableId || (s.fromIdx !== src && s.toIdx !== src)) return;
+                var n = Number(s.fiberCount) || (s.fibers && s.fibers.length) || 0;
+                if (n > cap) cap = n;
             });
-            var minTop = Infinity;
-            var shiftSet = [];
-            for (j = 0; j < model.nodes.length; j++) {
-                if (nodeIsDeviceHang[j]) continue;
-                if (nodeCX[j] < nextCx - 2) continue;
-                shiftSet.push(j);
-                if (!nodeIsSideLeaf[j] && Math.abs(nodeCX[j] - nextCx) < 2) {
-                    minTop = Math.min(minTop, nodeCY[j] - cardH(j) / 2);
+            return cap;
+        }
+        function fiberZone(src, lane) {
+            var cap = fiberCapAt(src);
+            if (cap < 2) cap = Math.max(Number(lane) || 1, 8);
+            var frac = ((Number(lane) || 1) - 1) / Math.max(1, cap - 1);
+            if (frac <= 0.33) return 'top';
+            if (frac >= 0.67) return 'bottom';
+            return 'mid';
+        }
+        function laneSrc(ni) {
+            var lane = null;
+            var src = null;
+            (model.segments || []).forEach(function (s) {
+                if (!s || s.toIdx !== ni) return;
+                var lf = s.laneFiber != null ? Number(s.laneFiber)
+                    : (s.tracedFiber != null ? Number(s.tracedFiber) : null);
+                if (lf == null || s.fromIdx == null) return;
+                lane = lf;
+                src = s.fromIdx;
+            });
+            return { lane: lane, src: src };
+        }
+        function shiftFromColumn(nextCx, delta, skip) {
+            if (!delta) return;
+            for (var k = 0; k < model.nodes.length; k++) {
+                if (k === skip || nodeIsDeviceHang[k]) continue;
+                if (nodeCX[k] < nextCx - 30) continue;
+                nodeCY[k] += delta;
+            }
+        }
+        function matesInColumn(nextCx, skip) {
+            var list = [];
+            for (var j = 0; j < model.nodes.length; j++) {
+                if (j === skip || nodeIsDeviceHang[j] || nodeIsSideLeaf[j]) continue;
+                if (model.nodes[j] && model.nodes[j].type === 'splitter' && j !== skip) {
+                    // сплиттер в этом столбце тоже сосед, если уже стоит здесь
+                }
+                if (Math.abs(nodeCX[j] - nextCx) > 36) continue;
+                list.push(j);
+            }
+            return list;
+        }
+        function placeInNextColumn(ni, src, lane, w) {
+            var nextCx = nodeCX[src] + colW;
+            var zone = fiberZone(src, lane);
+            var h = cardH(ni);
+            var mates = matesInColumn(nextCx, ni);
+            var cy;
+            if (!mates.length) {
+                var pTop = nodeCY[src] - cardH(src) / 2;
+                var pH = cardH(src);
+                var frac = zone === 'top' ? 0.18 : (zone === 'bottom' ? 0.82 : 0.5);
+                cy = pTop + frac * pH;
+            } else {
+                var minTop = Infinity;
+                var maxBot = -Infinity;
+                mates.forEach(function (m) {
+                    minTop = Math.min(minTop, nodeCY[m] - cardH(m) / 2);
+                    maxBot = Math.max(maxBot, nodeCY[m] + cardH(m) / 2);
+                });
+                if (zone === 'top') {
+                    var top = minTop - 12 - h;
+                    var need = padTop + padY;
+                    if (top < need) {
+                        shiftFromColumn(nextCx, need - top, ni);
+                        top = need;
+                    }
+                    cy = top + h / 2;
+                } else if (zone === 'bottom') {
+                    cy = maxBot + 12 + h / 2;
+                } else {
+                    cy = (minTop + maxBot) / 2;
+                    var hits = false;
+                    mates.forEach(function (m) {
+                        var mt = nodeCY[m] - cardH(m) / 2 - 6;
+                        var mb = nodeCY[m] + cardH(m) / 2 + 6;
+                        if (cy + h / 2 > mt && cy - h / 2 < mb) hits = true;
+                    });
+                    if (hits) cy = maxBot + 12 + h / 2;
                 }
             }
-            if (!isFinite(minTop)) return;
-            var needTop = padTop + padY;
-            var delta = Math.max(0, stack - (minTop - needTop));
-            if (delta) {
-                shiftSet.forEach(function (sj) { nodeCY[sj] += delta; });
+            for (var ov = 0; ov < model.nodes.length; ov++) {
+                if (ov === ni) continue;
+                if (Math.abs((nodeCX[ov] || 0) - nextCx) > 36) continue;
+                if (!nodeIsDeviceHang[ov] && !(model.nodes[ov] && model.nodes[ov].type === 'splitter')) continue;
+                var ot = nodeCY[ov] - cardH(ov) / 2;
+                var ob = nodeCY[ov] + cardH(ov) / 2;
+                if (cy + h / 2 > ot - 6 && cy - h / 2 < ob + 6) cy = ob + 8 + h / 2;
             }
-            var yCursor = minTop + delta - 10;
-            for (var i = hangs.length - 1; i >= 0; i--) {
-                var hi = hangs[i];
-                var h = cardH(hi);
-                var w = smallNodeW;
-                yCursor -= h;
-                nodeUnitW[hi] = w;
-                nodeUnitH[hi] = h;
-                nodeCX[hi] = nextCx;
-                nodeCY[hi] = yCursor + h / 2;
-                nodeLeft[hi] = nextCx - w / 2;
-                nodeRight[hi] = nextCx + w / 2;
+            var colIdx = Math.round((nextCx - padX - colW / 2) / colW);
+            if (colIdx > layout.maxDepth) layout.maxDepth = colIdx;
+            nodeUnitW[ni] = w;
+            nodeUnitH[ni] = h;
+            nodeCX[ni] = nextCx;
+            nodeCY[ni] = cy;
+            nodeLeft[ni] = nextCx - w / 2;
+            nodeRight[ni] = nextCx + w / 2;
+        }
+        Object.keys(hangsOf).forEach(function (sk) {
+            var src = Number(sk);
+            (hangsOf[sk] || []).forEach(function (hi) {
+                var info = laneSrc(hi);
+                placeInNextColumn(hi, info.src != null ? info.src : src, info.lane || 1, smallNodeW);
                 model.nodes[hi]._hangPlaced = true;
-                yCursor -= 8;
-            }
+            });
         });
+        for (var spi = 0; spi < model.nodes.length; spi++) {
+            var spn = model.nodes[spi];
+            if (!spn || spn._embedInHost == null) continue;
+            var hostSp = spn._embedInHost;
+            nodeCX[spi] = nodeCX[hostSp];
+        }
+
+        // Отвод жилы на сплиттер: карточка в столбце сразу за муфтой, откуда жила вышла.
+        // Если столбец уже занят следующей муфтой — сплиттер над ней или под ней, по номеру жилы.
+        function plantHostIdx(ni) {
+            var t = model.nodes[ni] && model.nodes[ni].type;
+            return t === 'sleeve' || t === 'cross' || t === 'spliceCassette' || t === 'olt';
+        }
+        for (var spi2 = 0; spi2 < model.nodes.length; spi2++) {
+            var spn2 = model.nodes[spi2];
+            if (!spn2 || spn2.type !== 'splitter' || spn2._embedInHost != null || nodeIsSideLeaf[spi2]) continue;
+            var shallow = null;
+            var shallowD = Infinity;
+            var shallowSeg = null;
+            (model.segments || []).forEach(function (s) {
+                if (!s || s.toIdx !== spi2 || s.fromIdx == null || !plantHostIdx(s.fromIdx)) return;
+                var d = layout.depth[s.fromIdx] || 0;
+                if (d < shallowD) {
+                    shallowD = d;
+                    shallow = s.fromIdx;
+                    shallowSeg = s;
+                }
+            });
+            if (shallow == null || !shallowSeg) continue;
+            // Жила рисуется с кассеты начала кабеля, даже если назначение висит на муфте прибытия.
+            var ribbon = null;
+            var ribbonD = Infinity;
+            var tapSeg = null;
+            (model.segments || []).forEach(function (s) {
+                if (!s || s.toIdx !== spi2 || s.fromIdx == null || !plantHostIdx(s.fromIdx)) return;
+                if (s.cableId && s.kind !== 'nodeLink') return;
+                var r = (s.ribbonFromIdx != null && plantHostIdx(s.ribbonFromIdx))
+                    ? s.ribbonFromIdx : s.fromIdx;
+                var d = layout.depth[r] || 0;
+                if (d < ribbonD) {
+                    ribbonD = d;
+                    ribbon = r;
+                    tapSeg = s;
+                }
+            });
+            if (!tapSeg) continue;
+            var srcTap = ribbon != null ? ribbon : shallow;
+            var desiredCx = nodeCX[srcTap] + colW;
+            if (nodeCX[spi2] <= desiredCx + colW * 0.35) continue;
+            var oldCx = nodeCX[spi2];
+            var laneTap = tapSeg.laneFiber != null ? Number(tapSeg.laneFiber)
+                : (tapSeg.tracedFiber != null ? Number(tapSeg.tracedFiber) : 1);
+            placeInNextColumn(spi2, srcTap, laneTap || 1, nodeUnitW[spi2] || blockW);
+            var occupied = false;
+            for (var oi = 0; oi < model.nodes.length; oi++) {
+                if (oi === spi2) continue;
+                if (model.nodes[oi] && model.nodes[oi]._embedInHost != null) continue;
+                if (Math.abs((nodeCX[oi] || 0) - oldCx) < 36) occupied = true;
+            }
+            if (!occupied) {
+                for (var sj = 0; sj < model.nodes.length; sj++) {
+                    if ((nodeCX[sj] || 0) > oldCx + 30) {
+                        nodeCX[sj] -= colW;
+                        if (nodeLeft[sj] != null) nodeLeft[sj] -= colW;
+                        if (nodeRight[sj] != null) nodeRight[sj] -= colW;
+                    }
+                }
+                if (layout.maxDepth > 0) layout.maxDepth -= 1;
+            }
+        }
+        byDepth = {};
+        for (var bd = 0; bd < model.nodes.length; bd++) {
+            if (nodeIsDeviceHang[bd] || nodeIsSideLeaf[bd]) continue;
+            if (model.nodes[bd] && model.nodes[bd]._embedInHost != null) continue;
+            var bdx = Math.round((nodeCX[bd] - padX - colW / 2) / colW);
+            if (bdx < 0) bdx = 0;
+            if (!byDepth[bdx]) byDepth[bdx] = [];
+            byDepth[bdx].push(model.nodes[bd]);
+        }
 
         var contentBottom = padTop + padY;
         for (var bi = 0; bi < model.nodes.length; bi++) {
@@ -5276,6 +5561,12 @@
                 segs = segs.filter(function (s) {
                     if (!s || s.toIdx == null) return false;
                     if (nodeIsSideLeaf[s.toIdx]) return false;
+                    if (model.nodes[s.toIdx] && model.nodes[s.toIdx]._embedInHost != null && !s.cableId) {
+                        return false;
+                    }
+                    if (model.nodes[fi] && model.nodes[fi]._embedInHost != null && !s.cableId) {
+                        return false;
+                    }
                     var td = layout.depth[s.toIdx] || 0;
                     var fd = layout.depth[fi] || 0;
                     if (td < fd && !(s.opticalEnd && (nodeCX[s.toIdx] || 0) + 8 >= (nodeCX[fi] || 0))) {
@@ -5551,6 +5842,91 @@
             return hasAny && !hasOnPath;
         }
 
+        function bindSplitterOutRibbons(node, ni) {
+            var cySp = nodeCY[ni];
+            (model.segments || []).forEach(function (outCab) {
+                if (!outCab || outCab.fromIdx !== ni) return;
+                if (outCab.kind === 'nodeLink' && !outCab.cableId) return;
+                if (!outCab.cableId && outCab.kind === 'nodeLink') return;
+                var spHostSkip = node.object && node.object._host;
+                var toSkip = model.nodes[outCab.toIdx];
+                if (spHostSkip && toSkip && toSkip.object &&
+                    getUid(toSkip.object) === getUid(spHostSkip)) {
+                    return;
+                }
+                if (outCab.invented || outCab.onTracePath === false) return;
+                syncSplitterSegmentToOutputConn(outCab, node);
+                var outIdx = outCab.splitterOutputIndex;
+                if (outIdx == null) {
+                    var toObj2 = model.nodes[outCab.toIdx] && model.nodes[outCab.toIdx].object;
+                    outIdx = toObj2
+                        ? resolveSplitterOutputIndexForTarget(
+                            node.object, toObj2, model.nodes[outCab.toIdx].port,
+                            outCab.cableId, outCab.tracedFiber
+                        )
+                        : null;
+                    if (outIdx != null) outCab.splitterOutputIndex = outIdx;
+                    syncSplitterSegmentToOutputConn(outCab, node);
+                    outIdx = outCab.splitterOutputIndex;
+                }
+                var portNum = outIdx != null ? (Number(outIdx) + 1) : null;
+                var leaveY = (portNum != null && node._portLaneY && node._portLaneY[portNum] != null)
+                    ? node._portLaneY[portNum]
+                    : cySp;
+                var fibersOut = ensureSchematicSegmentFibers(outCab, model.nodes[outCab.toIdx], null) || [];
+                var laneMap = {};
+                var outsArr = (node.object && node.object.properties)
+                    ? (node.object.properties.get('outputConnections') || [])
+                    : [];
+                var tapFiber = null;
+                if (outIdx != null && outsArr[outIdx] && outsArr[outIdx].fiberNumber != null) {
+                    tapFiber = Number(outsArr[outIdx].fiberNumber);
+                }
+                if (tapFiber == null && outCab.tracedFiber != null) tapFiber = Number(outCab.tracedFiber);
+                if (tapFiber == null && outCab.tapFiber != null) tapFiber = Number(outCab.tapFiber);
+                if (tapFiber != null) {
+                    outCab.tapFiber = tapFiber;
+                    if (outCab.onTracePath !== false && !outCab.invented) outCab.tracedFiber = tapFiber;
+                    else if (outCab.invented || outCab.onTracePath === false) outCab.tracedFiber = null;
+                }
+                fibersOut.forEach(function (f) {
+                    if (!f) return;
+                    laneMap[Number(f.number)] = leaveY;
+                });
+                if (tapFiber != null) laneMap[tapFiber] = leaveY;
+                else laneMap._leave = leaveY;
+                var xL = nodeLeft[ni];
+                var xR = nodeRight[ni];
+                var geomXb = (node._splitterPortsGeom && node._splitterPortsGeom.xb != null)
+                    ? node._splitterPortsGeom.xb
+                    : (xR - 8);
+                outCab._ribbonGeom = {
+                    xa: (node._splitterPortsGeom && node._splitterPortsGeom.xa != null)
+                        ? node._splitterPortsGeom.xa
+                        : (xL + 44),
+                    xb: geomXb,
+                    boxL: xL,
+                    boxR: xR,
+                    unitL: (node._splitterPortsGeom && node._splitterPortsGeom.unitL != null)
+                        ? node._splitterPortsGeom.unitL
+                        : xL,
+                    unitR: (node._splitterPortsGeom && node._splitterPortsGeom.unitR != null)
+                        ? node._splitterPortsGeom.unitR
+                        : xR,
+                    unitX: xL,
+                    unitW: xR - xL,
+                    yMid: leaveY,
+                    laneY: laneMap,
+                    fromIdx: ni,
+                    toIdx: outCab.toIdx,
+                    cableId: outCab.cableId,
+                    _fromSplitterPorts: true,
+                    _tapFiber: tapFiber,
+                    _outPort: portNum
+                };
+            });
+        }
+
         // Объединённые блоки муфта+кассета / компактные узлы
         for (var drawNi = 0; drawNi < model.nodes.length; drawNi++) {
             (function (node, ni) {
@@ -5565,6 +5941,7 @@
             var outSeg = primaryOut(ni);
 
             if (nodeIsSplitterPorts[ni]) {
+                if (node._embedInHost != null) return;
                 var portsH = nodeUnitH[ni] || (headH + 80);
                 var yTopPorts = cy - portsH / 2;
                 var usedOuts = schematicSplitterUsedOutIndices(node, model, ni);
@@ -5577,97 +5954,7 @@
                     usedOuts,
                     node._splitterInheritColor || '#06b6d4'
                 );
-                // Для кабеля после сплиттера — выход с ПОРТА вых.N, не «волокно N → порт N»
-                (model.segments || []).forEach(function (outCab) {
-                    if (!outCab || outCab.fromIdx !== ni) return;
-                    if (outCab.kind === 'nodeLink' && !outCab.cableId) return;
-                    if (!outCab.cableId && outCab.kind === 'nodeLink') return;
-                    // Не вести «вых.N» на свой хост-кросс сплиттера
-                    var spHostSkip = node.object && node.object._host;
-                    var toSkip = model.nodes[outCab.toIdx];
-                    if (spHostSkip && toSkip && toSkip.object &&
-                        getUid(toSkip.object) === getUid(spHostSkip)) {
-                        return;
-                    }
-                    if (outCab.invented || outCab.onTracePath === false) {
-                        // Соседние выходы без трассы — без cyan-ленты
-                        return;
-                    }
-                    syncSplitterSegmentToOutputConn(outCab, node);
-                    var outIdx = outCab.splitterOutputIndex;
-                    if (outIdx == null) {
-                        var toObj2 = model.nodes[outCab.toIdx] && model.nodes[outCab.toIdx].object;
-                        outIdx = toObj2
-                            ? resolveSplitterOutputIndexForTarget(
-                                node.object, toObj2, model.nodes[outCab.toIdx].port,
-                                outCab.cableId, outCab.tracedFiber
-                            )
-                            : null;
-                        if (outIdx != null) outCab.splitterOutputIndex = outIdx;
-                        syncSplitterSegmentToOutputConn(outCab, node);
-                        outIdx = outCab.splitterOutputIndex;
-                    }
-                    var portNum = outIdx != null ? (Number(outIdx) + 1) : null;
-                    var leaveY = (portNum != null && node._portLaneY && node._portLaneY[portNum] != null)
-                        ? node._portLaneY[portNum]
-                        : cy;
-                    var fibersOut = ensureSchematicSegmentFibers(outCab, model.nodes[outCab.toIdx], null) || [];
-                    var laneMap = {};
-                    var outsArr = (node.object && node.object.properties)
-                        ? (node.object.properties.get('outputConnections') || [])
-                        : [];
-                    var tapFiber = null;
-                    if (outIdx != null && outsArr[outIdx] && outsArr[outIdx].fiberNumber != null) {
-                        tapFiber = Number(outsArr[outIdx].fiberNumber);
-                    }
-                    if (tapFiber == null && outCab.tracedFiber != null) {
-                        tapFiber = Number(outCab.tracedFiber);
-                    }
-                    if (tapFiber == null && outCab.tapFiber != null) {
-                        tapFiber = Number(outCab.tapFiber);
-                    }
-                    // Не красить все отводы сплиттера как трассу — только hop из маршрута
-                    if (tapFiber != null) {
-                        outCab.tapFiber = tapFiber;
-                        if (outCab.onTracePath !== false && !outCab.invented) {
-                            outCab.tracedFiber = tapFiber;
-                        } else if (outCab.invented || outCab.onTracePath === false) {
-                            outCab.tracedFiber = null;
-                        }
-                    }
-                    // Все волокна этого кабеля выходят с одного порта сплиттера (вых.N)
-                    fibersOut.forEach(function (f) {
-                        if (!f) return;
-                        laneMap[Number(f.number)] = leaveY;
-                    });
-                    if (tapFiber != null) laneMap[tapFiber] = leaveY;
-                    else laneMap._leave = leaveY;
-                    var xL = nodeLeft[ni];
-                    var xR = nodeRight[ni];
-                    var geomXb = (node._splitterPortsGeom && node._splitterPortsGeom.xb != null)
-                        ? node._splitterPortsGeom.xb
-                        : (xR - 8);
-                    outCab._ribbonGeom = {
-                        xa: (node._splitterPortsGeom && node._splitterPortsGeom.xa != null)
-                            ? node._splitterPortsGeom.xa
-                            : (xL + 44),
-                        xb: geomXb,
-                        boxL: xL,
-                        boxR: xR,
-                        unitL: xL,
-                        unitR: xR,
-                        unitX: xL,
-                        unitW: xR - xL,
-                        yMid: leaveY,
-                        laneY: laneMap,
-                        fromIdx: ni,
-                        toIdx: outCab.toIdx,
-                        cableId: outCab.cableId,
-                        _fromSplitterPorts: true,
-                        _tapFiber: tapFiber,
-                        _outPort: portNum
-                    };
-                });
+                bindSplitterOutRibbons(node, ni);
                 return;
             }
 
@@ -5898,6 +6185,41 @@
                 var db = layout.depth[b.fromIdx] != null ? layout.depth[b.fromIdx] : 0;
                 return db - da;
             });
+            var termCableIds = {};
+            inSegs.forEach(function (s) {
+                if (s && s.cableId && s.kind !== 'nodeLink') termCableIds[String(s.cableId)] = true;
+            });
+            var termHasEmbed = model.nodes[ti] && model.nodes[ti]._embeddedSplitters &&
+                model.nodes[ti]._embeddedSplitters.length;
+            if (Object.keys(termCableIds).length > 1 || termHasEmbed) {
+                var termEntries = [];
+                var termSeen = {};
+                inSegs.forEach(function (s) {
+                    if (!s || !s.cableId || s.kind === 'nodeLink' || s.invented) return;
+                    if (termSeen[String(s.cableId)]) return;
+                    termSeen[String(s.cableId)] = true;
+                    var fr = model.nodes[s.fromIdx];
+                    var title = s.cableName || 'Кабель';
+                    if (fr && fr.name) title += ' · ' + fr.name;
+                    termEntries.push({
+                        seg: s,
+                        toNode: model.nodes[ti],
+                        nextCableId: null,
+                        incoming: true,
+                        noSplice: true,
+                        title: title
+                    });
+                });
+                var termTotalH = nodeUnitH[ti] ||
+                    (headH + estimateHostCableStackH(termEntries) + embeddedSplittersExtraH(model.nodes[ti]));
+                var termTop = nodeCY[ti] - termTotalH / 2;
+                nodeLeft[ti] = nodeCX[ti] - blockW / 2;
+                nodeRight[ti] = nodeLeft[ti] + blockW;
+                appendTreeHostCassetteUnit(
+                    parts, nodeLeft[ti], termTop, blockW, model.nodes[ti], termEntries
+                );
+                continue;
+            }
             var seg = inSegs[0];
             var toNode = model.nodes[ti];
             var fibers = ensureSchematicSegmentFibers(seg, toNode, null);
@@ -6399,6 +6721,34 @@
             });
         })();
 
+        // Отвод на сплиттер красим цветом жилы, с которой он выходит.
+        (model.segments || []).forEach(function (s) {
+            if (!s || !s.deviceBranch || s._fiberColor) return;
+            var toSp = model.nodes[s.toIdx];
+            if (!toSp || toSp.type !== 'splitter') return;
+            var lane = s.laneFiber != null ? Number(s.laneFiber)
+                : (s.tracedFiber != null ? Number(s.tracedFiber) : null);
+            if (lane == null) return;
+            var hostIdx = (s.ribbonFromIdx != null) ? s.ribbonFromIdx : s.fromIdx;
+            var geom = fiberAttachGeom(hostIdx, lane);
+            if (geom && geom.color && geom.color !== '#94a3b8') {
+                s._fiberColor = geom.color;
+                return;
+            }
+            (model.segments || []).some(function (c) {
+                if (!c || !c.cable || c.fromIdx !== hostIdx) return false;
+                if (typeof global.getFiberColors !== 'function') return false;
+                var cols = global.getFiberColors(c.cable) || [];
+                for (var ci = 0; ci < cols.length; ci++) {
+                    if (cols[ci] && Number(cols[ci].number) === lane && cols[ci].color) {
+                        s._fiberColor = schematicNormalizeFiberColor(cols[ci].color);
+                        return true;
+                    }
+                }
+                return false;
+            });
+        });
+
         // Стволы / бейджи под мостами
         drawTreeTrunkEdges();
 
@@ -6425,6 +6775,11 @@
 
         // Сварки / мосты между unit-блоками — самый верхний слой
         paintSchematicSplitterInheritedColors(model);
+        for (var ebi = 0; ebi < model.nodes.length; ebi++) {
+            if (model.nodes[ebi] && model.nodes[ebi]._embedInHost != null) {
+                bindSplitterOutRibbons(model.nodes[ebi], ebi);
+            }
+        }
         var spliceNodeH = Math.max(smallNodeH, Math.min(maxUnitH, 160));
         appendTreeFiberSplices(
             parts, model, nodeCX, nodeCY, nodeLeft, nodeRight,
@@ -7345,11 +7700,79 @@
                             linkLabel: att.label,
                             onTracePath: true,
                             opticalEnd: true,
-                            deviceBranch: !isRoute
+                            deviceBranch: !isRoute,
+                            ribbonFromIdx: seg.fromIdx
                         });
                         added++;
                     });
                 }
+            });
+        });
+        appendSplitterCableHops(model);
+    }
+
+    /** Один шаг за сплиттером: кабель выхода → дальний кросс/муфта, чтобы продолжение было видно. */
+    function appendSplitterCableHops(model) {
+        if (!model || !model.nodes || typeof global.getOtherEndOfCable !== 'function') return;
+        var hostTypes = { sleeve: 1, cross: 1, spliceCassette: 1, olt: 1, splitter: 1 };
+        var added = 0;
+        (model.nodes || []).forEach(function (node, si) {
+            if (added >= 16) return;
+            if (!node || node.type !== 'splitter' || !node.object || !node.object.properties) return;
+            var host = node.object._host || null;
+            if (!host) {
+                (model.segments || []).some(function (s) {
+                    if (!s || s.toIdx !== si || !model.nodes[s.fromIdx]) return false;
+                    host = model.nodes[s.fromIdx].object;
+                    return true;
+                });
+            }
+            var outs = node.object.properties.get('outputConnections') || [];
+            outs.forEach(function (conn, oi) {
+                if (added >= 16 || !conn || !conn.cableId) return;
+                var cab = findSchematicCableById(conn.cableId);
+                if (!cab) return;
+                var far = global.getOtherEndOfCable(cab, host || node.object);
+                if (!far || !far.properties) return;
+                var farType = far.properties.get('type');
+                if (!hostTypes[farType]) return;
+                if (host && String(getUid(far)) === String(getUid(host))) return;
+                var ti = schematicNodeIndexByObject(model, far);
+                if (ti < 0) {
+                    ti = model.nodes.length;
+                    model.nodes.push({
+                        id: getUid(far),
+                        name: far.properties.get('name') || getTypeName(farType),
+                        type: farType,
+                        object: far,
+                        reserveM: 0,
+                        port: null
+                    });
+                }
+                if (ti === si) return;
+                var dup = false;
+                (model.segments || []).forEach(function (s) {
+                    if (s && s.fromIdx === si && s.toIdx === ti) dup = true;
+                });
+                if (dup) return;
+                var fcount = typeof global.getFiberCount === 'function' ? (Number(global.getFiberCount(cab)) || 0) : 0;
+                model.segments.push({
+                    kind: 'cable',
+                    fromIdx: si,
+                    toIdx: ti,
+                    cableId: conn.cableId,
+                    cable: cab,
+                    cableName: (cab.properties && cab.properties.get('cableName')) || 'Кабель',
+                    tracedFiber: conn.fiberNumber != null ? Number(conn.fiberNumber) : null,
+                    fiberCount: fcount,
+                    fibers: [],
+                    splitterOutputIndex: oi,
+                    linkLabel: 'вых.' + (oi + 1),
+                    onTracePath: true,
+                    invented: false,
+                    lengthM: null
+                });
+                added++;
             });
         });
     }
