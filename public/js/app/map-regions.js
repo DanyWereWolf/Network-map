@@ -444,11 +444,20 @@
                 break;
             }
         }
+        var badge = document.getElementById('mapRegionCurrentName');
+        if (badge) {
+            badge.textContent = name;
+            badge.title = id ? name : '';
+            if (id) badge.removeAttribute('hidden');
+            else badge.setAttribute('hidden', '');
+        }
+        var value = chip.querySelector('.map-region-current-chip__value');
         var label = chip.querySelector('.map-region-current-chip__label');
-        if (label) label.textContent = name;
-        else chip.textContent = name;
-        chip.title = 'Текущий регион: ' + name + ' (нажмите, чтобы сменить)';
-        chip.hidden = !id;
+        if (value) value.textContent = name;
+        else if (label && !chip.classList.contains('map-region-change-btn')) label.textContent = name;
+        chip.title = id ? ('Текущий регион: ' + name + ' (нажмите, чтобы сменить)') : 'Регион';
+        if (id) chip.removeAttribute('hidden');
+        else chip.setAttribute('hidden', '');
     }
 
     function switchMapRegionInteractive() {
@@ -846,19 +855,23 @@
     function initMapRegionUi() {
         var chip = document.getElementById('mapRegionCurrentChip');
         if (chip) {
-            if (!chip.querySelector('.map-region-current-chip__icon')) {
+            if (!chip.classList.contains('map-region-change-btn') && !chip.querySelector('.map-region-current-chip__icon')) {
                 chip.innerHTML =
                     '<span class="map-region-current-chip__icon" aria-hidden="true">' +
-                    '  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                     '    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon>' +
                     '    <line x1="9" y1="3" x2="9" y2="18"></line>' +
                     '    <line x1="15" y1="6" x2="15" y2="21"></line>' +
                     '  </svg>' +
                     '</span>' +
-                    '<span class="map-region-current-chip__label">Регион</span>' +
+                    '<span class="map-region-current-chip__text">' +
+                    '  <span class="map-region-current-chip__label">Регион</span>' +
+                    '  <span class="map-region-current-chip__hint">Текущий раздел карты</span>' +
+                    '</span>' +
+                    '<span class="map-region-current-chip__value">Регион</span>' +
                     '<span class="map-region-current-chip__chevron" aria-hidden="true">' +
-                    '  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">' +
-                    '    <polyline points="6 9 12 15 18 9"></polyline>' +
+                    '  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">' +
+                    '    <polyline points="9 18 15 12 9 6"></polyline>' +
                     '  </svg>' +
                     '</span>';
             }

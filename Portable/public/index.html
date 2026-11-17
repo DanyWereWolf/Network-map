@@ -420,17 +420,17 @@
                             <circle cx="11" cy="11" r="8"></circle>
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
-                        <input type="text" id="mapSearch" class="search-input" placeholder="Поиск объектов..." autocomplete="off">
+                        <input type="text" id="mapSearch" class="search-input" placeholder="Поиск объектов..." autocomplete="off" title="Поиск по карте (Ctrl+K)">
                         <button id="clearSearch" class="search-clear" style="display: none;">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
                                 <line x1="6" y1="6" x2="18" y2="18"></line>
                             </svg>
                         </button>
+                        <kbd class="search-kbd" aria-hidden="true">Ctrl K</kbd>
                     </div>
                     <div id="searchResults" class="search-results" style="display: none;"></div>
                 </div>
-                <button type="button" id="mapRegionCurrentChip" class="map-region-current-chip" hidden title="Текущий регион">Регион</button>
             </div>
             <!-- Панель пользователя -->
             <div class="user-panel">
@@ -622,6 +622,7 @@
                         </div>
                     </div>
                     <p class="sidebar-readonly-hint" role="status">?? ???? ?????? ????? ?????? ??? ?????????. ????????? ? ? ?????????? (?????? ???? ?????? 768&nbsp;px).</p>
+                    
                     <div class="info-dock-mode" aria-label="????? ?????">
                         <div class="mode-switcher" role="group" aria-label="????? ?????">
                             <button type="button" id="viewMode" class="mode-btn">
@@ -645,7 +646,7 @@
                     <div class="info-dock-group" data-dock-group="map">
                         <p class="info-dock-group-label">?????</p>
 
-                    <details name="infoDockSections" class="info-dock-section info-dock-section--visibility" id="infoDockMapSection">
+<details name="infoDockSections" class="info-dock-section info-dock-section--visibility" id="infoDockMapSection">
                         <summary class="info-dock-section-summary">
                             <span class="info-dock-section-icon" aria-hidden="true">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
@@ -831,6 +832,29 @@
 
                     <div class="info-dock-group" data-dock-group="settings">
                         <p class="info-dock-group-label">?????????</p>
+
+                    <details name="infoDockSections" class="info-dock-section info-dock-section--region" id="infoDockRegionSection">
+                        <summary class="info-dock-section-summary">
+                            <span class="info-dock-section-icon" aria-hidden="true">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon>
+                                    <line x1="9" y1="3" x2="9" y2="18"></line>
+                                    <line x1="15" y1="6" x2="15" y2="21"></line>
+                                </svg>
+                            </span>
+                            <span class="info-dock-section-text">
+                                <span class="info-dock-section-summary-label">Регион</span>
+                                <span class="info-dock-section-hint">Какой раздел карты открыт</span>
+                            </span>
+                            <span id="mapRegionCurrentName" class="info-dock-region-badge" hidden></span>
+                        </summary>
+                        <div class="info-dock-section-body">
+                            <div class="info-dock-flat-block">
+                                <p class="app-settings-section-desc">Карта показывает только объекты выбранного региона.</p>
+                                <button type="button" id="mapRegionCurrentChip" class="btn-primary map-region-change-btn" hidden>Сменить регион</button>
+                            </div>
+                        </div>
+                    </details>
 
                     <details name="infoDockSections" class="info-dock-section info-dock-section--look">
                         <summary class="info-dock-section-summary">

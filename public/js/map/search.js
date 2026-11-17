@@ -7,12 +7,19 @@ function setupMapSearch() {
     const clearBtn = document.getElementById('clearSearch');
     
     if (!searchInput || !searchResults) return;
+
+    var searchBox = searchInput.closest('.header-search');
+    function syncSearchChrome() {
+        var filled = !!searchInput.value.trim();
+        if (searchBox) searchBox.classList.toggle('is-filled', filled);
+        if (clearBtn) clearBtn.style.display = filled ? 'flex' : 'none';
+    }
     
     let searchTimeout = null;
 
     searchInput.addEventListener('input', function() {
         const query = this.value.trim();
-        clearBtn.style.display = query ? 'flex' : 'none';
+        syncSearchChrome();
         if (searchTimeout) clearTimeout(searchTimeout);
         if (query.length < 2) {
             searchResults.style.display = 'none';
@@ -27,8 +34,17 @@ function setupMapSearch() {
     clearBtn.addEventListener('click', function() {
         searchInput.value = '';
         searchResults.style.display = 'none';
-        clearBtn.style.display = 'none';
+        syncSearchChrome();
         searchInput.focus();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (!(e.ctrlKey || e.metaKey) || (e.key !== 'k' && e.key !== 'K')) return;
+        var tag = e.target && e.target.tagName ? e.target.tagName.toUpperCase() : '';
+        if (tag === 'TEXTAREA') return;
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
     });
 
     document.addEventListener('click', function(e) {

@@ -351,23 +351,25 @@ body {
 }
 
 .top-header-content {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "brand center tools";
     align-items: center;
-    justify-content: flex-start;
-    gap: 16px;
+    column-gap: 20px;
     height: 100%;
     max-width: 100%;
+    min-width: 0;
 }
 
 .header-center {
+    grid-area: center;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    flex: 1 1 auto;
     min-width: 0;
-    max-width: 560px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
 }
 
 .visually-hidden {
@@ -383,13 +385,14 @@ body {
 }
 
 .header-brand {
+    grid-area: brand;
     display: flex;
     align-items: center;
     gap: 11px;
     min-width: 0;
     position: relative;
-    flex: 0 1 auto;
-    max-width: min(340px, 32vw);
+    justify-self: start;
+    max-width: 100%;
 }
 
 .header-title-icon {
@@ -397,10 +400,10 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
-    border-radius: 11px;
+    border-radius: 10px;
     background:
         linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 100%);
     border: 1px solid rgba(255, 255, 255, 0.26);
@@ -408,17 +411,10 @@ body {
     box-shadow:
         0 1px 6px rgba(7, 17, 31, 0.22),
         inset 0 1px 0 rgba(255, 255, 255, 0.28);
-    animation: headerTitleIconGlow 4.8s ease-in-out infinite;
 }
 
 .header-title-icon-ring {
-    position: absolute;
-    inset: -3px;
-    border-radius: 13px;
-    border: 1px solid rgba(94, 234, 212, 0.28);
-    opacity: 0;
-    pointer-events: none;
-    animation: headerTitleIconRing 4.8s ease-out infinite;
+    display: none;
 }
 
 .header-title-icon-svg,
@@ -426,8 +422,8 @@ body {
     position: relative;
     z-index: 1;
     display: block;
-    width: 21px;
-    height: 21px;
+    width: 19px;
+    height: 19px;
     stroke: rgba(255, 255, 255, 0.98);
     filter: drop-shadow(0 1px 1px rgba(7, 17, 31, 0.22));
 }
@@ -580,8 +576,9 @@ body {
 /* ==================== Поиск по карте ==================== */
 .header-search {
     flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
-    max-width: none;
+    max-width: 480px;
     margin: 0;
     position: relative;
 }
@@ -590,6 +587,7 @@ body {
     position: relative;
     display: flex;
     align-items: center;
+    width: 100%;
 }
 
 .search-icon {
@@ -603,16 +601,25 @@ body {
 
 .search-input {
     width: 100%;
-    padding: 9px 38px 9px 42px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    height: 38px;
+    box-sizing: border-box;
+    padding: 0 72px 0 40px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.11);
     color: white;
     font-family: inherit;
     font-size: 0.875rem;
     outline: none;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 1px 8px rgba(7, 17, 31, 0.12);
     transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.header-search.is-filled .search-input,
+.search-wrapper:focus-within .search-input {
+    padding-right: 38px;
 }
 
 .search-input::placeholder {
@@ -634,6 +641,33 @@ body {
 
 .search-wrapper:focus-within .search-icon {
     stroke: rgba(255, 255, 255, 0.9);
+}
+
+.search-kbd {
+    position: absolute;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(7, 17, 31, 0.35);
+    color: rgba(255, 255, 255, 0.58);
+    font-family: var(--font-sans);
+    font-size: 0.625rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.header-search.is-filled .search-kbd,
+.search-wrapper:focus-within .search-kbd {
+    display: none;
 }
 
 .search-clear {
@@ -975,13 +1009,15 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 
 /* ==================== Панель пользователя ==================== */
 .user-panel {
+    grid-area: tools;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding-left: 14px;
-    border-left: 1px solid rgba(255, 255, 255, 0.12);
-    flex: 0 0 auto;
-    margin-left: auto;
+    gap: 8px;
+    padding-left: 0;
+    border-left: none;
+    justify-self: end;
+    min-width: 0;
+    flex-wrap: nowrap;
 }
 
 .user-info {
@@ -1002,8 +1038,8 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 }
 
 .user-avatar {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     background: linear-gradient(150deg, color-mix(in srgb, var(--accent-primary) 40%, #fff) 0%, var(--accent-primary) 48%, color-mix(in srgb, var(--accent-primary) 68%, #07111f) 100%);
     border-radius: 50%;
     display: flex;
@@ -1050,7 +1086,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     font-size: 0.8125rem;
     font-weight: 650;
     color: rgba(255, 255, 255, 0.96);
-    max-width: 140px;
+    max-width: 128px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1065,6 +1101,10 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     text-transform: uppercase;
     letter-spacing: 0.045em;
     line-height: 1.2;
+    max-width: 128px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .user-role.admin {
@@ -1074,6 +1114,7 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 .user-menu {
     display: flex;
     align-items: center;
+    flex-shrink: 0;
     gap: 2px;
     padding: 3px;
     border-radius: 999px;
@@ -16282,11 +16323,12 @@ html[data-theme="light"] .app-entrance__status {
     }
 
     .top-header-content {
-        gap: 12px;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        column-gap: 12px;
     }
 
     .header-brand {
-        max-width: min(280px, 28vw);
+        max-width: 100%;
         gap: 9px;
     }
     
@@ -16307,7 +16349,18 @@ html[data-theme="light"] .app-entrance__status {
 
     .header-center {
         gap: 8px;
-        max-width: 440px;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
+
+    .header-search {
+        width: 100%;
+        max-width: 360px;
+    }
+
+    .search-kbd {
+        display: none;
     }
     
     .sidebar {
@@ -16340,7 +16393,7 @@ html[data-theme="light"] .app-entrance__status {
     
     .user-panel {
         gap: 8px;
-        padding-left: 10px;
+        padding-left: 0;
     }
 
     .user-info {
@@ -16406,8 +16459,9 @@ html[data-theme="light"] .app-entrance__status {
     }
 
     .header-search {
+        flex: 1 1 auto;
+        width: auto;
         max-width: none;
-        flex: 1;
         margin: 0;
     }
     
@@ -16428,7 +16482,7 @@ html[data-theme="light"] .app-entrance__status {
     
     .user-panel {
         gap: 8px;
-        padding-left: 10px;
+        padding-left: 0;
         margin-left: 0;
     }
     
@@ -16759,7 +16813,7 @@ html[data-theme="light"] .app-entrance__status {
 
     .user-panel {
         gap: 6px;
-        padding-left: 8px;
+        padding-left: 0;
         margin-left: 0;
     }
     
@@ -29249,7 +29303,7 @@ body.edit-mode-active .edit-toolbar {
 
 .info-dock-header {
     flex-shrink: 0;
-    padding: 14px 14px 12px;
+    padding: 12px 12px 12px;
     border-bottom: 1px solid color-mix(in srgb, var(--border-color) 75%, transparent);
     background:
         linear-gradient(180deg, color-mix(in srgb, var(--accent-primary) 7%, transparent) 0%, transparent 72%),
@@ -29257,7 +29311,7 @@ body.edit-mode-active .edit-toolbar {
 }
 
 .info-dock-header-main {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .info-dock-brand {
@@ -29341,6 +29395,49 @@ body.edit-mode-active .edit-toolbar {
     transform: scale(0.98);
 }
 
+.info-dock-section--region { --dock-section-tone: #2563eb; }
+
+.info-dock-section-summary .info-dock-region-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 1 auto;
+    min-height: 20px;
+    max-height: 20px;
+    max-width: 8.5rem;
+    min-width: 0;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--dock-section-tone);
+    background: color-mix(in srgb, var(--dock-section-tone) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--dock-section-tone) 22%, transparent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.info-dock-section-summary .info-dock-region-badge[hidden],
+.info-dock-section-summary .info-dock-region-badge:empty {
+    display: none !important;
+}
+
+.map-region-change-btn {
+    width: 100%;
+    margin: 0;
+    min-height: 38px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 650;
+    border-radius: 10px;
+}
+
+.map-region-change-btn[hidden] {
+    display: none !important;
+}
+
 .info-dock-scroll {
     flex: 1;
     min-height: 0;
@@ -29383,6 +29480,7 @@ body.edit-mode-active .edit-toolbar {
 
 .info-dock-section--visibility { --dock-section-tone: #0e7490; }
 .info-dock-section--view { --dock-section-tone: #0f766e; }
+.info-dock-section--region { --dock-section-tone: #2563eb; }
 .info-dock-section--look { --dock-section-tone: #0f766e; }
 .info-dock-section--perf { --dock-section-tone: #c2410c; }
 .info-dock-section--team { --dock-section-tone: #0f766e; }
@@ -29944,10 +30042,22 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
 .map-region-current-chip__icon svg {
     display: block;
 }
+.map-region-current-chip__text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
 .map-region-current-chip__label {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.map-region-current-chip__hint {
+    display: none;
+}
+.map-region-current-chip__value {
+    display: none;
 }
 .map-region-current-chip__chevron {
     flex-shrink: 0;
