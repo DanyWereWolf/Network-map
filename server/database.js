@@ -246,6 +246,8 @@ async function initStorage() {
         migrateToOrganizations();
         mysqlInitialized = true;
         initSchema();
+        primeKnownMapObjectIds();
+        if (ensureObjectCreateBackfill(store)) saveStore();
         console.log('[DB] Storage: MySQL (' +
             ((store.organizations || []).length) + ' orgs, ' +
             ((store.users || []).length) + ' users, ' +
@@ -255,6 +257,8 @@ async function initStorage() {
     mysqlInitialized = false;
     loadStore();
     initSchema();
+    primeKnownMapObjectIds();
+    if (ensureObjectCreateBackfill(store)) saveStore();
     console.log('[DB] Storage: JSON (' + STORE_PATH + ')');
     return store;
 }
@@ -822,7 +826,9 @@ function setMapData(orgId, data, opts) {
     if (!s.mapDataByOrg) s.mapDataByOrg = {};
     var org = getOrganization(orgId);
     var key = org ? org.id : orgId;
-    s.mapDataByOrg[key] = stripMapItemsFromOtherOrganizations(orgId, data);
+    var nextMap = stripMapItemsFromOtherOrganizations(orgId, data);
+    noteNewMapObjects(s, key, nextMap);
+    s.mapDataByOrg[key] = nextMap;
     if (opts.allowShrink) allowDangerousSaveOnce = true;
     try {
         saveStore();
@@ -1552,6 +1558,211 @@ function getPlatformTopObjectTypes(limit) {
         source: fromHistory.length ? 'history' : 'none',
         total: fromHistory.reduce(function(s, i) { return s + i.count; }, 0)
     };
+}
+
+var OBJECT_CREATE_WINDOW_DAYS = 30;
+var knownMapObjectIdsByOrg = Object.create(null);
+var knownMapObjectIdsReady = false;
+
+function localDateKey(ms) {
+    var d = new Date(ms);
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function shiftDateKey(daysBack) {
+    var now = new Date();
+    var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
+    return localDateKey(d.getTime());
+}
+
+function collectMapObjectIds(arr) {
+    var ids = Object.create(null);
+    if (!Array.isArray(arr)) return ids;
+    arr.forEach(function (item) {
+        if (!isMapInfrastructureObject(item)) return;
+        if (item.uniqueId != null && item.uniqueId !== '') ids[String(item.uniqueId)] = 1;
+        if (item.type === 'node' && Array.isArray(item.attachedSwitches)) {
+            item.attachedSwitches.forEach(function (sw) {
+                if (!sw || sw.uniqueId == null || sw.uniqueId === '') return;
+                ids[String(sw.uniqueId)] = 1;
+            });
+        }
+    });
+    return ids;
+}
+
+function primeKnownMapObjectIds() {
+    if (knownMapObjectIdsReady || !store) return;
+    knownMapObjectIdsByOrg = Object.create(null);
+    var byOrg = store.mapDataByOrg || {};
+    Object.keys(byOrg).forEach(function (orgId) {
+        knownMapObjectIdsByOrg[orgId] = collectMapObjectIds(byOrg[orgId]);
+    });
+    knownMapObjectIdsReady = true;
+}
+
+function loadObjectCreateBuckets(s) {
+    var raw = s && s.settings ? s.settings.objectCreateDaily : null;
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw;
+    try {
+        var parsed = JSON.parse(String(raw));
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveObjectCreateBuckets(s, buckets) {
+    if (!s.settings) s.settings = {};
+    s.settings.objectCreateDaily = JSON.stringify(buckets || {});
+}
+
+function pruneObjectCreateBuckets(buckets) {
+    var cutoff = shiftDateKey(OBJECT_CREATE_WINDOW_DAYS - 1);
+    Object.keys(buckets || {}).forEach(function (orgId) {
+        var days = buckets[orgId];
+        if (!days || typeof days !== 'object') {
+            delete buckets[orgId];
+            return;
+        }
+        Object.keys(days).forEach(function (day) {
+            if (String(day) < cutoff) delete days[day];
+        });
+        if (!Object.keys(days).length) delete buckets[orgId];
+    });
+    return buckets;
+}
+
+function historyForOrg(s, orgId) {
+    var byOrg = s && s.historyByOrg;
+    if (!byOrg || typeof byOrg !== 'object') return [];
+    if (Array.isArray(byOrg[orgId])) return byOrg[orgId];
+    var alt = Object.keys(byOrg).find(function (k) { return organizationIdsMatch(k, orgId); });
+    return alt && Array.isArray(byOrg[alt]) ? byOrg[alt] : [];
+}
+
+function ensureObjectCreateBackfill(s) {
+    if (!s.settings || typeof s.settings !== 'object') s.settings = {};
+    if (String(s.settings.objectCreateBackfill || '') === '1') return false;
+    var buckets = {};
+    var cutoff = shiftDateKey(OBJECT_CREATE_WINDOW_DAYS - 1);
+    var orgs = Array.isArray(s.organizations) ? s.organizations : [];
+    orgs.forEach(function (o) {
+        if (!o || !o.id) return;
+        historyForOrg(s, o.id).forEach(function (entry) {
+            if (!entry || !entry.actionType) return;
+            var action = String(entry.actionType);
+            var n = 0;
+            if (action === 'create_object') {
+                var type = entry.details && entry.details.objectType ? String(entry.details.objectType) : '';
+                if (type === 'cable' || type === 'cableLabel') return;
+                n = 1;
+            }
+            if (!n) return;
+            var t = new Date(entry.timestamp || entry.createdAt || 0).getTime();
+            if (isNaN(t) || t <= 0) return;
+            var day = localDateKey(t);
+            if (day < cutoff) return;
+            if (!buckets[o.id]) buckets[o.id] = {};
+            buckets[o.id][day] = (Number(buckets[o.id][day]) || 0) + n;
+        });
+    });
+    pruneObjectCreateBuckets(buckets);
+    saveObjectCreateBuckets(s, buckets);
+    s.settings.objectCreateBackfill = '1';
+    return true;
+}
+
+function noteNewMapObjects(s, orgKey, nextArr) {
+    if (!knownMapObjectIdsReady) primeKnownMapObjectIds();
+    var known = knownMapObjectIdsByOrg[orgKey];
+    if (!known) {
+        var alt = Object.keys(knownMapObjectIdsByOrg).find(function (k) {
+            return organizationIdsMatch(k, orgKey);
+        });
+        if (alt) known = knownMapObjectIdsByOrg[alt];
+    }
+    if (!known) known = Object.create(null);
+    var nextIds = collectMapObjectIds(nextArr);
+    var added = 0;
+    Object.keys(nextIds).forEach(function (id) {
+        if (!known[id]) {
+            known[id] = 1;
+            added++;
+        }
+    });
+    knownMapObjectIdsByOrg[orgKey] = known;
+    if (!added) return 0;
+    var buckets = pruneObjectCreateBuckets(loadObjectCreateBuckets(s));
+    if (!buckets[orgKey] || typeof buckets[orgKey] !== 'object') buckets[orgKey] = {};
+    var day = localDateKey(Date.now());
+    buckets[orgKey][day] = (Number(buckets[orgKey][day]) || 0) + added;
+    saveObjectCreateBuckets(s, buckets);
+    return added;
+}
+
+function sumBucketWindow(daysMap, windowDays) {
+    var total = 0;
+    var days = daysMap && typeof daysMap === 'object' ? daysMap : {};
+    for (var i = 0; i < windowDays; i++) {
+        total += Number(days[shiftDateKey(i)]) || 0;
+    }
+    return total;
+}
+
+function bucketsForOrg(all, orgId) {
+    if (!all) return {};
+    if (all[orgId] && typeof all[orgId] === 'object') return all[orgId];
+    var alt = Object.keys(all).find(function (k) { return organizationIdsMatch(k, orgId); });
+    return alt && all[alt] && typeof all[alt] === 'object' ? all[alt] : {};
+}
+
+/**
+ * Новые объекты на картах: сегодня, 7 дней, 30 дней и разбивка по организациям.
+ * Прошлые дни до внедрения счётчика берутся из журнала созданий.
+ */
+function getCreatedObjectsActivity() {
+    var s = loadStore();
+    var buckets = loadObjectCreateBuckets(s);
+    var orgs = getOrganizations();
+    var totals = { day: 0, week: 0, month: 0 };
+    var organizations = [];
+    orgs.forEach(function (o) {
+        if (!o || !o.id) return;
+        var days = bucketsForOrg(buckets, o.id);
+        var day = sumBucketWindow(days, 1);
+        var week = sumBucketWindow(days, 7);
+        var month = sumBucketWindow(days, OBJECT_CREATE_WINDOW_DAYS);
+        totals.day += day;
+        totals.week += week;
+        totals.month += month;
+        if (month > 0) {
+            organizations.push({
+                id: o.id,
+                name: o.name || o.id,
+                day: day,
+                week: week,
+                month: month
+            });
+        }
+    });
+    organizations.sort(function (a, b) {
+        return b.month - a.month || b.week - a.week || b.day - a.day
+            || String(a.name).localeCompare(String(b.name), 'ru');
+    });
+    var daily = [];
+    for (var i = 13; i >= 0; i--) {
+        var key = shiftDateKey(i);
+        var count = 0;
+        orgs.forEach(function (o) {
+            if (!o || !o.id) return;
+            count += Number(bucketsForOrg(buckets, o.id)[key]) || 0;
+        });
+        daily.push({ date: key, count: count });
+    }
+    return { totals: totals, organizations: organizations, daily: daily };
 }
 
 /** РђРіСЂРµРіР°С‚С‹ РґР»СЏ РїСѓР±Р»РёС‡РЅРѕРіРѕ Р»РµРЅРґРёРЅРіР° (Р±РµР· Р°РІС‚РѕСЂРёР·Р°С†РёРё). */
@@ -3256,6 +3467,7 @@ module.exports = {
     mapObjectTypeLabel,
     getOrganizationMonitorStats,
     getPlatformTopObjectTypes,
+    getCreatedObjectsActivity,
     addVisitLog,
     purgeExpiredPasswordResetTokens,
     addPasswordResetToken,

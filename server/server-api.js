@@ -1387,7 +1387,8 @@ app.get('/api/organizations', (req, res) => {
             organizations: list,
             defaultFreeMapObjectLimit: getDefaultFreeMapObjectLimit(),
             defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers(),
-            platformTopObjectTypes: db.getPlatformTopObjectTypes(10)
+            platformTopObjectTypes: db.getPlatformTopObjectTypes(10),
+            createdObjectsActivity: db.getCreatedObjectsActivity()
         });
     } catch (e) {
         res.status(500).json({ error: String(e.message) });

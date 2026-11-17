@@ -3,6 +3,7 @@
  * - копирует дерево без node_modules / data / рабочего server-config
  * - читает публичный ключ из server/config/portable-license-keypair.json (тот же, что site-admin)
  * - прошивает EMBEDDED_PUBLIC_KEY и portableLicenseRequired: true
+ * - обфусцирует public/js только в копии для заказчика (рабочая папка Portable/ не меняется)
  * - пишет INSTALL.md и опционально zip
  *
  * Запуск из корня репо или из Portable:
@@ -11,6 +12,7 @@
  *
  * Опции:
  *   --no-zip          не создавать архив
+ *   --no-obfuscate    оставить клиентский JS читаемым
  *   --out <dir>       каталог вывода (по умолчанию releases/)
  *   --keypair <path>  путь к keypair JSON
  */
@@ -42,15 +44,39 @@ const SKIP_FILE_NAMES = new Set([
     'Thumbs.db'
 ]);
 
+/** Как в scripts/build-client.js: глобальные имена между файлами не переименовываются. */
+var CLIENT_OBFUSCATOR_OPTIONS = {
+    compact: true,
+    controlFlowFlattening: true,
+    controlFlowFlatteningThreshold: 0.4,
+    deadCodeInjection: false,
+    debugProtection: false,
+    disableConsoleOutput: false,
+    identifierNamesGenerator: 'hexadecimal',
+    renameGlobals: false,
+    selfDefending: false,
+    stringArray: true,
+    stringArrayEncoding: ['base64'],
+    stringArrayThreshold: 0.75,
+    transformObjectKeys: false,
+    unicodeEscapeSequence: false,
+    splitStrings: true,
+    splitStringsChunkLength: 8,
+    numbersToExpressions: true,
+    simplify: true,
+    target: 'browser'
+};
+
 function parseArgs(argv) {
-    var opts = { zip: true, outRoot: path.join(REPO_ROOT, 'releases'), keypair: null };
+    var opts = { zip: true, obfuscate: true, outRoot: path.join(REPO_ROOT, 'releases'), keypair: null };
     for (var i = 0; i < argv.length; i++) {
         var a = argv[i];
         if (a === '--no-zip') opts.zip = false;
+        else if (a === '--no-obfuscate') opts.obfuscate = false;
         else if (a === '--out' && argv[i + 1]) { opts.outRoot = path.resolve(argv[++i]); }
         else if (a === '--keypair' && argv[i + 1]) { opts.keypair = path.resolve(argv[++i]); }
         else if (a === '--help' || a === '-h') {
-            console.log('Usage: node scripts/build-release.js [--no-zip] [--out dir] [--keypair path]');
+            console.log('Usage: node scripts/build-release.js [--no-zip] [--no-obfuscate] [--out dir] [--keypair path]');
             process.exit(0);
         }
     }
@@ -128,9 +154,49 @@ function copyTree(srcRoot, destRoot) {
             return;
         }
         ensureDir(path.dirname(dest));
-        fs.copyFileSync(src, dest);
+        copyReleaseFile(src, dest, relPosix);
     }
     walk('');
+}
+
+/**
+ * cmd.exe ломает .bat/.cmd, если в файле UTF-8 (кириллица, chcp 65001) или только LF.
+ * В архив для клиента всегда пишем ASCII + CRLF.
+ * .ps1 с не-ASCII должен быть UTF-8 BOM, иначе Windows PowerShell 5.1 читает его как ANSI.
+ */
+function copyReleaseFile(src, dest, relPosix) {
+    var ext = path.extname(dest).toLowerCase();
+    if (ext === '.bat' || ext === '.cmd') {
+        var buf = fs.readFileSync(src);
+        for (var i = 0; i < buf.length; i++) {
+            if (buf[i] > 127) {
+                fail('В ' + relPosix + ' есть байты вне ASCII. cmd.exe на Windows рвёт такой .bat на обрывки команд. Русский текст выносите в .ps1 (UTF-8 BOM).');
+            }
+        }
+        var text = buf.toString('latin1').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
+        if (!text.endsWith('\r\n')) text += '\r\n';
+        fs.writeFileSync(dest, Buffer.from(text, 'latin1'));
+        return;
+    }
+    if (ext === '.ps1') {
+        var ps = fs.readFileSync(src);
+        var hasBom = ps.length >= 3 && ps[0] === 0xEF && ps[1] === 0xBB && ps[2] === 0xBF;
+        var body = hasBom ? ps.slice(3) : ps;
+        var nonAscii = false;
+        for (var j = 0; j < body.length; j++) {
+            if (body[j] > 127) { nonAscii = true; break; }
+        }
+        if (nonAscii && !hasBom) {
+            fail(relPosix + ' содержит не-ASCII без UTF-8 BOM. Windows PowerShell 5.1 прочитает кириллицу как кракозябры. Сохраните файл как UTF-8 with BOM.');
+        }
+        var psText = body.toString('utf8').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
+        if (!psText.endsWith('\r\n')) psText += '\r\n';
+        var out = Buffer.from(psText, 'utf8');
+        if (hasBom) out = Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), out]);
+        fs.writeFileSync(dest, out);
+        return;
+    }
+    fs.copyFileSync(src, dest);
 }
 
 function patchEmbeddedPublicKey(licenseJsPath, publicKey) {
@@ -185,6 +251,52 @@ function writeReleaseMeta(destRoot, meta) {
     fs.writeFileSync(path.join(destRoot, 'RELEASE.json'), JSON.stringify(meta, null, 2) + '\n', 'utf8');
 }
 
+function collectJsFiles(dir, list) {
+    fs.readdirSync(dir, { withFileTypes: true }).forEach(function (entry) {
+        var full = path.join(dir, entry.name);
+        if (entry.isDirectory()) collectJsFiles(full, list);
+        else if (entry.isFile() && entry.name.endsWith('.js')) list.push(full);
+    });
+    return list;
+}
+
+function obfuscateReleaseClient(outDir) {
+    var jsDir = path.join(outDir, 'public', 'js');
+    if (!fs.existsSync(jsDir)) fail('Нет public/js в сборке');
+    var JavaScriptObfuscator;
+    try {
+        JavaScriptObfuscator = require('javascript-obfuscator');
+    } catch (e) {
+        fail('Нет пакета javascript-obfuscator. В корне репозитория выполните npm install.');
+    }
+    var files = collectJsFiles(jsDir, []);
+    console.log('[release] Обфускация клиента: ' + files.length + ' файлов в public/js (рабочая папка Portable/ не меняется)…');
+    var t0 = Date.now();
+    var failed = 0;
+    files.forEach(function (file) {
+        var rel = path.relative(outDir, file).split(path.sep).join('/');
+        try {
+            var code = fs.readFileSync(file, 'utf8');
+            var result = JavaScriptObfuscator.obfuscate(code, CLIENT_OBFUSCATOR_OPTIONS);
+            fs.writeFileSync(file, result.getObfuscatedCode(), 'utf8');
+            var check = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
+            if (check.status !== 0) {
+                failed += 1;
+                console.error('  ✗ ' + rel + ' не парсится: ' + String(check.stderr || check.stdout || '').trim());
+                return;
+            }
+            process.stdout.write('  ✓ ' + rel + '\n');
+        } catch (err) {
+            failed += 1;
+            console.error('  ✗ ' + rel + ': ' + (err && err.message ? err.message : err));
+        }
+    });
+    var sec = ((Date.now() - t0) / 1000).toFixed(1);
+    if (failed) fail('Обфускация клиента: ошибок ' + failed + ' за ' + sec + ' с');
+    console.log('[release] Клиентский JS обфусцирован: ' + files.length + ' файлов, ' + sec + ' с');
+    return files.length;
+}
+
 function makeZip(folderPath, zipPath) {
     if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
     var parent = path.dirname(folderPath);
@@ -231,11 +343,20 @@ function main() {
     patchExampleConfig(exampleCfg, keyInfo.publicKey);
     console.log('[release] example-конфиг: portableLicenseRequired=true');
 
+    var obfuscatedFiles = 0;
+    if (opts.obfuscate) obfuscatedFiles = obfuscateReleaseClient(outDir);
+    else console.log('[release] Обфускация клиента пропущена (--no-obfuscate)');
+
     // убрать из клиентского README внутренние детали разработки — оставим INSTALL.md как главный
     var meta = {
         name: 'network-map-portable',
         version: VERSION,
         builtAt: new Date().toISOString(),
+        client: {
+            obfuscated: opts.obfuscate,
+            files: obfuscatedFiles,
+            scope: 'public/js'
+        },
         license: {
             algorithm: 'ed25519',
             publicKeyEmbedded: true,

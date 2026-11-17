@@ -1349,6 +1349,7 @@
                             <ul class="fact-list">
                             <li>Сводка по данным API <code style="font-size:0.76em;">/api/organizations</code> на момент загрузки.</li>
                             <li>Счётчик объектов на картах — узлы, кроссы, муфты и т.д. (кабели не учитываются), как в приложении карты.</li>
+                            <li>«Новые объекты» — сколько появилось за сутки, 7 дней и 30 дней, и какие организации их добавили.</li>
                             <li>Бесплатный режим и карточки на сайте — во вкладке «Витрина» (лимиты объектов и пользователей, текст карточек).</li>
                             <li>Остальные карточки — просмотр; по клику откроется связанный раздел.</li>
                         </ul>
@@ -1468,6 +1469,54 @@
                             </div>
                             <div class="analytics-card analytics-card--flush">
                                 <div class="col-chart" id="topObjectTypesChart"></div>
+                            </div>
+                        </section>
+
+                        <section class="analytics-section" aria-labelledby="analyticsNewObjectsTitle">
+                            <div class="analytics-section-head">
+                                <h3 class="analytics-section-title" id="analyticsNewObjectsTitle">Новые объекты</h3>
+                                <p class="hint" id="newObjectsHint">Сутки — сегодня, неделя — 7 дней, месяц — 30 дней</p>
+                            </div>
+                            <div class="cards-row" id="newObjectsTotals">
+                                <div class="stat-card">
+                                    <div class="stat-label">За сутки</div>
+                                    <div class="stat-value" id="statNewObjectsDay">—</div>
+                                    <div class="stat-extra">Сегодняшний день</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">За неделю</div>
+                                    <div class="stat-value" id="statNewObjectsWeek">—</div>
+                                    <div class="stat-extra">Последние 7 дней, включая сегодня</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">За месяц</div>
+                                    <div class="stat-value" id="statNewObjectsMonth">—</div>
+                                    <div class="stat-extra">Последние 30 дней, включая сегодня</div>
+                                </div>
+                            </div>
+                            <div class="analytics-section-grid analytics-section-grid--2">
+                                <div class="analytics-card">
+                                    <div class="analytics-title">По дням</div>
+                                    <div class="rank-chart" id="newObjectsDailyChart"></div>
+                                </div>
+                                <div class="analytics-card analytics-card--flush">
+                                    <div class="analytics-title">По организациям</div>
+                                    <div class="table-wrap table-wrap--scroll">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th>Организация</th>
+                                                    <th class="new-objects-num">Сутки</th>
+                                                    <th class="new-objects-num">Неделя</th>
+                                                    <th class="new-objects-num">Месяц</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="newObjectsByOrgBody">
+                                                <tr><td colspan="4" class="hint">Загрузка…</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </section>
 
@@ -2544,6 +2593,7 @@
     (function() {
         var orgs = [];
         var platformTopObjectTypes = null;
+        var createdObjectsActivity = null;
         var adminUserId = null;
         var supportThreadsCache = [];
         var supportActiveThreadId = null;
@@ -2861,6 +2911,69 @@
             if (riskSusp) riskSusp.textContent = String(suspended);
 
             renderTopObjectTypesChart();
+            renderNewObjectsActivity();
+        }
+
+        function formatNewObjectsDay(isoDate) {
+            var parts = String(isoDate || '').split('-');
+            if (parts.length !== 3) return isoDate || '—';
+            return parts[2] + '.' + parts[1];
+        }
+
+        function renderNewObjectsActivity() {
+            var data = createdObjectsActivity || {};
+            var totals = data.totals || {};
+            var dayEl = document.getElementById('statNewObjectsDay');
+            var weekEl = document.getElementById('statNewObjectsWeek');
+            var monthEl = document.getElementById('statNewObjectsMonth');
+            if (dayEl) dayEl.textContent = String(totals.day || 0);
+            if (weekEl) weekEl.textContent = String(totals.week || 0);
+            if (monthEl) monthEl.textContent = String(totals.month || 0);
+
+            var dailyChart = document.getElementById('newObjectsDailyChart');
+            if (dailyChart) {
+                dailyChart.innerHTML = '';
+                var daily = Array.isArray(data.daily) ? data.daily : [];
+                var maxDaily = 0;
+                daily.forEach(function(item) {
+                    var n = item && item.count ? item.count : 0;
+                    if (n > maxDaily) maxDaily = n;
+                });
+                if (!daily.length) {
+                    dailyChart.innerHTML = '<div class="hint">Пока нет данных</div>';
+                } else {
+                    daily.forEach(function(item) {
+                        var count = item && item.count ? item.count : 0;
+                        var label = formatNewObjectsDay(item && item.date);
+                        appendRankRow(dailyChart, {
+                            rank: '',
+                            label: label,
+                            title: label + ': ' + count,
+                            value: count,
+                            pct: maxDaily > 0 ? (count / maxDaily) * 100 : 0,
+                            tone: count > 0 ? 'tone-a' : ''
+                        });
+                    });
+                }
+            }
+
+            var tbody = document.getElementById('newObjectsByOrgBody');
+            if (!tbody) return;
+            var rows = Array.isArray(data.organizations) ? data.organizations : [];
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="hint">За 30 дней новые объекты не появлялись</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            rows.forEach(function(org) {
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td><strong>' + escapeHtml(org.name || org.id || '—') + '</strong></td>' +
+                    '<td class="new-objects-num">' + (org.day || 0) + '</td>' +
+                    '<td class="new-objects-num">' + (org.week || 0) + '</td>' +
+                    '<td class="new-objects-num"><strong>' + (org.month || 0) + '</strong></td>';
+                tbody.appendChild(tr);
+            });
         }
 
         function appendRankRow(container, opts) {
@@ -3874,6 +3987,7 @@
                 }
                 orgs = body.organizations;
                 platformTopObjectTypes = body.platformTopObjectTypes || null;
+                createdObjectsActivity = body.createdObjectsActivity || null;
                 applyPlatformLimitsUi({
                     defaultFreeMapObjectLimit: body.defaultFreeMapObjectLimit,
                     defaultMaxConcurrentUsers: body.defaultMaxConcurrentUsers
