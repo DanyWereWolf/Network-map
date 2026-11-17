@@ -6,7 +6,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawnSync, spawn } = require('child_process');
 const {
     loadServerConfig,
     getMysqlConfig,
@@ -117,6 +117,136 @@ function listMysqlDumps() {
     }
 }
 
+function mysqlDumpArgs(cfg) {
+    return [
+        '-h', cfg.host,
+        '-P', String(cfg.port),
+        '-u', cfg.user,
+        '--single-transaction',
+        '--routines',
+        '--databases', cfg.database
+    ];
+}
+
+function mysqlClientEnv(cfg) {
+    var env = Object.assign({}, process.env);
+    if (cfg.password) env.MYSQL_PWD = cfg.password;
+    return env;
+}
+
+function formatDumpDate(d) {
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function isDailyDumpFilename(name) {
+    return /^mysqldump-[\w.-]+-\d{4}-\d{2}-\d{2}\.sql$/i.test(name);
+}
+
+function pruneMysqlDumps(keepDays) {
+    keepDays = keepDays || 30;
+    try {
+        ensureFullBackupsDir();
+        var listed = fs.readdirSync(FULL_BACKUPS_DIR)
+            .filter(function (f) { return /^mysqldump-.*\.sql$/i.test(f); })
+            .map(function (f) {
+                var p = path.join(FULL_BACKUPS_DIR, f);
+                try { return { name: f, path: p, mtime: fs.statSync(p).mtimeMs }; } catch (e) { return null; }
+            })
+            .filter(Boolean);
+        var daily = [];
+        var extra = [];
+        listed.forEach(function (f) {
+            if (isDailyDumpFilename(f.name)) daily.push(f);
+            else extra.push(f);
+        });
+        daily.sort(function (a, b) { return b.name.localeCompare(a.name); });
+        var cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000;
+        var drop = daily.slice(keepDays);
+        extra.forEach(function (f) {
+            if (f.mtime < cutoff) drop.push(f);
+        });
+        drop.forEach(function (f) {
+            try {
+                fs.unlinkSync(f.path);
+                console.log('[Backup] Удалён старый SQL dump:', f.name);
+            } catch (e) {}
+        });
+    } catch (e) {
+        console.error('[Backup] Очистка SQL dump:', e.message);
+    }
+}
+
+/**
+ * One mysqldump per calendar day. Skips if today's file is already non-empty.
+ * Daily files: newest `keepDays`. Manual dumps: deleted after `keepDays`.
+ * @param {number} [keepDays]
+ * @returns {Promise<{ ok: boolean, skipped?: boolean, filename?: string, path?: string, error?: string }>}
+ */
+function createDailyMysqlDump(keepDays) {
+    return new Promise(function (resolve) {
+        if (!isMysqlEnabled()) {
+            resolve({ ok: true, skipped: true });
+            return;
+        }
+        ensureFullBackupsDir();
+        var cfg = getMysqlConfig();
+        var dateStr = formatDumpDate(new Date());
+        var dumpName = 'mysqldump-' + cfg.database + '-' + dateStr + '.sql';
+        var dumpPath = path.join(FULL_BACKUPS_DIR, dumpName);
+        if (fs.existsSync(dumpPath)) {
+            try {
+                if (fs.statSync(dumpPath).size > 0) {
+                    pruneMysqlDumps(keepDays);
+                    resolve({ ok: true, skipped: true, filename: dumpName });
+                    return;
+                }
+            } catch (eStat) {}
+        }
+        var tmpPath = dumpPath + '.tmp';
+        var fd;
+        try {
+            fd = fs.openSync(tmpPath, 'w');
+        } catch (eOpen) {
+            resolve({ ok: false, error: eOpen && eOpen.message ? eOpen.message : String(eOpen) });
+            return;
+        }
+        var proc = spawn('mysqldump', mysqlDumpArgs(cfg), {
+            env: mysqlClientEnv(cfg),
+            stdio: ['ignore', fd, 'pipe']
+        });
+        var stderr = '';
+        var settled = false;
+        function finish(result) {
+            if (settled) return;
+            settled = true;
+            try { fs.closeSync(fd); } catch (eClose) {}
+            resolve(result);
+        }
+        proc.stderr.on('data', function (chunk) { stderr += chunk; });
+        proc.on('error', function (e) {
+            try { fs.unlinkSync(tmpPath); } catch (eUnlink) {}
+            finish({ ok: false, error: 'mysqldump недоступен: ' + (e && e.message ? e.message : e) });
+        });
+        proc.on('close', function (code) {
+            try { fs.closeSync(fd); } catch (eClose) {}
+            if (code !== 0) {
+                try { fs.unlinkSync(tmpPath); } catch (eUnlink) {}
+                finish({ ok: false, error: (stderr || ('mysqldump exit ' + code)).trim() });
+                return;
+            }
+            try {
+                fs.renameSync(tmpPath, dumpPath);
+            } catch (eRename) {
+                finish({ ok: false, error: eRename && eRename.message ? eRename.message : String(eRename) });
+                return;
+            }
+            pruneMysqlDumps(keepDays);
+            finish({ ok: true, filename: dumpName, path: dumpPath });
+        });
+    });
+}
+
 /**
  * Create mysqldump into data/backups/full/.
  * @returns {{ ok: boolean, path?: string, filename?: string, error?: string }}
@@ -127,16 +257,8 @@ function createMysqlDump() {
     var stamp = new Date().toISOString().replace(/[:.]/g, '-');
     var dumpName = 'mysqldump-' + cfg.database + '-' + stamp + '.sql';
     var dumpPath = path.join(FULL_BACKUPS_DIR, dumpName);
-    var args = [
-        '-h', cfg.host,
-        '-P', String(cfg.port),
-        '-u', cfg.user,
-        '--single-transaction',
-        '--routines',
-        '--databases', cfg.database
-    ];
-    var env = Object.assign({}, process.env);
-    if (cfg.password) env.MYSQL_PWD = cfg.password;
+    var args = mysqlDumpArgs(cfg);
+    var env = mysqlClientEnv(cfg);
     var r = spawnSync('mysqldump', args, { encoding: 'utf8', env: env, maxBuffer: 256 * 1024 * 1024 });
     if (r.error) {
         return { ok: false, error: 'mysqldump недоступен: ' + r.error.message };
@@ -153,6 +275,7 @@ function createMysqlDump() {
         }
         return { ok: false, error: msg };
     }
+    pruneMysqlDumps(30);
     return { ok: true, path: dumpPath, filename: dumpName };
 }
 
@@ -206,6 +329,8 @@ module.exports = {
     getStorageStatus,
     listMysqlDumps,
     createMysqlDump,
+    createDailyMysqlDump,
+    pruneMysqlDumps,
     restoreMysqlDump,
     isSafeDumpFilename,
     ensureFullBackupsDir,

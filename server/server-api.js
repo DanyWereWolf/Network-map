@@ -5585,7 +5585,11 @@ db.initStorage().then(function () {
         } else {
             console.log('Данные: ' + path.join(DATA_DIR, 'store.json'));
         }
-        if (db.createDailyBackup) console.log('Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
+        if (db.createDailyBackup) {
+            console.log(db.getStorageMode && db.getStorageMode() === 'mysql'
+                ? 'Резервные копии: ежедневно в data/backups/, JSON и SQL dumps хранятся 30 дней.'
+                : 'Резервные копии: ежедневно в data/backups/, хранятся 30 дней.');
+        }
         try {
             var plKp = getPortableLicenseKeypair();
             var plPub = plKp && plKp.publicKey ? String(plKp.publicKey) : '';

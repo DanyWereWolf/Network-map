@@ -450,6 +450,14 @@ function formatSnapshotStamp(d) {
         pad(d.getHours()) + pad(d.getMinutes());
 }
 
+var DAILY_STORE_SNAPSHOT_RE = /^store-\d{4}-\d{2}-\d{2}\.json$/i;
+
+function unlinkSnapshotFiles(files) {
+    for (var i = 0; i < files.length; i++) {
+        try { fs.unlinkSync(files[i].path); } catch (e2) {}
+    }
+}
+
 function pruneFullSnapshots(keepCount) {
     keepCount = keepCount || FULL_SNAPSHOT_KEEP;
     try {
@@ -460,11 +468,17 @@ function pruneFullSnapshots(keepCount) {
                 var p = path.join(FULL_BACKUPS_DIR, f);
                 try { return { name: f, path: p, mtime: fs.statSync(p).mtimeMs }; } catch (e) { return null; }
             })
-            .filter(Boolean)
-            .sort(function (a, b) { return b.mtime - a.mtime; });
-        for (var i = keepCount; i < files.length; i++) {
-            try { fs.unlinkSync(files[i].path); } catch (e2) {}
-        }
+            .filter(Boolean);
+        var daily = [];
+        var rotating = [];
+        files.forEach(function (f) {
+            if (DAILY_STORE_SNAPSHOT_RE.test(f.name)) daily.push(f);
+            else rotating.push(f);
+        });
+        daily.sort(function (a, b) { return b.name.localeCompare(a.name); });
+        rotating.sort(function (a, b) { return b.mtime - a.mtime; });
+        unlinkSnapshotFiles(daily.slice(BACKUP_RETENTION_DAYS));
+        unlinkSnapshotFiles(rotating.slice(keepCount));
     } catch (e) {
         console.error('[DB] pruneFullSnapshots:', e.message);
     }
@@ -2256,6 +2270,20 @@ async function createDailyBackupAsync() {
         console.log('[Backup] Полный снимок:', path.basename(fullDaily));
     }
     pruneFullSnapshots(FULL_SNAPSHOT_KEEP);
+
+    if (isMysqlEnabled()) {
+        try {
+            var mysqlOps = require('./db/mysql-ops');
+            var dumpResult = await mysqlOps.createDailyMysqlDump(BACKUP_RETENTION_DAYS);
+            if (!dumpResult.ok) {
+                console.error('[Backup] MySQL dump:', dumpResult.error || 'failed');
+            } else if (!dumpResult.skipped) {
+                console.log('[Backup] MySQL dump:', dumpResult.filename);
+            }
+        } catch (eDump) {
+            console.error('[Backup] MySQL dump:', eDump && eDump.message ? eDump.message : eDump);
+        }
+    }
 }
 
 function listBackups(orgId) {

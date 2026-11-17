@@ -1680,8 +1680,8 @@
                             <summary>Справка по разделу</summary>
                             <ul class="fact-list">
                                 <li>Режим <code>json</code> — файл <code>data/store.json</code>; режим <code>mysql</code> — таблицы MySQL (пароль в UI не показывается).</li>
-                                <li>JSON-снимки в <code>data/backups/full/store-*.json</code> — полный логический снимок платформы.</li>
-                                <li>SQL dumps (<code>mysqldump-*.sql</code>) — нативный бэкап MySQL. Восстановление перезаписывает БД и сбрасывает сессии.</li>
+                                <li>JSON-снимки в <code>data/backups/full/store-*.json</code> — полный логический снимок платформы. Суточные <code>store-ГГГГ-ММ-ДД</code> хранятся 30 дней, почасовые — последние 48.</li>
+                                <li>SQL dumps (<code>mysqldump-*.sql</code>) — нативный бэкап MySQL, один файл в сутки, хранится 30 дней. Восстановление перезаписывает БД и сбрасывает сессии.</li>
                                 <li>Сервер сам отказывается записывать «пустую» базу поверх полной.</li>
                             </ul>
                         </details>
@@ -1698,7 +1698,7 @@
                     </div>
 
                     <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">JSON-снимки (store)</h3>
-                    <p class="hint" style="margin:0 0 14px;">Полные снимки пользователей, организаций и карт. «Восстановить» заменяет текущую базу выбранным снимком.</p>
+                    <p class="hint" style="margin:0 0 14px;">Полные снимки пользователей, организаций и карт. Суточные хранятся 30 дней, почасовые — последние 48. «Восстановить» заменяет текущую базу выбранным снимком.</p>
                     <div class="field-row" style="margin-bottom:14px;gap:10px;align-items:center;">
                         <button type="button" class="btn-sm-primary" id="storeBackupCreateBtn">Создать снимок сейчас</button>
                         <button type="button" class="btn-sm" id="storeBackupRefreshBtn">Обновить список</button>
@@ -1721,7 +1721,7 @@
                     </div>
 
                     <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">MySQL SQL dumps</h3>
-                    <p class="hint" style="margin:0 0 14px;">Нативные dumps через <code>mysqldump</code> → <code>data/backups/full/</code>. Нужны клиенты <code>mysqldump</code>/<code>mysql</code> на сервере.</p>
+                    <p class="hint" style="margin:0 0 14px;">Раз в сутки сервер пишет <code>mysqldump</code> в <code>data/backups/full/</code>. Файлы хранятся 30 дней. Нужны клиенты <code>mysqldump</code>/<code>mysql</code> на сервере.</p>
                     <div class="field-row" style="margin-bottom:14px;gap:10px;align-items:center;">
                         <button type="button" class="btn-sm-primary" id="mysqlDumpCreateBtn">Создать SQL dump</button>
                         <button type="button" class="btn-sm" id="mysqlDumpRefreshBtn">Обновить список</button>
