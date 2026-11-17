@@ -5,6 +5,7 @@
     var SEND_DEBOUNCE_MS = 400;
     var sendTimer = null;
     var pendingState = null;
+    var pendingStateRegionId = null;
     var reconnectTimer = null;
     var reconnectAttempts = 0;
     var reconnectDelayBaseMs = 2000;
@@ -649,28 +650,52 @@
         clearReconnectTimer();
     }
 
+    function currentSyncRegionId() {
+        try {
+            if (typeof window.getCurrentMapRegionId === 'function') {
+                var rid = window.getCurrentMapRegionId();
+                if (rid) return String(rid);
+            }
+        } catch (eRid) {}
+        if (window.currentMapRegionId) return String(window.currentMapRegionId);
+        return '';
+    }
+
     function sendState(data) {
         if (!data) return;
-        // Не заливать неполный снимок во время первичной загрузки / смены подложки.
+        // Не заливать неполный снимок во время первичной загрузки / смены подложки / смены региона.
         try {
+            if (window.__mapRegionSwitching) return;
             if (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) return;
             if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress) return;
             if (window.__volsmapRuntimeSwitching) return;
         } catch (eSkip) {}
         pendingState = data;
+        pendingStateRegionId = currentSyncRegionId();
         if (sendTimer) clearTimeout(sendTimer);
         sendTimer = setTimeout(function flushSendState() {
             sendTimer = null;
             var toSend = pendingState;
+            var regionAtQueue = pendingStateRegionId || '';
             pendingState = null;
+            pendingStateRegionId = null;
             if (!toSend) return;
+            var switching = false;
+            var applyBusy = false;
+            var initial = false;
+            var runtimeSwitch = false;
             try {
-                if (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) return;
-                if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress) return;
-                if (window.__volsmapRuntimeSwitching) return;
+                switching = !!window.__mapRegionSwitching;
+                applyBusy = typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress;
+                initial = typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending;
+                runtimeSwitch = !!window.__volsmapRuntimeSwitching;
             } catch (eSkip2) {}
+            // Снимок прошлого региона досылаем с тем id, который был в момент сохранения.
+            var goodbye = !!(switching && regionAtQueue && regionAtQueue !== currentSyncRegionId());
+            if (!goodbye && (switching || initial || applyBusy || runtimeSwitch)) return;
             if (lastOpSendTime && (Date.now() - lastOpSendTime) < SUPPRESS_STATE_AFTER_OP_MS) {
                 pendingState = toSend;
+                pendingStateRegionId = regionAtQueue;
                 var wait = SUPPRESS_STATE_AFTER_OP_MS - (Date.now() - lastOpSendTime);
                 if (wait < 50) wait = 50;
                 sendTimer = setTimeout(flushSendState, wait);
@@ -683,12 +708,8 @@
                         var gn = window.getGroupNamesForSync();
                         if (gn && (gn.cross || gn.node)) payload.groupNames = gn;
                     }
-                    if (typeof window.getCurrentMapRegionId === 'function') {
-                        var rid = window.getCurrentMapRegionId();
-                        if (rid) payload.regionId = rid;
-                    } else if (window.currentMapRegionId) {
-                        payload.regionId = String(window.currentMapRegionId);
-                    }
+                    var ridSend = regionAtQueue || currentSyncRegionId();
+                    if (ridSend) payload.regionId = ridSend;
                     ws.send(JSON.stringify(payload));
                 } catch (e) {}
             }

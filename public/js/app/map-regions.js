@@ -7,6 +7,7 @@
     var _regionsCache = null;
     var _pickerResolve = null;
     var _lastSoftWarnKey = '';
+    var _regionSwitchGen = 0;
 
     function getAuthHeaders() {
         var h = { 'Content-Type': 'application/json' };
@@ -168,8 +169,20 @@
             list.innerHTML = '';
             var regions = (payload && payload.regions) || [];
             var defId = payload && payload.defaultMapRegionId;
-            if (!selectedId && defId) selectedId = String(defId);
-            if (!selectedId && regions[0]) selectedId = String(regions[0].id);
+            var currentOpenId = getCurrentMapRegionId();
+            function regionListed(id) {
+                if (!id) return false;
+                for (var ri = 0; ri < regions.length; ri++) {
+                    if (regions[ri] && String(regions[ri].id) === String(id)) return true;
+                }
+                return false;
+            }
+            if (!regionListed(selectedId)) {
+                if (regionListed(currentOpenId)) selectedId = String(currentOpenId);
+                else if (defId && regionListed(defId)) selectedId = String(defId);
+                else if (regions[0]) selectedId = String(regions[0].id);
+                else selectedId = null;
+            }
             regions.forEach(function (r, idx) {
                 var btn = document.createElement('button');
                 btn.type = 'button';
@@ -180,7 +193,11 @@
                 btn.style.setProperty('--item-i', String(idx));
                 var count = r.objectCount != null ? r.objectCount : 0;
                 var isDefault = defId && String(r.id) === String(defId);
+                var isCurrent = currentOpenId && String(r.id) === String(currentOpenId);
                 var badges = '';
+                if (isCurrent) {
+                    badges += '<span class="map-region-picker-badge map-region-picker-badge--current">текущий</span>';
+                }
                 if (isDefault) {
                     badges += '<span class="map-region-picker-badge map-region-picker-badge--default">по умолчанию</span>';
                 }
@@ -223,6 +240,10 @@
             });
             var openBtn = document.getElementById('mapRegionPickerOpenBtn');
             if (openBtn) openBtn.disabled = !selectedId;
+            var selectedBtn = list.querySelector('.map-region-picker-item.is-selected');
+            if (selectedBtn && selectedBtn.scrollIntoView) {
+                try { selectedBtn.scrollIntoView({ block: 'nearest' }); } catch (eScroll) {}
+            }
         }
         el._renderList = renderList;
         el._getSelectedId = function () { return selectedId; };
@@ -266,7 +287,7 @@
             var setDef = document.getElementById('mapRegionPickerSetDefault');
             var wantDefault = !!(setDef && setDef.checked);
             var finish = function () {
-                hidePicker();
+                hidePicker({ replayEntrance: true });
                 if (_pickerResolve) {
                     var resolve = _pickerResolve;
                     _pickerResolve = null;
@@ -337,7 +358,10 @@
             if (allowDismiss) closeBtn.removeAttribute('hidden');
             else closeBtn.setAttribute('hidden', '');
         }
-        if (payload && payload.defaultMapRegionId) el._setSelectedId(String(payload.defaultMapRegionId));
+        var preferId = opts.selectedId != null ? String(opts.selectedId) : getCurrentMapRegionId();
+        if (preferId) el._setSelectedId(preferId);
+        else if (payload && payload.defaultMapRegionId) el._setSelectedId(String(payload.defaultMapRegionId));
+        else el._setSelectedId(null);
         el._renderList(payload || { regions: [] });
         global._mapRegionPickerAwaiting = true;
         if (typeof setMapLoadingOverlayText === 'function') {
@@ -348,15 +372,19 @@
         enhanceDynamicModal(el);
     }
 
-    function hidePicker() {
+    function hidePicker(opts) {
+        opts = opts || {};
         var el = document.getElementById('mapRegionPickerModal');
         global._mapRegionPickerAwaiting = false;
         if (el) {
             el.style.display = 'none';
             el.setAttribute('aria-hidden', 'true');
         }
-        // После выбора региона — полный intro, затем вход на карту.
-        if (typeof resetAppEntranceTimer === 'function') {
+        // Заставку «Загрузка карты» переигрываем только после реального выбора
+        // на первом входе. Закрытие окна без смены региона карту не трогает:
+        // иначе оверлей включается снова, а снять его уже некому.
+        var stillInitial = typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending;
+        if (opts.replayEntrance && stillInitial && typeof resetAppEntranceTimer === 'function') {
             try { resetAppEntranceTimer(); } catch (eReset) {}
         }
         if (typeof tryCompleteMapInitialLoad === 'function') {
@@ -364,7 +392,17 @@
         }
     }
 
-    /** Обязательный выбор региона перед загрузкой карты. */
+    function regionIdFromList(payload, id) {
+        if (!payload || !id || !Array.isArray(payload.regions)) return '';
+        var want = String(id);
+        for (var i = 0; i < payload.regions.length; i++) {
+            var region = payload.regions[i];
+            if (region && region.id != null && String(region.id) === want) return want;
+        }
+        return '';
+    }
+
+    /** Регион перед загрузкой карты: уже открытый, единственный или регион по умолчанию. */
     function chooseMapRegionBeforeLoad() {
         var existing = getCurrentMapRegionId();
         if (existing) return Promise.resolve(existing);
@@ -380,6 +418,11 @@
                 var onlyId = String(payload.regions[0].id);
                 setCurrentMapRegionId(onlyId);
                 return onlyId;
+            }
+            var defId = regionIdFromList(payload, payload.defaultMapRegionId);
+            if (defId) {
+                setCurrentMapRegionId(defId);
+                return defId;
             }
             return new Promise(function (resolve) {
                 _pickerResolve = resolve;
@@ -444,16 +487,180 @@
         }
     }
 
+    function objectLodZoom() {
+        var z = 16;
+        if (typeof getLodThresholds === 'function') {
+            try {
+                var thr = getLodThresholds();
+                if (thr && typeof thr.objects === 'number') z = thr.objects;
+            } catch (eThr) {}
+        }
+        return z;
+    }
+
+    /** Границы объектов региона. Полигоны зон — только если точек и кабелей нет. */
+    function boundsFromSerializedRegion(data) {
+        var list = Array.isArray(data) ? data : [];
+        var minLat = Infinity;
+        var minLon = Infinity;
+        var maxLat = -Infinity;
+        var maxLon = -Infinity;
+        var any = false;
+        var anchor = null;
+        function visit(value) {
+            if (!Array.isArray(value) || value.length < 2) return;
+            if (Array.isArray(value[0])) {
+                for (var i = 0; i < value.length; i++) visit(value[i]);
+                return;
+            }
+            var lat = Number(value[0]);
+            var lon = Number(value[1]);
+            if (!isFinite(lat) || !isFinite(lon)) return;
+            any = true;
+            if (!anchor) anchor = [lat, lon];
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lon < minLon) minLon = lon;
+            if (lon > maxLon) maxLon = lon;
+        }
+        var pass;
+        for (pass = 0; pass < 2 && !any; pass++) {
+            for (var n = 0; n < list.length; n++) {
+                var item = list[n];
+                if (!item || item.geometry == null) continue;
+                var t = item.type;
+                if (t === 'cableLabel' || t === 'regionLabel' || t === 'zoneLabel') continue;
+                if (pass === 0 && (t === 'region' || t === 'zone')) continue;
+                visit(item.geometry);
+            }
+        }
+        if (!any) return null;
+        return { bounds: [[minLat, minLon], [maxLat, maxLon]], anchor: anchor };
+    }
+
+    function focusMapOnSerializedRegion(data) {
+        if (typeof myMap === 'undefined' || !myMap) return false;
+        var frame = boundsFromSerializedRegion(data);
+        if (!frame || !frame.bounds) return false;
+        var bounds = frame.bounds;
+        var sw = bounds[0];
+        var ne = bounds[1];
+        var anchor = frame.anchor || [(sw[0] + ne[0]) / 2, (sw[1] + ne[1]) / 2];
+        var minZoom = objectLodZoom();
+        var samePoint = Math.abs(sw[0] - ne[0]) < 1e-5 && Math.abs(sw[1] - ne[1]) < 1e-5;
+        try {
+            if (samePoint) {
+                myMap.setCenter(anchor, minZoom);
+            } else if (typeof myMap.setBounds === 'function') {
+                myMap.setBounds(bounds, { checkZoomRange: true, duration: 0, zoomMargin: 48 });
+                var zoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
+                if (typeof zoom === 'number' && zoom < minZoom) {
+                    myMap.setCenter(anchor, minZoom);
+                }
+            } else {
+                myMap.setCenter(anchor, minZoom);
+            }
+        } catch (eFocus) {
+            return false;
+        }
+        return true;
+    }
+
+    function revealRegionObjects() {
+        try {
+            if (typeof applyMapViewportUpdate === 'function') applyMapViewportUpdate();
+        } catch (eVp) {}
+        try {
+            if (typeof myMap !== 'undefined' && myMap && myMap.container && typeof myMap.container.fitToViewport === 'function') {
+                myMap.container.fitToViewport();
+            }
+        } catch (eFit) {}
+    }
+
+    function settleRegionSwitchView(gen) {
+        return new Promise(function (resolve) {
+            var started = Date.now();
+            function tick() {
+                if (gen !== _regionSwitchGen) {
+                    resolve();
+                    return;
+                }
+                var busy = (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive())
+                    || (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress);
+                if (busy && (Date.now() - started) < 20000) {
+                    setTimeout(tick, 60);
+                    return;
+                }
+                revealRegionObjects();
+                if (typeof hideMapLoadingOverlay === 'function') {
+                    try { hideMapLoadingOverlay(); } catch (eHide) {}
+                }
+                global.__mapRegionSwitching = false;
+                try { updateMapRegionChip(); } catch (eChip) {}
+                resolve();
+            }
+            setTimeout(tick, 0);
+        });
+    }
+
+    function applyRegionSliceWhenIdle(body, rid, gen, forceFull) {
+        return new Promise(function (resolve) {
+            var tries = 0;
+            function attempt() {
+                if (gen != null && gen !== _regionSwitchGen) {
+                    resolve(false);
+                    return;
+                }
+                if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress && tries < 50) {
+                    tries++;
+                    setTimeout(attempt, 40);
+                    return;
+                }
+                if (typeof applyRemoteState === 'function') {
+                    applyRemoteState(body.data, {
+                        fromApi: true,
+                        organizationId: body.organizationId,
+                        forceFull: !!forceFull,
+                        mapRegionId: rid
+                    });
+                }
+                resolve(true);
+            }
+            attempt();
+        });
+    }
+
     function switchToMapRegion(regionId) {
         var rid = regionId != null ? String(regionId) : '';
         if (!rid) return Promise.reject(new Error('regionId required'));
+        var gen = ++_regionSwitchGen;
         if (typeof saveData === 'function') {
             try { saveData({ skipSync: false, syncFull: true }); } catch (eSave) {}
+        }
+        global.__mapRegionSwitching = true;
+        if (typeof showUndoRedoLoadingOverlay === 'function') {
+            try { showUndoRedoLoadingOverlay('Загрузка региона…'); } catch (eOv) {}
         }
         clearLocalMapForRegionSwitch();
         setCurrentMapRegionId(rid);
         _lastSoftWarnKey = '';
-        return loadMapDataForCurrentRegion({ forceFull: true });
+        return loadMapDataForCurrentRegion({ forceFull: true, focus: true, switchGen: gen })
+            .then(function (ok) {
+                if (!ok && gen === _regionSwitchGen && typeof showNotification === 'function') {
+                    showNotification('Не удалось загрузить регион', 'error');
+                }
+                return !!ok;
+            })
+            .catch(function (err) {
+                if (gen === _regionSwitchGen && typeof showNotification === 'function') {
+                    showNotification(err && err.message ? err.message : 'Не удалось открыть регион', 'error');
+                }
+                return false;
+            })
+            .then(function (ok) {
+                if (gen !== _regionSwitchGen) return ok;
+                return settleRegionSwitchView(gen).then(function () { return ok; });
+            });
     }
 
     function loadMapDataForCurrentRegion(meta) {
@@ -461,25 +668,23 @@
         var token = typeof getAuthToken === 'function' ? getAuthToken() : null;
         var rid = getCurrentMapRegionId();
         if (!rid) return Promise.resolve(false);
+        var gen = meta.switchGen;
         var url = apiBase().replace(/\/$/, '') + '/api/map?regionId=' + encodeURIComponent(rid);
-        return fetch(url, { headers: { Authorization: 'Bearer ' + token } })
+        return fetch(url, { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (body) {
+                if (gen != null && gen !== _regionSwitchGen) return false;
                 if (!body || !Array.isArray(body.data)) return false;
                 if (typeof currentUser !== 'undefined' && currentUser && currentUser.organizationId != null) {
                     global._mapOrgIdLoaded = String(currentUser.organizationId);
                 }
                 if (body.softWarn) maybeShowSoftWarn(body.softWarn, true);
                 else maybeShowSoftWarn(softWarnForCount(body.objectCount || body.data.length), true);
-                if (typeof applyRemoteState === 'function') {
-                    applyRemoteState(body.data, {
-                        fromApi: true,
-                        organizationId: body.organizationId,
-                        forceFull: !!meta.forceFull,
-                        mapRegionId: rid
-                    });
+                if (meta.focus) focusMapOnSerializedRegion(body.data);
+                if (!body.data.length && typeof showNotification === 'function') {
+                    showNotification('В этом регионе пока нет объектов', 'info');
                 }
-                return true;
+                return applyRegionSliceWhenIdle(body, rid, gen, meta.forceFull);
             });
     }
 

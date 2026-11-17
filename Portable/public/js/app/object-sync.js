@@ -662,6 +662,7 @@ function pushSaveDataToSync(opts) {
     if (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) return;
     if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress) return;
     try { if (window.__volsmapRuntimeSwitching) return; } catch (eSw) {}
+    try { if (window.__mapRegionSwitching) return; } catch (eRegSw) {}
     // add/remove уже ушли как op — не слать полный state (у других map_refresh = пересборка карты).
     if (opts.addObject || (opts.removeUniqueIds && opts.removeUniqueIds.length) || opts.removeObject) {
         return;

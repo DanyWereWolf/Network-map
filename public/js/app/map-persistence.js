@@ -1851,6 +1851,7 @@ function isPendingLocalMapAdd(obj, now) {
 function shouldSkipSyncMapRefresh(organizationId) {
     // Импортёр сам делает location.reload после POST /api/map — не гоняем forceFull apply.
     if (typeof window !== 'undefined' && window._skipMapRefreshUntilReload) return true;
+    if (typeof window !== 'undefined' && window.__mapRegionSwitching) return true;
     // Пока идёт первичная/текущая apply из /api/map — hello map_refresh не нужен.
     if (_mapInitialLoadPending || _mapApplyInProgress) return true;
     if (!_lastMapLoadedFromApiAt) return false;
@@ -2029,6 +2030,7 @@ function applyRemoteState(data, meta) {
                 applyMapStartFromSettings(window._savedMapStart, true);
             }
             markMapDataReady();
+            _mapApplyInProgress = false;
             return;
         }
         importData(data, opts, bulkLoad ? finishRemoteApply : null);

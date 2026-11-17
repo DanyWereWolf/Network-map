@@ -30205,6 +30205,10 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
     background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
     color: var(--accent-primary);
 }
+.map-region-picker-badge--current {
+    background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
+    color: var(--accent-primary);
+}
 .map-region-picker-badge--warn {
     background: rgba(217, 119, 6, 0.14);
     color: #b45309;
