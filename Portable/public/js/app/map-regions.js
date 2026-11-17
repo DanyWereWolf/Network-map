@@ -351,9 +351,17 @@
     function hidePicker() {
         var el = document.getElementById('mapRegionPickerModal');
         global._mapRegionPickerAwaiting = false;
-        if (!el) return;
-        el.style.display = 'none';
-        el.setAttribute('aria-hidden', 'true');
+        if (el) {
+            el.style.display = 'none';
+            el.setAttribute('aria-hidden', 'true');
+        }
+        // После выбора региона — полный intro, затем вход на карту.
+        if (typeof resetAppEntranceTimer === 'function') {
+            try { resetAppEntranceTimer(); } catch (eReset) {}
+        }
+        if (typeof tryCompleteMapInitialLoad === 'function') {
+            try { tryCompleteMapInitialLoad(); } catch (eComplete) {}
+        }
     }
 
     /** Обязательный выбор региона перед загрузкой карты. */

@@ -90,7 +90,7 @@ html {
         grid-template-columns: minmax(0, 1fr) auto;
         grid-template-areas:
             "brand tools"
-            "search search";
+            "center center";
         align-items: center;
         column-gap: 10px;
         row-gap: 8px;
@@ -98,6 +98,16 @@ html {
         min-height: 0;
         padding-top: 10px;
         padding-bottom: 8px;
+    }
+
+    .header-center {
+        grid-area: center;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: none;
+        margin: 0;
     }
 
     .header-title-icon {
@@ -114,6 +124,7 @@ html {
     .header-brand {
         grid-area: brand;
         min-width: 0;
+        max-width: none;
     }
 
     .header-brand-text {
@@ -127,16 +138,23 @@ html {
     }
 
     .header-search {
-        grid-area: search;
-        width: 100%;
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
         max-width: none;
         margin: 0;
+    }
+
+    .map-region-current-chip {
+        flex-shrink: 0;
+        max-width: 36vw;
     }
 
     .user-panel {
         grid-area: tools;
         border-left: none;
         padding-left: 0;
+        margin-left: 0;
         justify-self: end;
         gap: 8px;
         min-width: 0;

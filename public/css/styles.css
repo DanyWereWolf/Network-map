@@ -24,8 +24,8 @@
     --shadow-lg: 0 12px 32px rgba(10, 22, 40, 0.12);
     --shadow-map: 0 2px 16px rgba(10, 22, 40, 0.1);
     
-    --header-bg: linear-gradient(145deg, #0a1628 0%, #0f2a3a 48%, #115e59 120%);
-    --header-border: rgba(20, 184, 166, 0.28);
+    --header-bg: linear-gradient(128deg, #07111f 0%, #0a1c2e 42%, #0d3d3a 78%, #0f766e 128%);
+    --header-border: rgba(20, 184, 166, 0.2);
     
     --accent-primary: #0f766e;
     --accent-primary-soft: rgba(15, 118, 110, 0.12);
@@ -96,8 +96,8 @@
     --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
     
-    --header-bg: linear-gradient(145deg, #07111f 0%, #0a1628 50%, #115e59 130%);
-    --header-border: rgba(45, 212, 191, 0.22);
+    --header-bg: linear-gradient(128deg, #050d18 0%, #07111f 40%, #0a2f2c 78%, #0f766e 130%);
+    --header-border: rgba(45, 212, 191, 0.16);
     --accent-primary: #14b8a6;
     --accent-primary-soft: rgba(20, 184, 166, 0.16);
     --accent-primary-bright: #2dd4bf;
@@ -317,11 +317,11 @@ body {
     height: var(--header-height);
     flex-shrink: 0;
     box-shadow:
-        0 4px 24px rgba(15, 23, 42, 0.2),
-        0 1px 0 rgba(255, 255, 255, 0.12) inset;
+        0 2px 14px rgba(7, 17, 31, 0.22),
+        0 1px 0 rgba(255, 255, 255, 0.08) inset;
     z-index: 1200;
     border-bottom: 1px solid var(--header-border);
-    backdrop-filter: blur(14px) saturate(1.15);
+    backdrop-filter: blur(16px) saturate(1.12);
     transition: background var(--transition-normal);
     position: relative;
     isolation: isolate;
@@ -330,11 +330,11 @@ body {
 .top-header::before {
     content: '';
     position: absolute;
-    left: 8%;
-    right: 8%;
+    left: 18%;
+    right: 18%;
     bottom: -1px;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.5), transparent);
+    background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.32), transparent);
     pointer-events: none;
     z-index: 1;
 }
@@ -344,9 +344,8 @@ body {
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(ellipse 55% 120% at 8% 0%, rgba(45, 212, 191, 0.26) 0%, transparent 55%),
-        radial-gradient(ellipse 40% 100% at 92% 100%, rgba(15, 118, 110, 0.22) 0%, transparent 50%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 48%);
+        radial-gradient(ellipse 48% 110% at 6% 0%, rgba(45, 212, 191, 0.16) 0%, transparent 58%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, transparent 42%);
     pointer-events: none;
     z-index: -1;
 }
@@ -354,10 +353,21 @@ body {
 .top-header-content {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 14px;
+    justify-content: flex-start;
+    gap: 16px;
     height: 100%;
     max-width: 100%;
+}
+
+.header-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 560px;
+    margin: 0 auto;
 }
 
 .visually-hidden {
@@ -378,7 +388,8 @@ body {
     gap: 11px;
     min-width: 0;
     position: relative;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    max-width: min(340px, 32vw);
 }
 
 .header-title-icon {
@@ -389,25 +400,25 @@ body {
     width: 40px;
     height: 40px;
     flex-shrink: 0;
-    border-radius: 12px;
+    border-radius: 11px;
     background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.32);
+        linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.26);
     color: rgba(255, 255, 255, 0.98);
     box-shadow:
-        0 2px 10px rgba(15, 23, 42, 0.18),
-        inset 0 1px 0 rgba(255, 255, 255, 0.35);
-    animation: headerTitleIconGlow 3.2s ease-in-out infinite;
+        0 1px 6px rgba(7, 17, 31, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    animation: headerTitleIconGlow 4.8s ease-in-out infinite;
 }
 
 .header-title-icon-ring {
     position: absolute;
     inset: -3px;
-    border-radius: 14px;
-    border: 1px solid rgba(94, 234, 212, 0.45);
+    border-radius: 13px;
+    border: 1px solid rgba(94, 234, 212, 0.28);
     opacity: 0;
     pointer-events: none;
-    animation: headerTitleIconRing 3.2s ease-out infinite;
+    animation: headerTitleIconRing 4.8s ease-out infinite;
 }
 
 .header-title-icon-svg,
@@ -415,56 +426,56 @@ body {
     position: relative;
     z-index: 1;
     display: block;
-    width: 22px;
-    height: 22px;
+    width: 21px;
+    height: 21px;
     stroke: rgba(255, 255, 255, 0.98);
-    filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.2));
+    filter: drop-shadow(0 1px 1px rgba(7, 17, 31, 0.22));
 }
 
 .header-title-icon-pin {
-    animation: headerTitleIconPin 3.2s ease-in-out infinite;
+    animation: headerTitleIconPin 4.8s ease-in-out infinite;
 }
 
 .header-title-icon-dot {
     transform-origin: 12px 10px;
-    animation: headerTitleIconDot 2.4s ease-in-out infinite;
+    animation: headerTitleIconDot 3.2s ease-in-out infinite;
 }
 
 @keyframes headerTitleIconGlow {
     0%, 100% {
         box-shadow:
-            0 2px 10px rgba(15, 23, 42, 0.18),
-            inset 0 1px 0 rgba(255, 255, 255, 0.35);
-        border-color: rgba(255, 255, 255, 0.32);
+            0 1px 6px rgba(7, 17, 31, 0.22),
+            inset 0 1px 0 rgba(255, 255, 255, 0.28);
+        border-color: rgba(255, 255, 255, 0.26);
     }
     50% {
         box-shadow:
-            0 3px 14px rgba(15, 23, 42, 0.22),
-            0 0 16px rgba(45, 212, 191, 0.28),
-            inset 0 1px 0 rgba(255, 255, 255, 0.42);
-        border-color: rgba(153, 246, 228, 0.55);
+            0 2px 10px rgba(7, 17, 31, 0.24),
+            0 0 12px rgba(45, 212, 191, 0.16),
+            inset 0 1px 0 rgba(255, 255, 255, 0.34);
+        border-color: rgba(153, 246, 228, 0.38);
     }
 }
 
 @keyframes headerTitleIconRing {
     0% {
-        opacity: 0.5;
-        transform: scale(0.92);
+        opacity: 0.35;
+        transform: scale(0.94);
     }
     70%, 100% {
         opacity: 0;
-        transform: scale(1.22);
+        transform: scale(1.16);
     }
 }
 
 @keyframes headerTitleIconPin {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.78; }
+    50% { opacity: 0.86; }
 }
 
 @keyframes headerTitleIconDot {
     0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.18); opacity: 0.72; }
+    50% { transform: scale(1.1); opacity: 0.8; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -530,18 +541,19 @@ body {
     margin: 0;
     font-family: var(--font-display);
     font-size: 1.0625rem;
-    font-weight: 700;
+    font-weight: 650;
     color: rgba(255, 255, 255, 0.98);
     white-space: nowrap;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-    text-shadow: 0 1px 2px rgba(10, 22, 40, 0.18);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
 }
 
 .header-brand-text {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     min-width: 0;
     justify-content: center;
 }
@@ -550,13 +562,13 @@ body {
     margin: 0;
     font-size: 0.6875rem;
     font-weight: 500;
-    color: rgba(153, 246, 228, 0.88);
+    color: rgba(153, 246, 228, 0.62);
     line-height: 1.25;
     max-width: 300px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.015em;
 }
 
 @media (max-width: 1200px) {
@@ -567,9 +579,10 @@ body {
 
 /* ==================== Поиск по карте ==================== */
 .header-search {
-    flex: 1;
-    max-width: 420px;
-    margin: 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
     position: relative;
 }
 
@@ -582,7 +595,7 @@ body {
 .search-icon {
     position: absolute;
     left: 13px;
-    stroke: rgba(255, 255, 255, 0.62);
+    stroke: rgba(255, 255, 255, 0.55);
     pointer-events: none;
     z-index: 1;
     transition: stroke 0.2s ease;
@@ -590,37 +603,37 @@ body {
 
 .search-input {
     width: 100%;
-    padding: 10px 38px 10px 42px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 9px 38px 9px 42px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.09);
     color: white;
     font-family: inherit;
     font-size: 0.875rem;
     outline: none;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .search-input::placeholder {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(255, 255, 255, 0.48);
 }
 
 .search-input:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.22);
 }
 
 .search-input:focus {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(153, 246, 228, 0.65);
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(94, 234, 212, 0.45);
     box-shadow:
-        0 0 0 3px rgba(94, 234, 212, 0.28),
-        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        0 0 0 2px rgba(94, 234, 212, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .search-wrapper:focus-within .search-icon {
-    stroke: rgba(255, 255, 255, 0.92);
+    stroke: rgba(255, 255, 255, 0.9);
 }
 
 .search-clear {
@@ -964,47 +977,48 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 .user-panel {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     padding-left: 14px;
-    border-left: 1px solid rgba(255, 255, 255, 0.16);
-    flex-shrink: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .user-info {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 4px 10px 4px 4px;
+    padding: 3px 10px 3px 3px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .user-info:hover {
     background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.24);
+    border-color: rgba(255, 255, 255, 0.22);
 }
 
 .user-avatar {
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(145deg, color-mix(in srgb, var(--accent-primary) 55%, #fff) 0%, var(--accent-primary) 55%, color-mix(in srgb, var(--accent-primary) 72%, #0f172a) 100%);
+    width: 30px;
+    height: 30px;
+    background: linear-gradient(150deg, color-mix(in srgb, var(--accent-primary) 40%, #fff) 0%, var(--accent-primary) 48%, color-mix(in srgb, var(--accent-primary) 68%, #07111f) 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
-    font-size: 12px;
+    font-size: 11px;
     color: white;
     text-transform: uppercase;
     flex-shrink: 0;
     cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
     overflow: hidden;
-    border: 1.5px solid rgba(255, 255, 255, 0.35);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
+    border: 1.5px solid rgba(255, 255, 255, 0.28);
+    box-shadow: 0 1px 5px rgba(7, 17, 31, 0.28);
 }
 
 .user-avatar .avatar-img,
@@ -1020,8 +1034,8 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 
 .user-avatar:hover,
 .user-avatar:focus {
-    transform: translateY(-1px) scale(1.03);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.28), 0 4px 12px rgba(15, 23, 42, 0.25);
+    border-color: rgba(255, 255, 255, 0.42);
+    box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.2), 0 2px 8px rgba(7, 17, 31, 0.28);
     outline: none;
 }
 
@@ -1035,36 +1049,36 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 .user-name {
     font-size: 0.8125rem;
     font-weight: 650;
-    color: white;
+    color: rgba(255, 255, 255, 0.96);
     max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     line-height: 1.2;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
 }
 
 .user-role {
     font-size: 0.625rem;
-    font-weight: 650;
-    color: rgba(191, 219, 254, 0.78);
+    font-weight: 600;
+    color: rgba(203, 213, 225, 0.72);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.045em;
     line-height: 1.2;
 }
 
 .user-role.admin {
-    color: #fbbf24;
+    color: rgba(251, 191, 36, 0.88);
 }
 
 .user-menu {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     padding: 3px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -1074,33 +1088,32 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     gap: 2px;
     padding-right: 3px;
     margin-right: 1px;
-    border-right: 1px solid rgba(255, 255, 255, 0.14);
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .user-menu-btn {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     border: 1px solid transparent;
     background: transparent;
-    border-radius: 9px;
+    border-radius: 999px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.92);
-    transition: background 0.2s, border-color 0.2s, transform 0.15s, color 0.2s, opacity 0.2s;
+    color: rgba(255, 255, 255, 0.88);
+    transition: background 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s;
     position: relative;
 }
 
 .user-menu-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.16);
-    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.18);
     color: #fff;
-    transform: translateY(-1px);
 }
 
 .user-menu-btn:active:not(:disabled) {
-    transform: translateY(0);
+    background: rgba(255, 255, 255, 0.18);
 }
 
 .user-menu-btn:disabled {
@@ -1109,24 +1122,24 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
 }
 
 .user-menu-btn:focus-visible {
-    outline: 2px solid rgba(191, 219, 254, 0.7);
+    outline: 2px solid rgba(94, 234, 212, 0.55);
     outline-offset: 1px;
 }
 
 .user-menu-btn svg {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
 }
 
 .user-menu-btn--logout:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.22);
-    border-color: rgba(252, 165, 165, 0.4);
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(252, 165, 165, 0.28);
     color: #fecaca;
 }
 
 #orgChatBtn[aria-expanded="true"],
 #themeToggle:hover {
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.16);
 }
 
 /* ==================== РЎРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ ==================== */
@@ -7156,15 +7169,16 @@ button {
     gap: 10px;
     padding: 7px 10px;
     margin-bottom: 5px;
-    background: var(--bg-card);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--panel-glass-surface) 88%, transparent);
+    border-radius: 9px;
+    border: 1px solid color-mix(in srgb, var(--panel-glass-border) 85%, var(--border-color));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
     transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
 .legend-item:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-light);
+    background: color-mix(in srgb, var(--accent-primary-soft) 55%, var(--bg-hover));
+    border-color: color-mix(in srgb, var(--accent-primary) 28%, var(--border-color));
 }
 
 .legend-item:last-child {
@@ -7913,6 +7927,745 @@ html[data-theme="light"] .app-entrance__vignette {
         linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, transparent 24%, transparent 76%, rgba(221, 231, 239, 0.55) 100%);
 }
 
+.app-entrance--logo {
+    background: #060d16 !important;
+}
+
+html[data-theme="light"] .app-entrance--logo {
+    background: #d7e0e8 !important;
+}
+
+.app-entrance--logo .app-entrance__wash,
+.app-entrance--logo .app-entrance__orb,
+.app-entrance--logo .app-entrance__horizon,
+.app-entrance--logo .app-entrance__rings,
+.app-entrance--logo .app-entrance__spot,
+.app-entrance--logo .app-entrance__floor,
+.app-entrance--logo .app-entrance__radar,
+.app-entrance--logo .app-entrance__beam,
+.app-entrance--logo .app-entrance__ground,
+.app-entrance--logo .app-entrance__horizon-line,
+.app-entrance--logo .app-entrance__grain,
+.app-entrance--logo .app-entrance__vignette {
+    display: none !important;
+}
+
+.app-entrance--logo .app-entrance__sky,
+.app-entrance--logo .app-entrance__beam,
+.app-entrance--logo .app-entrance__ground,
+.app-entrance--logo .app-entrance__horizon-line,
+.app-entrance--logo .app-entrance__grain {
+    position: absolute;
+    pointer-events: none;
+}
+
+.app-entrance--logo .app-entrance__sky {
+    inset: 0;
+    background:
+        radial-gradient(ellipse 70% 45% at 10% 8%, rgba(20, 184, 166, 0.18) 0%, transparent 55%),
+        radial-gradient(ellipse 55% 40% at 92% 12%, rgba(234, 88, 12, 0.1) 0%, transparent 50%),
+        linear-gradient(160deg, #050a12 0%, #0a1628 45%, #071018 100%);
+}
+
+.app-entrance--logo .app-entrance__mesh {
+    display: block !important;
+    opacity: 1;
+    overflow: hidden;
+    background: none;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 20%, transparent 75%);
+    animation: none;
+}
+
+.app-entrance--logo .app-entrance__mesh::before {
+    content: '';
+    position: absolute;
+    inset: -56px;
+    background-image:
+        linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+    background-size: 56px 56px;
+    animation: appEntranceGridDrift 42s linear infinite;
+    will-change: transform;
+}
+
+
+.app-entrance--logo.app-entrance--reduced .app-entrance__mesh::before {
+    animation: none;
+}
+
+@keyframes appEntranceGridDrift {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(56px, 56px, 0); }
+}
+
+@keyframes landingGridDrift {
+    from { background-position: 0 0, 0 0; }
+    to { background-position: 56px 56px, 56px 56px; }
+}
+
+.app-entrance--logo .app-entrance__radar {
+    position: absolute;
+    left: 50%;
+    top: 46%;
+    width: min(88vh, 860px);
+    height: min(88vh, 860px);
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.app-entrance--logo .app-entrance__radar-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(153, 246, 228, 0.28);
+    box-shadow: inset 0 0 40px rgba(45, 212, 191, 0.05);
+}
+
+.app-entrance--logo .app-entrance__radar-ring:nth-child(1) { inset: 8%; }
+.app-entrance--logo .app-entrance__radar-ring:nth-child(2) { inset: 22%; border-color: rgba(45, 212, 191, 0.4); }
+.app-entrance--logo .app-entrance__radar-ring:nth-child(3) { inset: 36%; }
+
+.app-entrance--logo .app-entrance__radar-sweep {
+    position: absolute;
+    inset: 12%;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 0 72%, rgba(45, 212, 191, 0.28) 88%, transparent 100%);
+    animation: appEntranceSweep 9s linear infinite;
+    -webkit-mask: radial-gradient(circle, transparent 18%, #000 19%);
+    mask: radial-gradient(circle, transparent 18%, #000 19%);
+}
+
+.app-entrance--logo.app-entrance--reduced .app-entrance__radar-sweep {
+    animation: none;
+}
+
+.app-entrance--logo .app-entrance__radar-core {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 42%;
+    height: 42%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(204, 251, 241, 0.35) 0%, rgba(20, 184, 166, 0.12) 42%, transparent 70%);
+    filter: blur(6px);
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__sky {
+    background:
+        radial-gradient(ellipse 80% 50% at 15% 10%, rgba(20, 184, 166, 0.24) 0%, transparent 55%),
+        radial-gradient(ellipse 60% 45% at 88% 15%, rgba(234, 88, 12, 0.12) 0%, transparent 50%),
+        radial-gradient(ellipse 50% 40% at 50% 95%, rgba(8, 145, 178, 0.12) 0%, transparent 45%),
+        linear-gradient(155deg, #c9d5e0 0%, #dce4ec 42%, #e8eef3 100%);
+}
+
+.app-entrance--logo .app-entrance__beam {
+    left: 50%;
+    top: -12%;
+    width: min(46vw, 560px);
+    height: 78vh;
+    transform: translateX(-50%);
+    background: linear-gradient(180deg, rgba(204, 251, 241, 0.22) 0%, rgba(45, 212, 191, 0.08) 42%, transparent 78%);
+    clip-path: polygon(46% 0, 54% 0, 82% 100%, 18% 100%);
+    filter: blur(10px);
+    opacity: 0;
+    animation: appEntranceBeam 1.6s ease 0.1s forwards;
+}
+
+.app-entrance--logo .app-entrance__ground {
+    left: 50%;
+    bottom: -18%;
+    width: 160%;
+    height: 48%;
+    transform: translateX(-50%);
+    background:
+        radial-gradient(ellipse 48% 38% at 50% 0%, rgba(45, 212, 191, 0.22) 0%, transparent 70%),
+        linear-gradient(180deg, rgba(12, 42, 48, 0.15) 0%, #010308 46%);
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__ground {
+    background:
+        radial-gradient(ellipse 48% 40% at 50% 0%, rgba(15, 118, 110, 0.16) 0%, transparent 72%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, #d5e8e3 50%);
+}
+
+.app-entrance--logo .app-entrance__horizon-line {
+    left: 8%;
+    right: 8%;
+    top: 64%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(153, 246, 228, 0.15) 18%, rgba(236, 254, 255, 0.85) 50%, rgba(153, 246, 228, 0.15) 82%, transparent);
+    box-shadow: 0 0 24px rgba(45, 212, 191, 0.45);
+    opacity: 0;
+    animation: appEntranceFadeUp 0.9s ease 0.25s forwards;
+}
+
+.app-entrance--logo .app-entrance__grain {
+    inset: 0;
+    opacity: 0.18;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.45) 0.6px, transparent 0.65px);
+    background-size: 3px 3px;
+    mix-blend-mode: overlay;
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__grain {
+    opacity: 0.12;
+    mix-blend-mode: multiply;
+}
+
+.app-entrance--logo .app-entrance__spot {
+    position: absolute;
+    left: 50%;
+    top: 38%;
+    width: min(520px, 70vw);
+    height: min(520px, 70vw);
+    transform: translate(-50%, -50%) scale(0.72);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(153, 246, 228, 0.28) 0%, rgba(20, 184, 166, 0.08) 38%, transparent 68%);
+    filter: blur(8px);
+    opacity: 0;
+    animation: appEntranceSpotIn 1.4s ease 0.05s forwards;
+}
+
+.app-entrance--logo .app-entrance__floor {
+    position: absolute;
+    left: 50%;
+    bottom: 16%;
+    width: min(640px, 78vw);
+    height: 90px;
+    transform: translateX(-50%);
+    background: radial-gradient(ellipse at center, rgba(45, 212, 191, 0.28) 0%, transparent 68%);
+    filter: blur(6px);
+    opacity: 0;
+    animation: appEntranceFadeUp 1s ease 0.35s forwards;
+}
+
+.app-entrance--logo .app-entrance__vignette {
+    background: radial-gradient(circle at 50% 46%, transparent 36%, rgba(2, 6, 23, 0.78) 100%);
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__vignette {
+    background:
+        radial-gradient(ellipse 70% 58% at 50% 42%, transparent 28%, rgba(247, 251, 251, 0.72) 100%);
+}
+
+.app-entrance--logo .app-entrance__logo {
+    gap: 0;
+}
+
+.app-entrance--logo .app-entrance__emblem {
+    position: relative;
+    width: 108px;
+    height: 108px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 22px;
+}
+
+.app-entrance--logo .app-entrance__emblem-ring {
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid rgba(153, 246, 228, 0.4);
+    opacity: 0;
+    animation: appEntranceLogoRing 5.2s ease-out 0.8s infinite;
+}
+
+.app-entrance--logo .app-entrance__emblem-ring--b {
+    animation-delay: 1.25s;
+}
+
+.app-entrance--logo .app-entrance__mark {
+    width: 88px;
+    height: 88px;
+    border-radius: 24px;
+    opacity: 0;
+    transform: scale(0.97);
+    animation: appEntranceLogoMark 1.7s cubic-bezier(0.16, 0.84, 0.32, 1) 0.16s forwards;
+}
+
+.app-entrance--logo .app-entrance__mark-svg {
+    width: 42px;
+    height: 42px;
+}
+
+.app-entrance--logo .app-entrance__pin {
+    stroke-dasharray: 72;
+    stroke-dashoffset: 72;
+    animation: appEntranceDraw 2.2s linear 0.45s forwards;
+}
+
+.app-entrance--logo .app-entrance__dot {
+    opacity: 0;
+    transform-origin: 12px 10px;
+    animation: appEntranceDot 1.05s cubic-bezier(0.16, 0.84, 0.32, 1) 1.35s forwards;
+}
+
+.app-entrance--logo .app-entrance__word {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.app-entrance--logo .app-entrance__brand {
+    position: relative;
+    overflow: visible;
+    font-size: clamp(2.6rem, 6vw, 3.6rem);
+    letter-spacing: -0.05em;
+    line-height: 1;
+    color: transparent !important;
+    background: none !important;
+    text-shadow: none !important;
+    opacity: 0;
+    transform: translateY(6px);
+    animation: appEntranceLogoWord 1.6s cubic-bezier(0.16, 0.84, 0.32, 1) 0.55s forwards !important;
+}
+
+.app-entrance--logo .app-entrance__brand-text {
+    display: inline-block;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(
+        100deg,
+        #c5d4e0 0%,
+        #eef3f8 30%,
+        #ffffff 48%,
+        #d1fae5 58%,
+        #eef3f8 74%,
+        #c5d4e0 100%
+    );
+    background-size: 100% 100%;
+    background-position: 50% 50%;
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+.app-entrance--logo .app-entrance__word::after {
+    content: '';
+    display: block;
+    width: 88px;
+    height: 1px;
+    margin-top: 18px;
+    background: linear-gradient(90deg, transparent, rgba(153, 246, 228, 0.9), transparent);
+    opacity: 0;
+    transform: scaleX(0.35);
+    transform-origin: center;
+    animation: appEntranceRule 1.45s cubic-bezier(0.16, 0.84, 0.32, 1) 1.55s forwards;
+}
+
+.app-entrance--logo .app-entrance__tagline {
+    margin: 14px 0 0;
+    font-size: 0.78rem;
+    font-weight: 560;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgba(153, 246, 228, 0.78) !important;
+    opacity: 0;
+    transform: translateY(6px);
+    animation: appEntranceFadeUp 1.25s cubic-bezier(0.16, 0.84, 0.32, 1) 1.7s forwards !important;
+}
+
+.app-entrance--logo .app-entrance__greet {
+    margin: 14px 0 0;
+    opacity: 0;
+    transform: translateY(6px);
+    animation: appEntranceFadeUp 1.25s cubic-bezier(0.16, 0.84, 0.32, 1) 1.55s forwards !important;
+}
+
+.app-entrance--logo .app-entrance__greet[hidden] {
+    display: none !important;
+}
+
+.app-entrance--logo .app-entrance__meter {
+    opacity: 0;
+    margin-top: 36px;
+    width: min(240px, 64vw);
+    transform: translateY(6px);
+    animation: appEntranceFadeUp 1.25s cubic-bezier(0.16, 0.84, 0.32, 1) 1.85s forwards;
+}
+
+.app-entrance--logo .app-entrance__bar {
+    width: 100%;
+    height: 2px;
+    margin-top: 0;
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+    animation: none !important;
+}
+
+.app-entrance--logo .app-entrance__bar-fill {
+    width: 46%;
+    background: linear-gradient(90deg, transparent 0%, rgba(94, 234, 212, 0.2) 28%, #99f6e4 62%, transparent 100%);
+    box-shadow: none;
+    animation: appEntranceBar 4.4s linear infinite !important;
+    will-change: transform, opacity;
+}
+
+.app-entrance--logo .app-entrance__status {
+    margin-top: 12px;
+    letter-spacing: 0.16em;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    opacity: 0.88;
+    animation: none !important;
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__brand-text {
+    background-image: linear-gradient(180deg, #0f172a 0%, #115e59 100%);
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__tagline {
+    color: #0f766e !important;
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__greet {
+    color: #115e59;
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__status {
+    color: #475569;
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__emblem-ring {
+    border-color: rgba(15, 118, 110, 0.38);
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__word::after {
+    background: linear-gradient(90deg, transparent, rgba(15, 118, 110, 0.55), transparent);
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__mark {
+    box-shadow:
+        0 16px 34px rgba(15, 118, 110, 0.22),
+        0 0 0 1px rgba(255, 255, 255, 0.7) inset,
+        0 1px 0 rgba(255, 255, 255, 0.85) inset;
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__bar {
+    background: rgba(15, 118, 110, 0.16);
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__bar-fill {
+    background: linear-gradient(90deg, transparent 0%, rgba(15, 118, 110, 0.28) 24%, #0f766e 58%, transparent 100%);
+}
+
+html[data-theme="light"] .app-entrance--logo .app-entrance__mesh::before {
+    background-image:
+        linear-gradient(rgba(15, 23, 42, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 23, 42, 0.07) 1px, transparent 1px);
+}
+
+.app-entrance--logo.app-entrance--reduced .app-entrance__mark,
+.app-entrance--logo.app-entrance--reduced .app-entrance__brand,
+.app-entrance--logo.app-entrance--reduced .app-entrance__tagline,
+.app-entrance--logo.app-entrance--reduced .app-entrance__meter,
+.app-entrance--logo.app-entrance--reduced .app-entrance__pin,
+.app-entrance--logo.app-entrance--reduced .app-entrance__dot,
+.app-entrance--logo.app-entrance--reduced .app-entrance__emblem-ring,
+.app-entrance--logo.app-entrance--reduced .app-entrance__spot,
+.app-entrance--logo.app-entrance--reduced .app-entrance__floor,
+.app-entrance--logo.app-entrance--reduced .app-entrance__brand-text {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+}
+
+.app-entrance--logo.app-entrance--reduced .app-entrance__emblem-ring {
+    opacity: 0;
+}
+
+.app-entrance--logo.app-entrance--reduced .app-entrance__brand-text {
+    background-position: 48% 50%;
+}
+
+.app-entrance--logo.app-entrance--reduced .app-entrance__word::after {
+    animation: none;
+    opacity: 1;
+    transform: scaleX(1);
+}
+
+.app-entrance--logo.app-entrance--reduced .app-entrance__pin {
+    stroke-dashoffset: 0;
+}
+
+@keyframes appEntranceLogoMark {
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes appEntranceLogoWord {
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes appEntranceTextReveal {
+    to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes appEntranceTextSheen {
+    from { background-position: 78% 50%; }
+    to { background-position: 22% 50%; }
+}
+
+@keyframes appEntranceRule {
+    to { opacity: 1; transform: scaleX(1); }
+}
+
+@keyframes appEntranceSpotIn {
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+@keyframes appEntranceBeam {
+    to { opacity: 1; }
+}
+
+@keyframes appEntranceSweep {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes appEntranceLogoRing {
+    0% { opacity: 0; transform: scale(0.96); }
+    28% { opacity: 0.32; }
+    100% { opacity: 0; transform: scale(1.14); }
+}
+
+.app-entrance__plate {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: min(920px, 94vw);
+    padding: 24px 20px 32px;
+    gap: 0;
+}
+
+.app-entrance__media {
+    position: relative;
+    width: min(760px, 88vw);
+    height: 50vh;
+    min-height: 220px;
+    max-height: 520px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.app-entrance__reel {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-entrance--reel .app-entrance__reel {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: none;
+}
+
+.app-entrance--loading .app-entrance__reel,
+.app-entrance--enter-map .app-entrance__reel,
+.app-entrance.is-leaving .app-entrance__reel {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.app-entrance__video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center center;
+    background: transparent;
+    filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.28));
+}
+
+.app-entrance__still {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+}
+
+.app-entrance--loading .app-entrance__still,
+.app-entrance--reduced .app-entrance__still {
+    opacity: 1;
+    transform: none;
+}
+
+.app-entrance__still .app-entrance__mascot-glow {
+    position: absolute;
+    left: 50%;
+    bottom: 6%;
+    width: 46%;
+    height: 22%;
+    transform: translateX(-50%);
+    animation: none;
+    opacity: 0.8;
+}
+
+.app-entrance__still .app-entrance__mascot {
+    position: relative;
+    z-index: 1;
+    height: 92%;
+    width: auto;
+    max-width: 70%;
+    object-fit: contain;
+    object-position: center bottom;
+    filter: drop-shadow(0 16px 24px rgba(7, 17, 31, 0.35));
+    animation: appEntranceMascotFloat 3.6s ease-in-out 0.4s infinite;
+}
+
+.app-entrance__lockup {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 6px;
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.app-entrance--reel .app-entrance__lockup {
+    animation: appEntranceLockupIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.85s forwards;
+}
+
+.app-entrance--loading .app-entrance__lockup,
+.app-entrance--reduced .app-entrance__lockup {
+    opacity: 1;
+    transform: none;
+    animation: none;
+}
+
+.app-entrance__lockup .app-entrance__mark {
+    width: 52px;
+    height: 52px;
+    margin: 0;
+    opacity: 1;
+    transform: none;
+    animation: appEntranceMarkGlow 2.4s ease-in-out 1.2s infinite;
+    flex-shrink: 0;
+}
+
+.app-entrance__lockup .app-entrance__mark-svg {
+    width: 26px;
+    height: 26px;
+}
+
+.app-entrance__lockup .app-entrance__pin,
+.app-entrance__lockup .app-entrance__dot {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+}
+
+.app-entrance__lockup-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    min-width: 0;
+}
+
+.app-entrance__lockup .app-entrance__brand,
+.app-entrance__lockup .app-entrance__tagline,
+.app-entrance__plate .app-entrance__greet,
+.app-entrance__plate .app-entrance__bar,
+.app-entrance__plate .app-entrance__status {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+    text-shadow: none;
+}
+
+.app-entrance__lockup .app-entrance__brand {
+    font-size: clamp(1.85rem, 4vw, 2.45rem);
+    letter-spacing: -0.045em;
+    line-height: 1;
+}
+
+.app-entrance__lockup .app-entrance__tagline {
+    margin: 6px 0 0;
+    font-size: 0.92rem;
+    letter-spacing: 0.04em;
+}
+
+.app-entrance__plate .app-entrance__greet {
+    margin: 14px 0 0;
+    min-height: 1.2em;
+}
+
+.app-entrance--reel .app-entrance__greet {
+    opacity: 0 !important;
+}
+
+.app-entrance__meter {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: min(280px, 70vw);
+    margin-top: 22px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.app-entrance--loading .app-entrance__meter,
+.app-entrance--reduced .app-entrance__meter {
+    opacity: 1;
+    transform: none;
+}
+
+.app-entrance__plate .app-entrance__bar {
+    width: 100%;
+    margin-top: 0;
+    opacity: 1;
+}
+
+.app-entrance__plate .app-entrance__status {
+    margin: 12px 0 0;
+    letter-spacing: 0.14em;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    opacity: 0.9;
+}
+
+.app-entrance.is-leaving .app-entrance__plate,
+.app-entrance--enter-map .app-entrance__plate {
+    animation: none;
+    transform: none;
+}
+
+.app-entrance--reduced .app-entrance__still .app-entrance__mascot,
+.app-entrance--reduced .app-entrance__lockup .app-entrance__mark {
+    animation: none !important;
+}
+
+@keyframes appEntranceLockupIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .app-entrance__stage {
     position: relative;
     z-index: 1;
@@ -7920,32 +8673,109 @@ html[data-theme="light"] .app-entrance__vignette {
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: 36px 28px;
-    max-width: 440px;
+    padding: 24px 24px 40px;
+    max-width: 560px;
+    width: min(560px, 94vw);
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+    transition: opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1), transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-entrance--reel .app-entrance__stage {
+    opacity: 0;
+    transform: translateY(22px) scale(0.96);
+    pointer-events: none;
+}
+
+.app-entrance--loading .app-entrance__stage {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.app-entrance--reduced.app-entrance--reel .app-entrance__reel {
+    display: none;
+}
+
+.app-entrance--reduced.app-entrance--reel .app-entrance__stage,
+.app-entrance--reduced.app-entrance--loading .app-entrance__stage {
+    opacity: 1;
+    transform: none;
+    transition: none;
+}
+
+.app-entrance__hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.app-entrance__mascot-wrap {
+    position: relative;
+    width: min(168px, 42vw);
+    height: min(168px, 42vw);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(28px) scale(0.86);
+    animation:
+        appEntranceMascotIn 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.12s forwards,
+        appEntranceMascotFloat 3.6s ease-in-out 1.35s infinite;
+}
+
+.app-entrance__mascot-glow {
+    position: absolute;
+    left: 50%;
+    bottom: 6%;
+    width: 86%;
+    height: 48%;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(45, 212, 191, 0.46) 0%, rgba(20, 184, 166, 0.16) 46%, transparent 74%);
+    filter: blur(14px);
+    pointer-events: none;
+    animation: appEntranceMascotGlow 2.8s ease-in-out 1.2s infinite;
+}
+
+.app-entrance__mascot {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center bottom;
+    filter: drop-shadow(0 18px 28px rgba(7, 17, 31, 0.35));
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
 }
 
 .app-entrance__mark-wrap {
     position: relative;
-    width: 112px;
-    height: 112px;
-    margin-bottom: 26px;
+    z-index: 2;
+    width: 72px;
+    height: 72px;
+    margin-top: -22px;
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: appEntranceMarkWrapBreathe 2.6s ease-in-out 1.1s infinite;
+    animation: appEntranceMarkWrapBreathe 2.6s ease-in-out 1.55s infinite;
 }
 
 .app-entrance__mark-ring {
     position: absolute;
-    inset: 0;
-    border-radius: 28px;
+    inset: -5px;
+    border-radius: 20px;
     border: 1px solid rgba(45, 212, 191, 0.35);
     opacity: 0;
-    animation: appEntranceRing 2.4s ease-out 0.55s infinite;
+    animation: appEntranceRing 2.4s ease-out 1.05s infinite;
 }
 
 .app-entrance__mark-ring--delay {
-    animation-delay: 1.35s;
+    animation-delay: 1.85s;
 }
 
 html[data-theme="light"] .app-entrance__mark-ring {
@@ -7955,9 +8785,9 @@ html[data-theme="light"] .app-entrance__mark-ring {
 .app-entrance__mark {
     position: relative;
     z-index: 1;
-    width: 92px;
-    height: 92px;
-    border-radius: 24px;
+    width: 58px;
+    height: 58px;
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -7965,14 +8795,14 @@ html[data-theme="light"] .app-entrance__mark-ring {
     background:
         linear-gradient(145deg, #2dd4bf 0%, #14b8a6 38%, #0f766e 72%, #115e59 100%);
     box-shadow:
-        0 22px 48px rgba(15, 118, 110, 0.42),
+        0 14px 32px rgba(15, 118, 110, 0.45),
         0 0 0 1px rgba(255, 255, 255, 0.18) inset,
         0 1px 0 rgba(255, 255, 255, 0.28) inset;
     opacity: 0;
-    transform: scale(0.72) translateY(12px);
+    transform: scale(0.66) translateY(14px);
     animation:
-        appEntranceMarkIn 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards,
-        appEntranceMarkGlow 2.2s ease-in-out 1s infinite;
+        appEntranceMarkIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.72s forwards,
+        appEntranceMarkGlow 2.2s ease-in-out 1.6s infinite;
 }
 
 .app-entrance__mark::after {
@@ -7983,14 +8813,14 @@ html[data-theme="light"] .app-entrance__mark-ring {
     pointer-events: none;
     background: radial-gradient(circle at 50% 42%, rgba(94, 234, 212, 0.38) 0%, transparent 62%);
     opacity: 0;
-    animation: appEntranceMarkSheen 2.2s ease-in-out 1.05s infinite;
+    animation: appEntranceMarkSheen 2.2s ease-in-out 1.15s infinite;
 }
 
 .app-entrance__mark-svg {
     position: relative;
     z-index: 1;
-    width: 46px;
-    height: 46px;
+    width: 26px;
+    height: 26px;
     filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.18));
 }
 
@@ -8011,14 +8841,18 @@ html[data-theme="light"] .app-entrance__mark-ring {
 }
 
 .app-entrance__greet {
-    margin: 0 0 8px;
-    font-size: 0.95rem;
-    font-weight: 500;
-    letter-spacing: 0.01em;
+    margin: 14px 0 8px;
+    font-size: 1rem;
+    font-weight: 550;
+    letter-spacing: 0.02em;
     color: #5eead4;
     opacity: 0;
-    transform: translateY(8px);
-    animation: appEntranceFadeUp 0.55s ease 0.35s forwards;
+    transform: translateY(12px);
+    animation: appEntranceFadeUp 0.65s ease 1.05s forwards;
+}
+
+.app-entrance__greet[hidden] {
+    display: none !important;
 }
 
 html[data-theme="light"] .app-entrance__greet {
@@ -8028,15 +8862,15 @@ html[data-theme="light"] .app-entrance__greet {
 .app-entrance__brand {
     margin: 0;
     font-family: var(--font-display, 'Sora', 'IBM Plex Sans', sans-serif);
-    font-size: clamp(2.1rem, 5vw, 2.75rem);
+    font-size: clamp(2.35rem, 6vw, 3.15rem);
     font-weight: 700;
-    letter-spacing: -0.04em;
-    line-height: 1.05;
+    letter-spacing: -0.045em;
+    line-height: 1.02;
     color: #f8fafc;
-    text-shadow: 0 10px 30px rgba(5, 10, 18, 0.35);
+    text-shadow: 0 12px 36px rgba(5, 10, 18, 0.4);
     opacity: 0;
-    transform: translateY(10px);
-    animation: appEntranceFadeUp 0.6s ease 0.28s forwards;
+    transform: translateY(14px) scale(0.96);
+    animation: appEntranceBrandIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) 1.15s forwards;
 }
 
 html[data-theme="light"] .app-entrance__brand {
@@ -8045,14 +8879,14 @@ html[data-theme="light"] .app-entrance__brand {
 }
 
 .app-entrance__tagline {
-    margin: 12px 0 0;
-    font-size: 1rem;
+    margin: 14px 0 0;
+    font-size: 1.0625rem;
     font-weight: 500;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.015em;
     color: rgba(186, 204, 220, 0.92);
     opacity: 0;
-    transform: translateY(8px);
-    animation: appEntranceFadeUp 0.55s ease 0.42s forwards;
+    transform: translateY(10px);
+    animation: appEntranceFadeUp 0.6s ease 1.35s forwards;
 }
 
 html[data-theme="light"] .app-entrance__tagline {
@@ -8061,15 +8895,15 @@ html[data-theme="light"] .app-entrance__tagline {
 
 .app-entrance__bar {
     position: relative;
-    width: min(240px, 58vw);
+    width: min(260px, 62vw);
     height: 4px;
-    margin-top: 32px;
+    margin-top: 34px;
     border-radius: 999px;
     overflow: hidden;
     background: rgba(148, 163, 184, 0.18);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
     opacity: 0;
-    animation: appEntranceFadeUp 0.45s ease 0.55s forwards;
+    animation: appEntranceFadeUp 0.5s ease 1.55s forwards;
 }
 
 html[data-theme="light"] .app-entrance__bar {
@@ -8083,36 +8917,46 @@ html[data-theme="light"] .app-entrance__bar {
     width: 38%;
     border-radius: inherit;
     background: linear-gradient(90deg, #5eead4 0%, #14b8a6 45%, #0f766e 100%);
-    box-shadow: 0 0 16px rgba(45, 212, 191, 0.55);
-    animation: appEntranceBar 1.45s ease-in-out infinite;
+    box-shadow: none;
+    animation: appEntranceBar 4.4s linear infinite;
 }
 
 .app-entrance__status {
     margin: 16px 0 0;
     font-size: 0.875rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: rgba(148, 163, 184, 0.95);
     min-height: 1.25em;
     opacity: 0;
-    animation: appEntranceFadeUp 0.45s ease 0.65s forwards;
+    animation: appEntranceFadeUp 0.5s ease 1.7s forwards;
 }
 
 html[data-theme="light"] .app-entrance__status {
     color: #64748b;
 }
 
-.app-entrance.is-leaving {
+.app-entrance.is-leaving,
+.app-entrance--enter-map {
     pointer-events: none;
-    animation: appEntranceLeave 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: appEntranceLeave 0.48s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.app-entrance.is-leaving .app-entrance__stage {
-    animation: appEntranceStageLeave 0.55s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+.app-entrance.is-leaving .app-entrance__stage,
+.app-entrance--enter-map .app-entrance__stage {
+    animation: appEntranceStageLeave 1.15s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.app-entrance.is-leaving .app-entrance__mascot-wrap,
+.app-entrance--enter-map .app-entrance__mascot-wrap {
+    animation: appEntranceMascotLeave 0.7s cubic-bezier(0.33, 0, 0.2, 1) forwards !important;
 }
 
 .app-entrance--reduced .app-entrance__mark,
 .app-entrance--reduced .app-entrance__mark-wrap,
+.app-entrance--reduced .app-entrance__mascot-wrap,
+.app-entrance--reduced .app-entrance__mascot-glow,
 .app-entrance--reduced .app-entrance__greet,
 .app-entrance--reduced .app-entrance__brand,
 .app-entrance--reduced .app-entrance__tagline,
@@ -8146,6 +8990,38 @@ html[data-theme="light"] .app-entrance__status {
 .app-entrance--reduced .app-entrance__mark-ring {
     opacity: 0.35;
     transform: none;
+}
+
+@keyframes appEntranceMascotIn {
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes appEntranceMascotFloat {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-8px) scale(1.02); }
+}
+
+@keyframes appEntranceMascotGlow {
+    0%, 100% { opacity: 0.55; transform: translateX(-50%) scale(1); }
+    50% { opacity: 0.95; transform: translateX(-50%) scale(1.1); }
+}
+
+@keyframes appEntranceMascotLeave {
+    to {
+        opacity: 0;
+        transform: translateY(-18px) scale(1.08);
+        filter: blur(8px);
+    }
+}
+
+@keyframes appEntranceBrandIn {
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 @keyframes appEntranceMarkIn {
@@ -8200,7 +9076,7 @@ html[data-theme="light"] .app-entrance__status {
 @keyframes appEntranceDot {
     from {
         opacity: 0;
-        transform: scale(0.4);
+        transform: scale(0.86);
     }
     to {
         opacity: 1;
@@ -8214,8 +9090,10 @@ html[data-theme="light"] .app-entrance__status {
 }
 
 @keyframes appEntranceBar {
-    0% { transform: translateX(-130%); }
-    100% { transform: translateX(340%); }
+    0% { transform: translate3d(-130%, 0, 0); opacity: 0; }
+    22% { opacity: 0.9; }
+    78% { opacity: 0.9; }
+    100% { transform: translate3d(280%, 0, 0); opacity: 0; }
 }
 
 @keyframes appEntranceOrb {
@@ -8245,23 +9123,67 @@ html[data-theme="light"] .app-entrance__status {
 }
 
 @keyframes appEntranceLeave {
-    to {
-        opacity: 0;
-        visibility: hidden;
-    }
+    to { opacity: 0; }
 }
 
 @keyframes appEntranceStageLeave {
     to {
         opacity: 0;
-        transform: scale(1.04) translateY(-8px);
-        filter: blur(6px);
+        transform: translateY(-10px);
+    }
+}
+
+@media (max-width: 480px) {
+    .app-entrance__media {
+        height: 46vh;
+        min-height: 180px;
+    }
+
+    .app-entrance__lockup {
+        gap: 10px;
+    }
+
+    .app-entrance__lockup .app-entrance__mark {
+        width: 44px;
+        height: 44px;
+    }
+
+    .app-entrance__mascot-wrap {
+        width: min(140px, 46vw);
+        height: min(140px, 46vw);
+    }
+
+    .app-entrance__mark-wrap {
+        width: 60px;
+        height: 60px;
+        margin-top: -16px;
+    }
+
+    .app-entrance__mark {
+        width: 50px;
+        height: 50px;
+        border-radius: 14px;
+    }
+
+    .app-entrance__mark-svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .app-entrance__stage {
+        padding-top: 12px;
+    }
+
+    .app-entrance__brand {
+        font-size: clamp(2rem, 9vw, 2.5rem);
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .app-entrance__mark,
     .app-entrance__mark-wrap,
+    .app-entrance__mascot-wrap,
+    .app-entrance__mascot-glow,
     .app-entrance__greet,
     .app-entrance__brand,
     .app-entrance__tagline,
@@ -15358,6 +16280,15 @@ html[data-theme="light"] .app-entrance__status {
         padding: 0 14px;
         height: 54px;
     }
+
+    .top-header-content {
+        gap: 12px;
+    }
+
+    .header-brand {
+        max-width: min(280px, 28vw);
+        gap: 9px;
+    }
     
     .header-title {
         font-size: 0.975rem;
@@ -15373,10 +16304,10 @@ html[data-theme="light"] .app-entrance__status {
         width: 20px;
         height: 20px;
     }
-    
-    .header-search {
-        max-width: 280px;
-        margin: 0 auto;
+
+    .header-center {
+        gap: 8px;
+        max-width: 440px;
     }
     
     .sidebar {
@@ -15464,10 +16395,20 @@ html[data-theme="light"] .app-entrance__status {
         height: 16px;
     }
     
+    .header-center {
+        max-width: none;
+        gap: 8px;
+        margin: 0;
+    }
+
+    .header-brand {
+        max-width: min(220px, 36vw);
+    }
+
     .header-search {
         max-width: none;
         flex: 1;
-        margin: 0 10px;
+        margin: 0;
     }
     
     .search-input {
@@ -15480,10 +16421,15 @@ html[data-theme="light"] .app-entrance__status {
         height: 16px;
         left: 10px;
     }
+
+    .map-region-current-chip {
+        max-width: 140px;
+    }
     
     .user-panel {
         gap: 8px;
         padding-left: 10px;
+        margin-left: 0;
     }
     
     .user-avatar {
@@ -15802,9 +16748,19 @@ html[data-theme="light"] .app-entrance__status {
         height: 14px;
     }
     
+    .header-center {
+        gap: 6px;
+    }
+
+    .header-brand {
+        max-width: min(160px, 40vw);
+        gap: 6px;
+    }
+
     .user-panel {
         gap: 6px;
         padding-left: 8px;
+        margin-left: 0;
     }
     
     .user-avatar {
@@ -15972,11 +16928,17 @@ html[data-theme="light"] .app-entrance__status {
     flex-direction: column;
     gap: 2px;
     padding: 6px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    box-shadow: var(--shadow-lg);
+    background: var(--panel-glass-bg);
+    border: 1px solid var(--panel-glass-border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    backdrop-filter: var(--panel-glass-blur-sm);
+    -webkit-backdrop-filter: var(--panel-glass-blur-sm);
     overflow: hidden;
+}
+
+[data-theme="dark"] .map-layer-selector__menu {
+    box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .map-layer-selector__menu[hidden] {
@@ -15990,7 +16952,7 @@ html[data-theme="light"] .app-entrance__status {
 .map-layer-selector__group + .map-layer-selector__group {
     margin-top: 4px;
     padding-top: 6px;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid color-mix(in srgb, var(--panel-glass-border) 80%, var(--border-color));
 }
 
 .map-layer-selector__group-label {
@@ -16006,7 +16968,7 @@ html[data-theme="light"] .app-entrance__status {
 .map-layer-selector__sep {
     height: 1px;
     margin: 4px 6px;
-    background: var(--border-color);
+    background: color-mix(in srgb, var(--panel-glass-border) 80%, var(--border-color));
 }
 
 .map-layer-selector__item {
@@ -16408,13 +17370,15 @@ html[data-theme="light"] .app-entrance__status {
 [class*="balloon__layout"]:has(.network-map-balloon) [class*="balloon__tail"] {
     display: none !important;
 }
-/* Р‘Р°Р»СѓРЅ РІС‹Р±РѕСЂР° РіСЂСѓРїРїС‹ вЂ” РєР°СЂС‚РѕС‡РєР° СЃ С‡С‘С‚РєРѕР№ СЃС‚СЂСѓРєС‚СѓСЂРѕР№ */
+/* Балун выбора группы — glass-карточка в языке панелей */
 .network-map-balloon {
-    background: var(--bg-card) !important;
+    background: var(--panel-glass-bg) !important;
     color: var(--text-primary) !important;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-lg);
+    border-radius: 12px;
+    border: 1px solid var(--panel-glass-border);
+    box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    backdrop-filter: var(--panel-glass-blur-sm);
+    -webkit-backdrop-filter: var(--panel-glass-blur-sm);
     overflow: hidden;
     min-width: 240px;
     max-width: 320px;
@@ -16449,11 +17413,11 @@ html[data-theme="light"] .app-entrance__status {
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 12px 14px;
+    padding: 11px 12px 11px 14px;
     font-weight: 600;
     color: var(--text-primary);
-    background: var(--bg-tertiary);
-    border-bottom: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--panel-glass-surface) 70%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--panel-glass-border) 85%, var(--border-color));
 }
 .group-balloon-title {
     flex: 1;
@@ -16465,36 +17429,37 @@ html[data-theme="light"] .app-entrance__status {
 }
 .group-balloon-close {
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     padding: 0;
-    border: 2px solid var(--border-color);
-    border-radius: var(--radius-md);
-    background: var(--bg-card);
-    color: var(--text-primary);
-    font-size: 20px;
-    font-weight: 700;
+    border: 1px solid color-mix(in srgb, var(--panel-glass-border) 80%, var(--border-color));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+    color: var(--text-secondary);
+    font-size: 16px;
+    font-weight: 600;
     line-height: 1;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background 0.2s, color 0.2s, border-color 0.2s;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    box-shadow: none;
 }
 .group-balloon-close:hover {
-    background: var(--bg-hover);
-    border-color: var(--text-muted);
+    background: color-mix(in srgb, var(--accent-danger) 12%, var(--bg-hover));
+    border-color: color-mix(in srgb, var(--accent-danger) 35%, var(--border-color));
+    color: var(--accent-danger);
 }
 [data-theme="dark"] .group-balloon-close {
-    background: rgba(255, 255, 255, 0.25);
-    border: 2px solid rgba(255, 255, 255, 0.55);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.82);
 }
 [data-theme="dark"] .group-balloon-close:hover {
-    background: rgba(255, 255, 255, 0.4);
-    border-color: rgba(255, 255, 255, 0.75);
-    color: #fff;
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(252, 165, 165, 0.35);
+    color: #fecaca;
 }
 
 /* Р‘Р»РѕРє В«РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹В» вЂ” СЏРІРЅРѕРµ РїРѕР»Рµ Рё Р°РєС†РµРЅС‚РЅР°СЏ РєРЅРѕРїРєР° */
@@ -16533,7 +17498,7 @@ html[data-theme="light"] .app-entrance__status {
 .group-name-input:focus {
     outline: none;
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    box-shadow: 0 0 0 2px var(--accent-primary-soft);
 }
 [data-theme="dark"] .group-name-input {
     background: var(--bg-surface, var(--bg-card));
@@ -16541,7 +17506,7 @@ html[data-theme="light"] .app-entrance__status {
 }
 [data-theme="dark"] .group-name-input:focus {
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+    box-shadow: 0 0 0 2px var(--accent-primary-soft);
 }
 .group-name-save {
     flex-shrink: 0;
@@ -16553,10 +17518,11 @@ html[data-theme="light"] .app-entrance__status {
     cursor: pointer;
     background: var(--accent-primary);
     color: #fff;
-    transition: background 0.2s, transform 0.1s;
+    transition: background 0.2s, filter 0.2s, transform 0.1s;
 }
 .group-name-save:hover {
-    background: #2563eb;
+    background: var(--accent-primary-bright, var(--accent-primary));
+    filter: brightness(1.06);
     color: #fff;
 }
 .group-name-save:active {
@@ -27929,8 +28895,20 @@ body.edit-mode-active .edit-toolbar {
     gap: 5px;
     flex: 1 1 auto;
     min-width: 0;
-    overflow: visible;
-    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 2px 2px 0;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--accent-primary) 35%, transparent) transparent;
+}
+
+.edit-tools-strip::-webkit-scrollbar {
+    height: 4px;
+}
+
+.edit-tools-strip::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+    border-radius: 999px;
 }
 
 .edit-tools-group {
@@ -28068,8 +29046,8 @@ body.edit-mode-active .edit-toolbar {
     background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
 }
 
-/* Уже окна: объекты — только иконки, подписи у Кабель/Регионы */
-@media (max-width: 1360px) {
+/* Средние окна: icon-first, подписи только у Кабель/Зоны */
+@media (max-width: 1480px) {
     .edit-toolbar-label {
         display: none;
     }
@@ -28086,6 +29064,7 @@ body.edit-mode-active .edit-toolbar {
         padding: 4px;
         justify-content: center;
         flex: 0 0 auto;
+        min-width: 28px;
     }
 
     .edit-tools-group:not(.edit-tools-group--actions) {
@@ -28093,7 +29072,8 @@ body.edit-mode-active .edit-toolbar {
     }
 }
 
-@media (max-width: 980px) {
+/* Уже: все чипы — иконки, горизонтальный скролл полосы */
+@media (max-width: 1180px) {
     .edit-tools-strip .object-type-chip__label {
         display: none;
     }
@@ -28103,6 +29083,24 @@ body.edit-mode-active .edit-toolbar {
         padding: 4px;
         justify-content: center;
         flex: 0 0 auto;
+        min-width: 28px;
+    }
+
+    .edit-tool-chip--cable,
+    .edit-tool-chip--region {
+        padding-left: 5px;
+        padding-right: 5px;
+    }
+
+    #moveSelectedToRegionBtn .object-type-chip__label {
+        display: none;
+    }
+
+    #moveSelectedToRegionBtn::before {
+        content: '↦';
+        font-size: 0.875rem;
+        line-height: 1;
+        opacity: 0.9;
     }
 }
 
@@ -28912,14 +29910,15 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    max-width: 220px;
-    height: 34px;
-    min-height: 34px;
-    margin: 0 8px;
-    padding: 0 8px 0 4px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.10);
+    max-width: 200px;
+    height: 36px;
+    min-height: 36px;
+    margin: 0;
+    flex-shrink: 0;
+    padding: 0 10px 0 4px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
     color: #fff;
     font-family: var(--font-sans);
     font-size: 0.8125rem;
@@ -28928,7 +29927,7 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
-    box-shadow: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .map-region-current-chip__icon {
@@ -28936,10 +29935,10 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 7px;
-    background: rgba(255, 255, 255, 0.14);
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
     color: rgba(255, 255, 255, 0.95);
 }
 .map-region-current-chip__icon svg {
@@ -28956,7 +29955,7 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
     align-items: center;
     justify-content: center;
     margin-left: -2px;
-    opacity: 0.62;
+    opacity: 0.55;
     color: rgba(255, 255, 255, 0.9);
 }
 .map-region-current-chip__chevron svg {
@@ -28964,19 +29963,19 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
 }
 .map-region-current-chip[hidden] { display: none !important; }
 .map-region-current-chip:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.24);
 }
 .map-region-current-chip:hover .map-region-current-chip__icon {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.18);
 }
 .map-region-current-chip:hover .map-region-current-chip__chevron {
-    opacity: 0.9;
+    opacity: 0.88;
 }
 .map-region-current-chip:focus-visible {
     outline: none;
-    border-color: rgba(153, 246, 228, 0.65);
-    box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.28);
+    border-color: rgba(94, 234, 212, 0.45);
+    box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.18);
 }
 
 /* Above #appEntranceOverlay (z-index: 2000000) */

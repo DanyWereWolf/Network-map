@@ -61,6 +61,71 @@ function createSelectionPulse(obj) {
     requestAnimationFrame(tick);
 }
 
+function emphasizeSelectedCableColor(hex) {
+    var raw = String(hex || '').trim();
+    var m = raw.match(/^#([0-9a-fA-F]{6})$/);
+    if (!m) return raw || '#14b8a6';
+    var n = parseInt(m[1], 16);
+    var r = (n >> 16) & 255;
+    var g = (n >> 8) & 255;
+    var b = n & 255;
+    var mix = 0.22;
+    r = Math.round(r + (255 - r) * mix);
+    g = Math.round(g + (255 - g) * mix);
+    b = Math.round(b + (255 - b) * mix);
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+function applyCableSelectionHighlight(cable) {
+    if (!cable || !cable.properties || !cable.options) return;
+    if (!cable.properties.get('originalCableSelectOptions')) {
+        cable.properties.set('originalCableSelectOptions', {
+            strokeWidth: cable.options.get('strokeWidth'),
+            strokeColor: cable.options.get('strokeColor'),
+            strokeOpacity: cable.options.get('strokeOpacity'),
+            zIndex: cable.options.get('zIndex')
+        });
+    }
+    var baseWidth = typeof getCableWidth === 'function' ? getCableWidth(cable) : (cable.options.get('strokeWidth') || 2);
+    var baseColor = cable.options.get('strokeColor') ||
+        (typeof getCableColor === 'function' ? getCableColor(cable) : '#0f766e');
+    // If currently hovered, prefer the stored pre-hover color as base.
+    var hoverOrig = cable.properties.get('originalCableOptions');
+    if (hoverOrig && hoverOrig.strokeColor) baseColor = hoverOrig.strokeColor;
+    if (hoverOrig && hoverOrig.strokeWidth != null) baseWidth = hoverOrig.strokeWidth;
+    cable.options.set({
+        strokeWidth: Math.max(Number(baseWidth) || 2, 2) * 2.05,
+        strokeColor: emphasizeSelectedCableColor(baseColor),
+        strokeOpacity: 1,
+        zIndex: 997
+    });
+    if (window.CableUnderground && CableUnderground.syncAerialOverlayStroke) {
+        CableUnderground.syncAerialOverlayStroke(cable);
+    }
+}
+
+function clearCableSelectionHighlight(cable) {
+    if (!cable || !cable.properties || !cable.options) return;
+    var original = cable.properties.get('originalCableSelectOptions');
+    if (!original) return;
+    // Hover may own the live stroke; don't clobber an active hover restore path.
+    if (typeof hoveredObject !== 'undefined' && hoveredObject === cable &&
+        cable.properties.get('originalCableOptions')) {
+        cable.properties.unset('originalCableSelectOptions');
+        return;
+    }
+    cable.options.set({
+        strokeWidth: original.strokeWidth,
+        strokeColor: original.strokeColor,
+        strokeOpacity: original.strokeOpacity,
+        zIndex: original.zIndex != null ? original.zIndex : (typeof CABLE_MAP_Z_INDEX !== 'undefined' ? CABLE_MAP_Z_INDEX : 100)
+    });
+    cable.properties.unset('originalCableSelectOptions');
+    if (window.CableUnderground && CableUnderground.syncAerialOverlayStroke) {
+        CableUnderground.syncAerialOverlayStroke(cable);
+    }
+}
+
 function selectObject(obj) {
     clearShowOnMapHighlight();
     if (!selectedObjects.includes(obj)) {
@@ -69,6 +134,11 @@ function selectObject(obj) {
         const type = obj.properties.get('type');
         
         if (isEditMode && type !== 'crossGroup' && type !== 'nodeGroup') {
+            return;
+        }
+
+        if (type === 'cable') {
+            applyCableSelectionHighlight(obj);
             return;
         }
 
@@ -128,6 +198,11 @@ function deselectObject(obj) {
     removeSelectionPulse(obj);
     
     const type = obj.properties.get('type');
+
+    if (type === 'cable') {
+        clearCableSelectionHighlight(obj);
+        return;
+    }
     
     if (isEditMode && type !== 'crossGroup' && type !== 'nodeGroup') {
         return;

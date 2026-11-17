@@ -18,8 +18,17 @@ var INCREMENTAL_UNDO_MAX_CHANGES = 50;
 
 var _entranceStartedAt = 0;
 var _entranceExitStarted = false;
-var APP_ENTRANCE_MIN_MS = 200;
-var APP_ENTRANCE_EXIT_MS = 280;
+var _entranceReelDone = false;
+var _entranceReelSafetyTimer = null;
+/** Логотипный splash: знак рисуется, слово проявляется, затем карта. */
+var APP_ENTRANCE_LOADING_MS = 3600;
+var APP_ENTRANCE_LOADING_WELCOME_MS = 4200;
+var APP_ENTRANCE_LOADING_REDUCED_MS = 400;
+var APP_ENTRANCE_REEL_FALLBACK_MS = 5200;
+var APP_ENTRANCE_MIN_MS = APP_ENTRANCE_LOADING_MS;
+var APP_ENTRANCE_EXIT_MS = 520;
+var APP_ENTRANCE_EXIT_REDUCED_MS = 140;
+var _entranceWelcomeMode = false;
 
 /** Время на пачку импорта за один шаг. Под оверлеем первой загрузки — больше (UI скрыт). */
 var MAP_BULK_IMPORT_STEP_BUDGET_MS = 40;
@@ -103,13 +112,104 @@ function isAppEntranceActive() {
     return !!(el && !el.hasAttribute('hidden') && !el.classList.contains('is-hidden') && !el.classList.contains('is-leaving'));
 }
 
+function finishAppEntranceReel() {
+    if (_entranceReelDone) return;
+    _entranceReelDone = true;
+    if (_entranceReelSafetyTimer) {
+        clearTimeout(_entranceReelSafetyTimer);
+        _entranceReelSafetyTimer = null;
+    }
+
+    var el = document.getElementById('appEntranceOverlay');
+    if (!el) return;
+
+    // Таймер фазы загрузки стартует после ролика.
+    _entranceStartedAt = Date.now();
+    APP_ENTRANCE_MIN_MS = _entranceWelcomeMode ? APP_ENTRANCE_LOADING_WELCOME_MS : APP_ENTRANCE_LOADING_MS;
+    if (el.classList.contains('app-entrance--reduced')) {
+        APP_ENTRANCE_MIN_MS = APP_ENTRANCE_LOADING_REDUCED_MS;
+    }
+
+    el.classList.remove('app-entrance--reel');
+    el.classList.add('app-entrance--loading');
+
+    var video = document.getElementById('appEntranceVideo');
+    if (video) {
+        try { video.pause(); } catch (ePause) {}
+    }
+
+    var status = el.querySelector('.app-entrance__status');
+    if (status) status.textContent = 'Загрузка карты…';
+
+    // Если карта уже готова — дождёмся минимума loading и откроем.
+    tryCompleteMapInitialLoad();
+}
+
+function startAppEntranceReel() {
+    var el = document.getElementById('appEntranceOverlay');
+    if (!el) return;
+
+    var reduceMotion = el.classList.contains('app-entrance--reduced');
+    var video = document.getElementById('appEntranceVideo');
+
+    if (reduceMotion || !video) {
+        finishAppEntranceReel();
+        return;
+    }
+
+    el.classList.add('app-entrance--reel');
+    el.classList.remove('app-entrance--loading');
+
+    var onDone = function() {
+        finishAppEntranceReel();
+    };
+
+    try {
+        video.currentTime = 0;
+    } catch (eSeek) {}
+    video.muted = true;
+    video.setAttribute('muted', '');
+    video.playsInline = true;
+
+    var played = false;
+    try {
+        var p = video.play();
+        if (p && typeof p.then === 'function') {
+            p.then(function() { played = true; }).catch(function() {
+                onDone();
+            });
+        } else {
+            played = true;
+        }
+    } catch (ePlay) {
+        onDone();
+        return;
+    }
+
+    video.addEventListener('ended', onDone, { once: true });
+    video.addEventListener('error', onDone, { once: true });
+    _entranceReelSafetyTimer = setTimeout(onDone, APP_ENTRANCE_REEL_FALLBACK_MS);
+}
+
 function initAppEntrance() {
     var el = document.getElementById('appEntranceOverlay');
     if (!el) return;
     _entranceStartedAt = Date.now();
+    _entranceExitStarted = false;
+    _entranceReelDone = false;
+    _entranceWelcomeMode = false;
+    if (_entranceReelSafetyTimer) {
+        clearTimeout(_entranceReelSafetyTimer);
+        _entranceReelSafetyTimer = null;
+    }
+
     document.documentElement.classList.add('app-entrance-active');
     el.removeAttribute('hidden');
-    el.classList.remove('is-hidden', 'is-leaving');
+    el.classList.remove(
+        'is-hidden', 'is-leaving', 'app-entrance--ready', 'app-entrance--enter-map',
+        'app-entrance--loading', 'app-entrance--welcome', 'app-entrance--reel'
+    );
+    el.classList.add('app-entrance--logo');
     el.setAttribute('aria-busy', 'true');
 
     var justLoggedIn = false;
@@ -118,49 +218,63 @@ function initAppEntrance() {
         if (justLoggedIn) sessionStorage.removeItem('networkMap_justLoggedIn');
     } catch (eFlag) {}
 
-    if (justLoggedIn) {
+    var greet = document.getElementById('appEntranceGreet');
+    var name = '';
+    try {
+        var session = (typeof getStoredSession === 'function')
+            ? getStoredSession()
+            : (typeof AuthSystem !== 'undefined' && AuthSystem.getCurrentSession
+                ? AuthSystem.getCurrentSession()
+                : null);
+        if (session) name = String(session.fullName || session.username || '').trim();
+    } catch (eName) {}
+
+    _entranceWelcomeMode = !!justLoggedIn;
+    APP_ENTRANCE_EXIT_MS = 520;
+
+    if (justLoggedIn && greet) {
         el.classList.add('app-entrance--welcome');
-        APP_ENTRANCE_MIN_MS = 500;
-        var greet = document.getElementById('appEntranceGreet');
-        var name = '';
-        try {
-            var session = (typeof getStoredSession === 'function')
-                ? getStoredSession()
-                : (typeof AuthSystem !== 'undefined' && AuthSystem.getCurrentSession
-                    ? AuthSystem.getCurrentSession()
-                    : null);
-            if (session) name = String(session.fullName || session.username || '').trim();
-        } catch (eName) {}
-        if (greet) {
-            greet.hidden = false;
-            greet.textContent = name ? ('Добро пожаловать, ' + name) : 'Добро пожаловать';
-        }
-    } else {
-        // Не держим оверлей искусственно — время выбора региона уже идёт в _entranceStartedAt.
-        APP_ENTRANCE_MIN_MS = 0;
+        greet.hidden = false;
+        greet.textContent = name ? ('Добро пожаловать, ' + name) : 'Добро пожаловать';
+    } else if (greet) {
+        greet.hidden = true;
     }
+
+    var status = el.querySelector('.app-entrance__status');
+    if (status) status.textContent = 'Загрузка карты…';
 
     var reduceMotion = false;
     try {
         reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     } catch (eMotion) {}
     if (reduceMotion) {
-        APP_ENTRANCE_MIN_MS = Math.min(APP_ENTRANCE_MIN_MS, 200);
-        APP_ENTRANCE_EXIT_MS = 80;
+        APP_ENTRANCE_EXIT_MS = APP_ENTRANCE_EXIT_REDUCED_MS;
         el.classList.add('app-entrance--reduced');
     }
+
+    _entranceReelDone = true;
+    APP_ENTRANCE_MIN_MS = _entranceWelcomeMode
+        ? APP_ENTRANCE_LOADING_WELCOME_MS
+        : APP_ENTRANCE_LOADING_MS;
+    if (reduceMotion) APP_ENTRANCE_MIN_MS = APP_ENTRANCE_LOADING_REDUCED_MS;
+    _entranceStartedAt = Date.now();
 }
 
 function hideAppEntranceOverlay() {
     var el = document.getElementById('appEntranceOverlay');
     if (!el || _entranceExitStarted) return;
     _entranceExitStarted = true;
-    el.classList.add('is-leaving');
+    el.classList.add('is-leaving', 'app-entrance--enter-map');
+    el.classList.remove('app-entrance--reel', 'app-entrance--loading');
     el.setAttribute('aria-busy', 'false');
+    var video = document.getElementById('appEntranceVideo');
+    if (video) {
+        try { video.pause(); } catch (ePause2) {}
+    }
     setTimeout(function() {
         el.setAttribute('hidden', '');
         el.classList.add('is-hidden');
-        el.classList.remove('is-leaving');
+        el.classList.remove('is-leaving', 'app-entrance--enter-map', 'app-entrance--ready');
         document.documentElement.classList.remove('app-entrance-active');
     }, APP_ENTRANCE_EXIT_MS);
 }
@@ -207,11 +321,34 @@ function setMapLoadingOverlayText(text) {
 window.setMapLoadingOverlayText = setMapLoadingOverlayText;
 
 /**
- * Раньше сбрасывали таймер после выбора региона — из‑за этого после «Открыть»
- * снова ждали 1–2 с min entrance. Больше не обнуляем: время пикера засчитывается.
+ * После выбора региона логотип проигрывается заново, затем карта.
  */
 function resetAppEntranceTimer() {
-    /* no-op: keep _entranceStartedAt from initAppEntrance */
+    _entranceExitStarted = false;
+    _entranceReelDone = true;
+    if (_entranceReelSafetyTimer) {
+        clearTimeout(_entranceReelSafetyTimer);
+        _entranceReelSafetyTimer = null;
+    }
+    var el = document.getElementById('appEntranceOverlay');
+    if (el) {
+        el.classList.remove(
+            'is-leaving', 'app-entrance--enter-map', 'app-entrance--ready',
+            'is-hidden', 'app-entrance--loading', 'app-entrance--reel', 'app-entrance--logo'
+        );
+        void el.offsetWidth;
+        el.classList.add('app-entrance--logo');
+        el.removeAttribute('hidden');
+        el.setAttribute('aria-busy', 'true');
+        document.documentElement.classList.add('app-entrance-active');
+        var status = el.querySelector('.app-entrance__status');
+        if (status) status.textContent = 'Загрузка карты…';
+    }
+    APP_ENTRANCE_MIN_MS = APP_ENTRANCE_LOADING_MS;
+    _entranceStartedAt = Date.now();
+    if (typeof tryCompleteMapInitialLoad === 'function') {
+        try { tryCompleteMapInitialLoad(); } catch (eComplete) {}
+    }
 }
 window.resetAppEntranceTimer = resetAppEntranceTimer;
 
@@ -298,31 +435,34 @@ function finishMapInitialReveal() {
     }
     requestAnimationFrame(function() {
         requestAnimationFrame(function() {
+            var overlay = document.getElementById('appEntranceOverlay');
+            if (overlay) overlay.classList.add('app-entrance--ready');
             var status = document.querySelector('#appEntranceOverlay .map-loading-text');
-            if (status) status.textContent = 'Готово';
-            hideAppEntranceOverlay();
-            hideMapLoadingOverlay();
-            if (myMap && myMap.container) {
-                try { myMap.container.fitToViewport(); } catch (eFit) {}
-            }
-            // Фильтр уже прогоняли в importDataPostProcess — повторный скан 25k сразу после reveal клинит.
-            try {
-                if (typeof applyMapViewportUpdate === 'function') {
-                    setTimeout(function() {
-                        try { applyMapViewportUpdate(); } catch (eVp) {}
-                    }, 300);
+            if (status) status.textContent = 'Открываем карту…';
+            // Короткий beat после полного показа — затем cinematic вход на карту.
+            setTimeout(function() {
+                hideAppEntranceOverlay();
+                hideMapLoadingOverlay();
+                if (myMap && myMap.container) {
+                    try { myMap.container.fitToViewport(); } catch (eFit) {}
                 }
-            } catch (eFilterReveal) {}
-            if (!window.syncIsConnected && typeof showSyncRequiredOverlay === 'function') {
-                showSyncRequiredOverlay();
-            }
-            scheduleWelcomeAfterMapReady();
-            // Dual prefs / warm — отложенно, без мгновенного switch runtime после «Готово».
-            if (typeof MapRuntime !== 'undefined' && MapRuntime.flushPendingAfterLoad) {
-                setTimeout(function() {
-                    try { MapRuntime.flushPendingAfterLoad(); } catch (eFlush) {}
-                }, 1500);
-            }
+                try {
+                    if (typeof applyMapViewportUpdate === 'function') {
+                        setTimeout(function() {
+                            try { applyMapViewportUpdate(); } catch (eVp) {}
+                        }, 300);
+                    }
+                } catch (eFilterReveal) {}
+                if (!window.syncIsConnected && typeof showSyncRequiredOverlay === 'function') {
+                    showSyncRequiredOverlay();
+                }
+                scheduleWelcomeAfterMapReady();
+                if (typeof MapRuntime !== 'undefined' && MapRuntime.flushPendingAfterLoad) {
+                    setTimeout(function() {
+                        try { MapRuntime.flushPendingAfterLoad(); } catch (eFlush) {}
+                    }, 1500);
+                }
+            }, 420);
         });
     });
 }
@@ -339,6 +479,10 @@ function scheduleWelcomeAfterMapReady() {
 function tryCompleteMapInitialLoad() {
     if (!_mapInitialLoadPending) return;
     if (!_mapTilesReady || !_mapDataReady) return;
+    // Сначала ролик, потом загрузка, потом карта.
+    if (!_entranceReelDone) return;
+    // Пока идёт выбор региона — не открываем карту под модалкой.
+    if (typeof isMapRegionPickerAwaiting === 'function' && isMapRegionPickerAwaiting()) return;
     _mapInitialLoadPending = false;
     if (_mapLoadSafetyTimer) {
         clearTimeout(_mapLoadSafetyTimer);
@@ -347,6 +491,8 @@ function tryCompleteMapInitialLoad() {
     var started = _entranceStartedAt || Date.now();
     var elapsed = Date.now() - started;
     var wait = Math.max(0, APP_ENTRANCE_MIN_MS - elapsed);
+    var status = document.querySelector('#appEntranceOverlay .map-loading-text');
+    if (status && wait > 80) status.textContent = 'Ещё мгновение…';
     setTimeout(finishMapInitialReveal, wait);
 }
 

@@ -43,7 +43,7 @@
         "inLanguage": "ru"
     }
     </script>
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=mark2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -294,9 +294,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #0a1628;
+            background: #060d16;
         }
-        html[data-theme="light"] .app-entrance { background: #e8eef3; }
+        html[data-theme="light"] .app-entrance { background: #d7e0e8; }
         .app-entrance[hidden],
         .app-entrance.is-hidden { display: none !important; }
         html.app-entrance-active,
@@ -342,8 +342,20 @@
 </head>
 <body>
     <!-- ????????????? ???? ????? ?????? / ??? ???????? ????? -->
-    <div id="appEntranceOverlay" class="app-entrance" role="status" aria-live="polite" aria-busy="true" aria-label="???????? ??????????">
+    <div id="appEntranceOverlay" class="app-entrance app-entrance--logo" role="status" aria-live="polite" aria-busy="true" aria-label="Загрузка приложения">
         <div class="app-entrance__bg" aria-hidden="true">
+            <div class="app-entrance__sky"></div>
+            <div class="app-entrance__radar" aria-hidden="true">
+                <span class="app-entrance__radar-ring"></span>
+                <span class="app-entrance__radar-ring"></span>
+                <span class="app-entrance__radar-ring"></span>
+                <span class="app-entrance__radar-sweep"></span>
+                <span class="app-entrance__radar-core"></span>
+            </div>
+            <div class="app-entrance__beam"></div>
+            <div class="app-entrance__ground"></div>
+            <div class="app-entrance__horizon-line"></div>
+            <div class="app-entrance__grain"></div>
             <div class="app-entrance__wash"></div>
             <div class="app-entrance__orb app-entrance__orb--a"></div>
             <div class="app-entrance__orb app-entrance__orb--b"></div>
@@ -355,12 +367,14 @@
                 <span class="app-entrance__ring app-entrance__ring--2"></span>
                 <span class="app-entrance__ring app-entrance__ring--3"></span>
             </div>
+            <div class="app-entrance__spot"></div>
+            <div class="app-entrance__floor"></div>
             <div class="app-entrance__vignette"></div>
         </div>
-        <div class="app-entrance__stage">
-            <div class="app-entrance__mark-wrap" aria-hidden="true">
-                <span class="app-entrance__mark-ring"></span>
-                <span class="app-entrance__mark-ring app-entrance__mark-ring--delay"></span>
+        <div class="app-entrance__plate app-entrance__logo">
+            <div class="app-entrance__emblem" aria-hidden="true">
+                <span class="app-entrance__emblem-ring"></span>
+                <span class="app-entrance__emblem-ring app-entrance__emblem-ring--b"></span>
                 <div class="app-entrance__mark">
                     <svg class="app-entrance__mark-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path class="app-entrance__pin" d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -368,13 +382,17 @@
                     </svg>
                 </div>
             </div>
-            <p class="app-entrance__greet" id="appEntranceGreet" hidden></p>
-            <h1 class="app-entrance__brand">Volsmap</h1>
-            <p class="app-entrance__tagline">????? ?????????? ????</p>
-            <div class="app-entrance__bar" aria-hidden="true">
-                <span class="app-entrance__bar-fill"></span>
+            <div class="app-entrance__word">
+                <h1 class="app-entrance__brand"><span class="app-entrance__brand-text">Volsmap</span></h1>
+                <p class="app-entrance__tagline">Карта оптической сети</p>
             </div>
-            <p class="app-entrance__status map-loading-text">???????? ??????</p>
+            <p class="app-entrance__greet" id="appEntranceGreet" hidden></p>
+            <div class="app-entrance__meter">
+                <div class="app-entrance__bar" aria-hidden="true">
+                    <span class="app-entrance__bar-fill"></span>
+                </div>
+                <p class="app-entrance__status map-loading-text">Загрузка карты…</p>
+            </div>
         </div>
     </div>
     <script>document.documentElement.classList.add('app-entrance-active');</script>
@@ -382,7 +400,7 @@
     <header class="top-header">
         <div class="top-header-content">
             <div class="header-brand">
-                <span class="header-title-icon" aria-hidden="true" title="????? ?????????? ????">
+                <span class="header-title-icon" aria-hidden="true" title="Карта оптической сети">
                     <span class="header-title-icon-ring"></span>
                     <svg class="header-title-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path class="header-title-icon-pin" d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
@@ -390,35 +408,37 @@
                     </svg>
                 </span>
                 <div class="header-brand-text">
-                    <h1 class="header-title">????? ?????????? ????</h1>
-                    <p class="header-tagline">????, ?????? ? GPON ?? ????? ?????</p>
+                    <h1 class="header-title">Карта оптической сети</h1>
+                    <p class="header-tagline">Узлы, кабели и GPON на одной карте</p>
                 </div>
             </div>
-            <!-- ????? ?? ????? -->
-            <div class="header-search">
-                <div class="search-wrapper">
-                    <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <path d="m21 21-4.35-4.35"></path>
-                    </svg>
-                    <input type="text" id="mapSearch" class="search-input" placeholder="????? ????????..." autocomplete="off">
-                    <button id="clearSearch" class="search-clear" style="display: none;">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
+            <div class="header-center">
+                <!-- Поиск по карте -->
+                <div class="header-search">
+                    <div class="search-wrapper">
+                        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
                         </svg>
-                    </button>
+                        <input type="text" id="mapSearch" class="search-input" placeholder="Поиск объектов..." autocomplete="off">
+                        <button id="clearSearch" class="search-clear" style="display: none;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="searchResults" class="search-results" style="display: none;"></div>
                 </div>
-                <div id="searchResults" class="search-results" style="display: none;"></div>
+                <button type="button" id="mapRegionCurrentChip" class="map-region-current-chip" hidden title="Текущий регион">Регион</button>
             </div>
-            <button type="button" id="mapRegionCurrentChip" class="map-region-current-chip" hidden title="??????? ??????">??????</button>
-            <!-- ?????? ???????????? -->
+            <!-- Панель пользователя -->
             <div class="user-panel">
                 <div class="user-info" id="userInfo">
-                    <div class="user-avatar" id="userAvatar" role="button" tabindex="0" title="??????? ?????? ???????">?</div>
+                    <div class="user-avatar" id="userAvatar" role="button" tabindex="0" title="Открыть личный кабинет">А</div>
                     <div class="user-details">
-                        <span class="user-name" id="userName">????????????</span>
-                        <span class="user-role" id="userRole">????</span>
+                        <span class="user-name" id="userName">Пользователь</span>
+                        <span class="user-role" id="userRole">Роль</span>
                     </div>
                 </div>
                 <div class="user-menu">
@@ -1267,7 +1287,7 @@
                                     </div>
 
                                     <div class="stats-group" id="statsGroupEquip">
-                                        <p class="stats-group-label"><span>????????????</span><span class="stats-group-sum" id="statsSumEquip">0</span></p>
+                                        <p class="stats-group-label"><span>Пользователь</span><span class="stats-group-sum" id="statsSumEquip">0</span></p>
                                         <div class="stats-grid">
                                             <div class="stat-item stat-item--tone-slate" data-stat-key="camera">
                                                 <div class="stat-icon" aria-hidden="true"></div>
@@ -2276,7 +2296,7 @@
                                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                             </svg>
                         </span>
-                        <span class="section-title">????????????</span>
+                        <span class="section-title">Пользователь</span>
                         <span id="orgSecuritySummaryMeta" class="org-settings-summary-meta"></span>
                     </summary>
                     <div class="org-settings-body">
@@ -2528,7 +2548,7 @@
                                         </svg>
                                     </span>
                                     <span class="user-edit-role-text">
-                                        <span class="user-edit-role-title">????????????</span>
+                                        <span class="user-edit-role-title">Пользователь</span>
                                         <span class="user-edit-role-desc">???????? ? ?????? ? ??????</span>
                                     </span>
                                 </span>

@@ -672,9 +672,11 @@ function showHoverCircle(obj, e) {
             const zoom = myMap.getZoom();
             const radius = zoom < 12 ? 0.00025 : (zoom < 15 ? 0.00015 : 0.0001);
             
+            var cableHoverColor = emphasizeMapLineColor(resolveCableDisplayColor(obj));
             hoverCircle = new ymaps.Circle([nearestPoint, radius], {}, {
-                fillColor: 'rgba(59, 130, 246, 0.2)',
-                strokeColor: '#3b82f6',
+                fillColor: cableHoverColor,
+                fillOpacity: 0.18,
+                strokeColor: cableHoverColor,
                 strokeWidth: 2,
                 strokeStyle: 'solid',
                 zIndex: 999,
@@ -689,27 +691,26 @@ function showHoverCircle(obj, e) {
         const zoom = myMap.getZoom();
         const radius = zoom < 12 ? 0.00025 : (zoom < 15 ? 0.00018 : 0.00012);
 
-        let fillColor = 'rgba(59, 130, 246, 0.15)';
-        let strokeColor = '#3b82f6';
+        let strokeColor = '#14b8a6';
         let strokeWidth = 2.5;
         const isGroup = type === 'crossGroup' || type === 'nodeGroup';
-        
-        if (type === 'node') {
-            const nodeKind = obj.properties.get('nodeKind') || 'network';
-            if (nodeKind === 'aggregation') {
-                strokeColor = '#ef4444';
-                fillColor = 'rgba(239, 68, 68, 0.18)';
-            } else {
-                strokeColor = '#22c55e';
-                fillColor = 'rgba(34, 197, 94, 0.18)';
+        if (window.MapIcons && MapIcons.COLORS) {
+            if (type === 'node' && typeof MapIcons.getNodeColor === 'function') {
+                strokeColor = MapIcons.getNodeColor(obj.properties.get('nodeKind')) || strokeColor;
+            } else if (type === 'crossGroup' && MapIcons.COLORS.cross) {
+                strokeColor = MapIcons.COLORS.cross;
+            } else if (type === 'nodeGroup' && MapIcons.COLORS.node) {
+                strokeColor = MapIcons.COLORS.node;
+            } else if (MapIcons.COLORS[type]) {
+                strokeColor = MapIcons.COLORS[type];
             }
-        } else if (isGroup) {
-            fillColor = 'rgba(59, 130, 246, 0.25)';
-            strokeWidth = 4;
         }
+        if (isGroup) strokeWidth = 4;
+        const fillColor = strokeColor;
         
         hoverCircle = new ymaps.Circle([coords, radius], {}, {
             fillColor: fillColor,
+            fillOpacity: isGroup ? 0.22 : 0.15,
             strokeColor: strokeColor,
             strokeWidth: strokeWidth,
             strokeStyle: 'solid',
@@ -728,6 +729,31 @@ function removeHoverCircle() {
     }
 }
 
+function emphasizeMapLineColor(hex) {
+    var raw = String(hex || '').trim();
+    var m = raw.match(/^#([0-9a-fA-F]{6})$/);
+    if (!m) return raw || '#14b8a6';
+    var n = parseInt(m[1], 16);
+    var r = (n >> 16) & 255;
+    var g = (n >> 8) & 255;
+    var b = n & 255;
+    var mix = 0.32;
+    r = Math.round(r + (255 - r) * mix);
+    g = Math.round(g + (255 - g) * mix);
+    b = Math.round(b + (255 - b) * mix);
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+function resolveCableDisplayColor(cable) {
+    if (!cable || !cable.options) {
+        return (typeof getCableColor === 'function' ? getCableColor(cable) : null) || '#0f766e';
+    }
+    var current = cable.options.get('strokeColor');
+    if (current) return current;
+    if (typeof getCableColor === 'function') return getCableColor(cable);
+    return '#0f766e';
+}
+
 function highlightCableOnHover(cable) {
     if (!cable || !cable.properties) return;
 
@@ -740,14 +766,14 @@ function highlightCableOnHover(cable) {
         cable.properties.set('originalCableOptions', originalOptions);
     }
 
-    const cableType = cable.properties.get('cableType');
-    const normalWidth = getCableWidth(cable);
-    const normalColor = getCableColor(cable);
-    
+    const normalWidth = typeof getCableWidth === 'function' ? getCableWidth(cable) : (cable.options.get('strokeWidth') || 2);
+    const baseColor = resolveCableDisplayColor(cable);
+    const hoverColor = emphasizeMapLineColor(baseColor);
+
     cable.options.set({
-        strokeWidth: normalWidth * 1.8,
-        strokeColor: '#60a5fa', 
-        strokeOpacity: 0.95,
+        strokeWidth: Math.max(Number(normalWidth) || 2, 2) * 1.75,
+        strokeColor: hoverColor,
+        strokeOpacity: 0.96,
         zIndex: 998
     });
     if (window.CableUnderground && CableUnderground.syncAerialOverlayStroke) {
