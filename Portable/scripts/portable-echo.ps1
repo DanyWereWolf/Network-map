@@ -18,6 +18,25 @@ function Show([string[]]$Lines) {
     }
 }
 
+function Get-BootstrapLogin {
+    $user = 'admin'
+    $pass = 'admin123'
+    $candidates = @(
+        (Join-Path $PSScriptRoot '..\server-config.json'),
+        (Join-Path $PSScriptRoot '..\server\config\server-config.example.json')
+    )
+    foreach ($cfgPath in $candidates) {
+        if (-not (Test-Path -LiteralPath $cfgPath)) { continue }
+        try {
+            $cfg = [System.IO.File]::ReadAllText($cfgPath) | ConvertFrom-Json
+            if ($cfg.bootstrapAdminUsername) { $user = [string]$cfg.bootstrapAdminUsername }
+            if ($cfg.bootstrapAdminPassword) { $pass = [string]$cfg.bootstrapAdminPassword }
+            break
+        } catch {}
+    }
+    return @{ User = $user; Pass = $pass }
+}
+
 switch ($Id) {
     'banner' {
         Show @(
@@ -70,13 +89,15 @@ switch ($Id) {
         Show @('Подготовка конфига и папок данных...')
     }
     'starting' {
+        $login = Get-BootstrapLogin
         Show @(
             'Запускаем сервер...',
             '',
             '============================================',
             "  Откройте:  http://localhost:$A1",
-            '  Логин:     admin',
-            '  Пароль:    admin123  (если не меняли в server-config.json)',
+            "  Логин:     $($login.User)",
+            "  Пароль:    $($login.Pass)",
+            '  Если пароль уже меняли в программе, вводите новый.',
             '  Остановка: Ctrl+C',
             '============================================',
             ''

@@ -961,12 +961,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     try { sessionStorage.setItem('networkMap_justLoggedIn', '1'); } catch (eFlag) {}
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
-                        var u = result.user || {};
-                        if (u.role === 'admin' && (u.username || '').toLowerCase() === 'admin') {
-                            window.location.href = 'site-admin.html';
-                        } else {
-                            window.location.href = 'index.html';
-                        }
+                        window.location.href = 'index.html';
                     }, 600);
                 } else {
                     showMessage(result.error, 'error');
@@ -988,12 +983,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     try { sessionStorage.setItem('networkMap_justLoggedIn', '1'); } catch (eFlag) {}
                     showMessage('Вход выполнен успешно! Перенаправление...', 'success');
                     setTimeout(function() {
-                        var u = result.user || {};
-                        if (u.role === 'admin' && (u.username || '').toLowerCase() === 'admin') {
-                            window.location.href = 'site-admin.html';
-                        } else {
-                            window.location.href = 'index.html';
-                        }
+                        window.location.href = 'index.html';
                     }, 600);
                 } else if (result.requiresTotp && result.pendingLoginId) {
                     pendingLoginId = result.pendingLoginId;

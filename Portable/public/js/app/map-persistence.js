@@ -536,7 +536,7 @@ function diffMapSnapshots(fromState, toState) {
     var crossKeySet = Object.create(null);
     function trackItem(item) {
         if (!item) return;
-        if (item.type === 'region' || type === 'zone' || item.type === 'zone') diff.hasRegion = true;
+        if (item.type === 'region' || item.type === 'zone') diff.hasRegion = true;
         if (item.type === 'node' && item.geometry) {
             var nk = groupKey(item.geometry);
             if (!nodeKeySet[nk]) { nodeKeySet[nk] = true; diff.nodeGroupKeys.push(nk); }
@@ -610,7 +610,12 @@ function finishIncrementalUndoRedoRefresh(diff, done) {
 }
 
 function tryApplyMapStateIncrementally(fromState, toState, done) {
-    var diff = diffMapSnapshots(fromState, toState);
+    var diff;
+    try {
+        diff = diffMapSnapshots(fromState, toState);
+    } catch (eDiff) {
+        return false;
+    }
     if (!diff) return false;
     if (diff.changeCount === 0) {
         requestAnimationFrame(function() { if (typeof done === 'function') done(); });
@@ -2066,7 +2071,7 @@ function applyRemoteStateMerged(data) {
     for (i = 0; i < data.length; i++) {
         item = data[i];
         if (item.type === 'cable') continue;
-        if (item.type === 'region' || type === 'zone' || item.type === 'zone') {
+        if (item.type === 'region' || item.type === 'zone') {
             existing = regionByUid.get(item.uniqueId);
             if (existing) {
                 populateRegionFromSerializedData(existing, item);
@@ -2450,7 +2455,7 @@ function applyOperationToMap(op) {
                 return;
             }
         }
-        if (op.data.type === 'region' || type === 'zone' || op.data.type === 'zone') {
+        if (op.data.type === 'region' || op.data.type === 'zone') {
             var newRegion = createRegionFromData(op.data);
             if (newRegion) {
                 updateStats();
