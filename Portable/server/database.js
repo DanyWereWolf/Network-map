@@ -870,6 +870,8 @@ function ensureMapRegionsMigrated(orgId) {
         }
     }
     var defaultId = String(o.defaultMapRegionId || regions[0].id);
+    var knownRegionIds = Object.create(null);
+    for (var ri = 0; ri < regions.length; ri++) knownRegionIds[regions[ri].id] = 1;
     var arr = getRawMapDataArray(orgId);
     if (!s.mapDataByOrg) s.mapDataByOrg = {};
     var mapKey = key;
@@ -883,7 +885,10 @@ function ensureMapRegionsMigrated(orgId) {
         var item = items[i];
         if (!item || typeof item !== 'object') continue;
         if (mapRegionsCore.migrateZoneFieldsOnItem(item)) changed = true;
-        if (!mapRegionsCore.itemMapRegionId(item)) {
+        // Бэкап раньше не хранил список регионов: у объектов оставались старые mapRegionId,
+        // а регион «Основной» создавался пустым — карта грузила 0 объектов.
+        var itemRegionId = mapRegionsCore.itemMapRegionId(item);
+        if (!itemRegionId || !knownRegionIds[itemRegionId]) {
             item.mapRegionId = defaultId;
             changed = true;
         }
@@ -1785,6 +1790,16 @@ function deleteSessionsForUser(userId) {
     saveStore();
 }
 
+function snapshotOrgSettings(orgId) {
+    var rec = getSettingsOrgRecord(orgId);
+    if (!rec || typeof rec !== 'object') return {};
+    try {
+        return JSON.parse(JSON.stringify(rec));
+    } catch (e) {
+        return {};
+    }
+}
+
 function getSettingsOrgRecord(orgId) {
     if (!orgId) return null;
     const s = loadStore();
@@ -2208,7 +2223,7 @@ async function createDailyBackupAsync() {
             createdAt: new Date().toISOString(),
             mapData: getMapData(orgId),
             history: getHistory(orgId),
-            settings: getSettings(orgId)
+            settings: snapshotOrgSettings(orgId)
         };
         // Не затираем сегодняшний непустой бэкап пустым
         if (fs.existsSync(backupPath)) {
@@ -2320,6 +2335,7 @@ function restoreFromBackup(orgId, filename, opts) {
     if (opts.force) allowDangerousSaveOnce = true;
     try {
         saveStore();
+        try { ensureMapRegionsMigrated(orgId); } catch (eMig) {}
     } finally {
         if (opts.force) allowDangerousSaveOnce = false;
     }

@@ -642,15 +642,17 @@ app.get('/api/map', (req, res) => {
                 code: 'MAP_REGION_REQUIRED'
             });
         }
+        var mig = null;
         if (orgId && db.ensureMapRegionsMigrated) {
-            try { db.ensureMapRegionsMigrated(orgId); } catch (eMig) {}
+            try { mig = db.ensureMapRegionsMigrated(orgId); } catch (eMig) { mig = null; }
         }
+        if (mig && mig.changed) dropSyncMapCache(orgId);
         // Живое sync-состояние приоритетнее store: иначе reload до debounce (1.5с)
         // отдаёт карту без только что добавленного кабеля.
         // Не вызываем getSyncStateForOrg на cold path — он deepClone всей org-карты (~21k).
         var full = [];
+        var live = null;
         if (orgId) {
-            var live = null;
             try {
                 var syncKey = normalizeSyncOrgId(orgId);
                 if (syncKey && syncCurrentStateByOrg[syncKey] && Array.isArray(syncCurrentStateByOrg[syncKey].data)) {
@@ -665,6 +667,15 @@ app.get('/api/map', (req, res) => {
         }
         var core = db.mapRegionsCore;
         var data = core ? core.filterItemsByRegionId(full, regionId) : full;
+        // Кэш синхронизации мог остаться со старыми mapRegionId — тогда срез региона пустой, а в store объекты есть.
+        if (orgId && data.length === 0 && live && Array.isArray(live.data) && live.data.length > 0) {
+            var dbFull = db.getMapData(orgId) || [];
+            var dbSlice = core ? core.filterItemsByRegionId(dbFull, regionId) : dbFull;
+            if (dbSlice.length > 0) {
+                data = dbSlice;
+                dropSyncMapCache(orgId);
+            }
+        }
         var objectCount = data.length;
         var softWarn = core ? core.softWarnForCount(objectCount) : null;
         var meta = db.getMapRegionsMeta ? db.getMapRegionsMeta(orgId) : null;
@@ -694,8 +705,10 @@ app.get('/api/map-regions', (req, res) => {
         }
         var orgId = user.organizationId;
         if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
-        // Подтянуть live sync перед подсчётом
-        try { getSyncStateForOrg(orgId, { forceFromDb: false }); } catch (eLive) {}
+        var migRegions = null;
+        try { migRegions = db.ensureMapRegionsMigrated(orgId); } catch (eMig) { migRegions = null; }
+        if (migRegions && migRegions.changed) dropSyncMapCache(orgId);
+        try { getSyncStateForOrg(orgId, { forceFromDb: !!(migRegions && migRegions.changed) }); } catch (eLive) {}
         var payload = db.listMapRegionsWithCounts(orgId);
         res.json(payload);
     } catch (e) {
@@ -4601,6 +4614,13 @@ function normalizeSyncOrgId(orgId) {
 function syncOrgIdsEqual(a, b) {
     if (a == null || b == null) return false;
     return String(a) === String(b);
+}
+
+function dropSyncMapCache(orgId) {
+    var key = normalizeSyncOrgId(orgId);
+    if (!key) return;
+    delete syncCurrentStateByOrg[key];
+    if (syncStateFingerprintByOrg) delete syncStateFingerprintByOrg[key];
 }
 
 function getSyncStateForOrg(orgId, options) {
