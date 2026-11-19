@@ -43,7 +43,6 @@ DATA_DIR   = ROOT_DIR/data
 | `maxConcurrentUsers` | Одновременные сессии организации |
 | `storage` | `"json"` или `"mysql"` |
 | `mysql` | `{ host, port, user, password, database, connectionLimit }` |
-| `turnstileSiteKey`, `turnstileSecretKey` | Cloudflare Turnstile |
 | `authRateLimitWindowMs`, `authRateLimitMax` | Лимит попыток входа с IP |
 
 ## Статика
@@ -84,7 +83,8 @@ app.use(express.static(PUBLIC_DIR));
 
 | Файл | Назначение |
 |------|------------|
-| `security.js` | Проверка Turnstile, rate limiting, TOTP для 2FA организации |
+| `security.js` | Rate limiting входа, TOTP для 2FA организации, pending login |
+| `basemap.js` | GeoTIFF→XYZ-тайлы, квоты packs (см. [ONPREM-BASEMAP.md](ONPREM-BASEMAP.md)) |
 | `support-bot.js` | Обработка обращений в чат поддержки |
 
 ## `database.js`
@@ -223,8 +223,8 @@ npm run restore:mysql -- --dump data/backups/full/mysqldump-network_map-….sql 
 
 ## Безопасность
 
-- Turnstile на login/register
-- Лимит попыток auth с IP
+- Лимит попыток auth с IP (`authRateLimitWindowMs` / `authRateLimitMax`)
+- Опциональная 2FA организации (TOTP)
 - Роли: глобальный admin (`site-admin`), admin организации, user (только просмотр)
 - Размер тела запроса и WebSocket ограничены в `server-api.js`
 - Секреты только в `server-config.json` (не в git)

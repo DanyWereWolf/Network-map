@@ -76,12 +76,16 @@
 | Ключ | Зачем |
 |------|--------|
 | `port` / `host` | Порт и адрес прослушивания (по умолчанию порт `3000`) |
-| `mapEngine` | `yandex` или `leaflet` |
-| `yandexMapsApiKey` | Ключ Яндекс.Карт (если нужны онлайн-слои) |
+| `mapEngine` | `yandex` (онлайн-слои) или `leaflet` (локальная подложка / ортофото) |
+| `yandexMapsApiKey` | Ключ Яндекс.Карт (если `mapEngine: yandex`) |
+| `storage` | `json` (по умолчанию) или `mysql` |
+| `mysql` | Параметры БД при `storage: mysql` |
 | `bootstrapAdminUsername` / `Password` | Первичный админ |
 | `organizationName` | Название организации |
 
-Данные карты и пользователей: `data/store.json` (или MySQL, если в конфиге `storage: mysql`).
+Данные карты и пользователей: `data/store.json` (или MySQL при `storage: mysql`). Лимиты объектов в Portable отключены.
+
+После входа: пользователи организации, бэкапы, при необходимости Zabbix/embed и загрузка ортофото (Leaflet). Подробности для разработчиков — в `README.md` поставки и в документации репозитория (`docs/ONPREM-BASEMAP.md`).
 
 ## 6. Доступ из сети
 

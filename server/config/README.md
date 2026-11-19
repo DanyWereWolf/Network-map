@@ -29,10 +29,10 @@ cp server/config/server-config.example.json server-config.json
 | `basemapMaxUploadGb` | `8` | Макс. размер одного GeoTIFF |
 | `yandexMapsApiKey` | — | Ключ Яндекс.Карт (для `mapEngine: yandex`) |
 | `publicSiteUrl` | — | Публичный URL сайта |
-| `freeMapObjectLimit` | `2000` | Лимит объектов на карте |
+| `freeMapObjectLimit` | `20000` | Лимит объектов на карте (облако; в Portable отключён) |
 | `maxConcurrentUsers` | `4` | Одновременные пользователи организации |
-| `smartCaptchaClientKey` | — | Yandex SmartCaptcha (клиент, `ysc1_…`) |
-| `smartCaptchaServerKey` | — | Yandex SmartCaptcha (сервер, `ysc2_…`) |
+| `storage` | `json` | `json` или `mysql` |
+| `mysql` | — | Параметры пула MySQL при `storage: mysql` |
 | `authRateLimitWindowMs` | `900000` | Окно rate limit (15 мин) |
 | `authRateLimitMax` | `20` | Попыток входа за окно |
 

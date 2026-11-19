@@ -2,12 +2,12 @@
 
 ## Требования
 
-- **Node.js** 18+ (LTS рекомендуется)
+- **Node.js** ≥ **20.9** (см. `engines` в `package.json`)
 - **npm**
 - Ключ [API Яндекс.Карт](https://developer.tech.yandex.ru/) в `server-config.json` (если `mapEngine` не `leaflet`)
 - On-prem ортофото: `mapEngine: "leaflet"` + GDAL — см. [ONPREM-BASEMAP.md](ONPREM-BASEMAP.md)
-- Для входа локально — тестовые ключи Turnstile уже в шаблоне конфига
 - Опционально **MySQL 8+** (режим `storage: "mysql"`)
+- Portable-сборка для заказчика: каталог `Portable/` — см. [../Portable/README.md](../Portable/README.md)
 
 ## Первый запуск
 
@@ -73,8 +73,6 @@ npm run verify
 | `PORT` | `port` |
 | `HOST` | `host` |
 | `SERVE_OBFUSCATED_CLIENT` | `serveObfuscatedClient` (`1` / `true` — раздавать `dist/` после `npm run build`) |
-| `TURNSTILE_SITE_KEY` | `turnstileSiteKey` |
-| `TURNSTILE_SECRET_KEY` | `turnstileSecretKey` |
 | `AUTH_RATE_LIMIT_WINDOW_MS` | `authRateLimitWindowMs` |
 | `AUTH_RATE_LIMIT_MAX` | `authRateLimitMax` |
 | `DB_PATH` | Путь к БД (legacy: подмена расширения `.db` → `-store.json`) |
@@ -91,6 +89,7 @@ npm run verify
 1. `public/js/core/config.js` — `APP_VERSION`
 2. `package.json` — поле `version`
 3. `README.md` — раздел «История изменений»
+4. Для Portable (если релиз on-prem): `Portable/public/js/core/config.js`, `Portable/package.json`, затем `cd Portable && npm run release`
 
 ### Добавить клиентский модуль
 

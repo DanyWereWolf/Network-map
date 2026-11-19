@@ -116,6 +116,20 @@ flowchart LR
 - Предпочитать `scheduleConnectionLinesUpdate(uid)` вместо `updateAllConnectionLines()`.
 - Attach опоры к кабелям на dragend всегда откладывать в idle (скан кабелей дорогой).
 
+## Подземные участки и колодцы
+
+Модуль `js/map/cable-underground.js` (+ вызовы из `cable-helpers.js`, `object-modals.js`, `fiber-trace.js`):
+
+| Понятие | Поведение |
+|---------|-----------|
+| Колодец | Точка трассы ВОЛС; участок **между соседними колодцами** всегда подземный |
+| `undergroundSpans` | Массив сегментов на кабеле (индексы точек / pathCoords), сериализуется в persist |
+| Отображение | Подземка — пунктир-overlay; воздух — обычная линия после выхода на опору/крепление |
+| Перепрокладка | Клик по пунктиру или «Проложить заново» в карточке колодца |
+| Drag | На кадре drag — только light `setCoordinates`; recreate overlays — в idle/`updateConnectedCables` |
+
+Движок карты: `map-engine.js` (`yandex` / `leaflet`) + `leaflet-ymaps-shim.js` для on-prem.
+
 ## Стили
 
 | Файл | Страницы |
@@ -130,6 +144,7 @@ flowchart LR
 
 ## Соглашения
 
-- Новые типы объектов: иконки в `js/map/map-icons.js`, фильтр в `main.js` (`applyMapFilter`)
+- Новые типы объектов: иконки в `js/map/map-icons.js`, фильтр в `main.js` (`applyMapFilter`), строка в справке `ui/help.js`
 - Уникальный id: `getObjectUniqueId()` + регистрация в `MapPerf.registerMapObject`
 - Не вызывать `updateAllConnectionLines()` напрямую без необходимости — предпочтительно `scheduleConnectionLinesUpdate(uid)`
+- Общие правки карты (основа + Portable): синхронизируйте зеркальные файлы в `Portable/public/`, не тащите SaaS-only UI в Portable

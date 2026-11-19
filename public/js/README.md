@@ -47,7 +47,7 @@
 | **map-icons.js** | SVG-иконки типов объектов |
 | **search.js** | Поиск по карте в шапке |
 | **regions.js** | Полигоны регионов, видимость, подсчёт объектов |
-| **cable-underground.js** | Подземные участки кабеля (колодцы, pathCoords) |
+| **cable-underground.js** | Подземные участки ВОЛС: колодцы, `undergroundSpans`, пунктир-overlays, перепрокладка |
 | **map-perf.js** | Индекс `uniqueId`, reverse cable links, spatial grid, viewport cull / виртуализация, планировщик линий связи |
 
 ## UI (`ui/`)

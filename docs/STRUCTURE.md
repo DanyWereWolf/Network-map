@@ -43,30 +43,43 @@ Network-map/
 ├── server/                         # Backend (Node.js)
 │   ├── server-api.js               # Express + WebSocket /sync + статика
 │   ├── server.js                   # Упрощённый только-WS сервер (npm run sync)
-│   ├── database.js                 # JSON store, организации, бэкапы
+│   ├── database.js                 # JSON store / фасад MySQL, организации, бэкапы
 │   ├── avatars.js                  # Аватары пользователей
 │   ├── chat-media.js               # Медиа организационного чата
 │   ├── news-media.js               # Медиа новостей
 │   ├── news-sanitize.js            # Санитизация HTML новостей
+│   ├── db/                         # MySQL: schema, migrate, mysql-ops, assemble
 │   ├── lib/
-│   │   ├── security.js             # Turnstile, rate limit, TOTP
+│   │   ├── security.js             # Rate limit входа, TOTP (2FA организации)
 │   │   ├── basemap.js              # GeoTIFF→тайлы, packs ортофото
 │   │   └── support-bot.js          # Бот поддержки
 │   └── config/
 │       └── server-config.example.json
 │
+├── Portable/                       # On-prem поставка (отдельное дерево public/ + server/)
+│   ├── INSTALL.md                  # Инструкция для заказчика
+│   ├── README.md                   # Обзор Portable для разработчика
+│   ├── scripts/build-release.js    # npm run release → releases/*.zip
+│   └── …
+│
 ├── data/                           # Локальные данные (в .gitignore)
-│   ├── store.json                  # Основное хранилище
+│   ├── store.json                  # Основное хранилище (режим json)
 │   ├── backups/<org_id>/           # Ежедневные бэкапы карт
+│   ├── backups/full/               # Полные снимки / mysqldump
 │   ├── basemaps/<org_id>/          # Ортофото XYZ-тайлы (on-prem)
 │   ├── avatars/
 │   ├── chat-media/
 │   └── news-media/
 │
 ├── scripts/
-│   └── check-js-syntax.js          # node --check для всех .js
+│   ├── check-js-syntax.js          # node --check для всех .js
+│   ├── setup-mysql-linux.sh        # Установка MySQL/MariaDB + migrate
+│   ├── migrate-store-to-mysql.js   # npm run migrate:mysql
+│   ├── mysql-backup.js / restore   # npm run backup:mysql / restore:mysql
+│   └── issue-portable-license.js   # Подпись лицензий Portable
 │
 ├── docs/                           # Документация (этот каталог)
+├── releases/                       # Готовые zip Portable (не обязательно в git)
 ├── server-config.json              # Рабочий конфиг (в .gitignore)
 ├── package.json
 ├── run-api.bat, run-api.sh
