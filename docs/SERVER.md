@@ -228,15 +228,19 @@ npm run restore:mysql -- --dump data/backups/full/mysqldump-network_map-….sql 
 - Роли: глобальный admin (`site-admin`), admin организации, user (только просмотр)
 - Размер тела запроса и WebSocket ограничены в `server-api.js`
 - Секреты только в `server-config.json` (не в git)
+- Заголовки `X-Content-Type-Options`, `Referrer-Policy`; запросы `*.js.map` / `*.css.map` — 404
+- Защита клиента от простого копирования: `npm run build` + `serveObfuscatedClient: true` (на боевом обязательно; без `dist/` сервер не стартует). При выключенном флаге на проде в лог пишется предупреждение
 
 ## Деплой (кратко)
 
 1. `npm install` (полный — нужен `javascript-obfuscator` для сборки клиента)
-2. `npm run build` — копирует `public/` в `dist/` и обфусцирует все JS
+2. `npm run build` — копирует `public/` в `dist/` и обфусцирует все JS (**обязательно** до включения флага ниже)
 3. `server-config.json` на сервере: боевые ключи и `"serveObfuscatedClient": true` (или `SERVE_OBFUSCATED_CLIENT=1`)
 4. Процесс-менеджер: `node server/server-api.js` или `npm run api`
 5. Reverse proxy (nginx) → HTTPS, при необходимости WebSocket upgrade на `/sync`
 6. Каталог `data/` на постоянном томе с бэкапами
+
+Если `serveObfuscatedClient` включён, а каталога `dist/js` нет, сервер **не стартует** (exit 1) — читаемый `public/` в этом режиме не раздаётся. Сначала `npm run build`, затем перезапуск.
 
 Локально без флага раздаётся читаемый `public/` — удобно для отладки. Обфускация усложняет чтение кода в DevTools, но не заменяет серверные секреты и права доступа.
 

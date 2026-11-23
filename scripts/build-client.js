@@ -33,7 +33,8 @@ const OBFUSCATOR_OPTIONS = {
     splitStrings: true,
     splitStringsChunkLength: 8,
     numbersToExpressions: true,
-    simplify: true
+    simplify: true,
+    target: 'browser'
 };
 
 function rmDir(dir) {

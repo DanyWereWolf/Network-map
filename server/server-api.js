@@ -78,6 +78,7 @@ function reloadServerConfig(options) {
 /**
  * Dev: public/ (читаемые исходники). Prod: dist/ после `npm run build`,
  * если serveObfuscatedClient / SERVE_OBFUSCATED_CLIENT включены.
+ * При включённом флаге без dist/js процесс завершается — fallback на public/ запрещён.
  */
 function resolvePublicDir(config) {
     const wantObfuscated =
@@ -91,14 +92,33 @@ function resolvePublicDir(config) {
             console.log('[Static] Раздача обфусцированного клиента из dist/');
             return distDir;
         }
-        console.warn('[Static] serveObfuscatedClient включён, но dist/ нет — сначала npm run build. Раздаётся public/');
+        console.error('[Static] serveObfuscatedClient включён, но dist/js нет. Выполните npm run build и перезапустите сервер.');
+        process.exit(1);
     }
     return publicDir;
+}
+
+function isServeObfuscatedEnabled(config) {
+    return (
+        config.serveObfuscatedClient === true ||
+        String(process.env.SERVE_OBFUSCATED_CLIENT || '').trim() === '1' ||
+        String(process.env.SERVE_OBFUSCATED_CLIENT || '').toLowerCase() === 'true'
+    );
+}
+
+/** Прод-признаки: NODE_ENV=production или публичный site URL (не localhost). */
+function looksLikeProductionDeploy(config) {
+    if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') return true;
+    var site = String((config && config.publicSiteUrl) || process.env.PUBLIC_SITE_URL || '').trim().toLowerCase();
+    if (!site) return false;
+    if (site.indexOf('localhost') !== -1 || site.indexOf('127.0.0.1') !== -1) return false;
+    return /^https?:\/\//.test(site);
 }
 
 var _initialConfigLoad = loadServerConfig();
 let serverConfig = (_initialConfigLoad.ok && _initialConfigLoad.config) ? _initialConfigLoad.config : {};
 const PUBLIC_DIR = resolvePublicDir(serverConfig);
+const SERVING_OBFUSCATED_CLIENT = isServeObfuscatedEnabled(serverConfig);
 
 if (fs.existsSync(SERVER_CONFIG_PATH)) {
     let configReloadTimer = null;
@@ -141,6 +161,12 @@ function logServerConfigWarnings() {
         }
     } else {
         console.warn('[Config] SMTP не настроен — восстановление пароля будет недоступно (503).');
+    }
+    if (looksLikeProductionDeploy(serverConfig) && !isServeObfuscatedEnabled(serverConfig)) {
+        console.warn(
+            '[Static] ВНИМАНИЕ: похоже на боевой деплой, но serveObfuscatedClient выключен — ' +
+            'раздаётся читаемый public/. Для защиты клиента: npm run build и "serveObfuscatedClient": true'
+        );
     }
 }
 
@@ -273,6 +299,17 @@ app.use(perfMonitor.httpMiddleware);
 app.use(cors({ origin: true, credentials: true }));
 // 50mb: карты 10k+ объектов / фото в payload; 10mb часто мало и провоцирует обрывы/ретраи.
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
+
+/** Базовые заголовки + запрет source maps (не отдаём .js.map / .css.map). */
+app.use(function(req, res, next) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    var p = String((req.path || req.url || '').split('?')[0] || '');
+    if (/\.(js|css)\.map$/i.test(p) || /\/sourcemaps?\//i.test(p)) {
+        return res.status(404).end();
+    }
+    next();
+});
 
 /** Разрешить встраивание карты (Zabbix URL widget и др.). */
 app.use(function(req, res, next) {
@@ -4564,6 +4601,11 @@ app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), {
     setHeaders: function (res, filePath) {
         if (filePath && String(filePath).endsWith('.js')) {
             res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            if (SERVING_OBFUSCATED_CLIENT) {
+                // Обфусцированный бандл — без долгого кэша у прокси со старым читаемым файлом.
+                res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
+            }
         }
     }
 }));
