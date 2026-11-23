@@ -39,12 +39,6 @@ function isMailConfigured(serverConfig) {
     return !!getSmtpConfig(serverConfig);
 }
 
-/**
- * Новый транспорт на каждую операцию.
- * Кэш ломал повторную отправку: после 1-го письма Reg.ru/хостинг
- * закрывает SMTP-сессию, а повтор шёл в уже мёртвое соединение
- * (пока процесс не перезапустят).
- */
 function createTransporter(smtp) {
     return nodemailer.createTransport({
         host: smtp.host,
@@ -62,7 +56,7 @@ function closeTransporter(transporter) {
     if (!transporter) return;
     try {
         transporter.close();
-    } catch (e) { /* ignore */ }
+    } catch (e) {  }
 }
 
 function sendWithTransporter(transporter, mailOptions) {
@@ -99,7 +93,6 @@ function sendMail(serverConfig, options) {
         return { ok: true };
     }).catch(function(err) {
         console.error('[Mail] Ошибка отправки:', err && err.message ? err.message : err);
-        // Одна повторная попытка с новым соединением
         return sendWithTransporter(createTransporter(smtp), mailOptions).then(function() {
             console.log('[Mail] Повторная отправка успешна');
             return { ok: true };
@@ -127,7 +120,6 @@ function verifySmtp(serverConfig) {
 }
 
 function invalidateTransporterCache() {
-    // совместимость: кэша больше нет
 }
 
 module.exports = {

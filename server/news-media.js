@@ -1,6 +1,3 @@
-/**
- * Медиафайлы для новостей: data/news-media/{mediaId}.{ext}
- */
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');

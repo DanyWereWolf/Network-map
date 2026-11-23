@@ -77,12 +77,10 @@ function startMapApp() {
         if (typeof setMapLoadingOverlayText === 'function') {
             setMapLoadingOverlayText('Загрузка карты…');
         }
-        // Не сбрасываем entrance-таймер: иначе после выбора региона снова ждём min MS.
         startMapLoadSafetyTimeout();
         whenYmapsReady(init);
     }
 
-    // Регион — до создания карты и загрузки объектов (пикер поверх экрана входа).
     var chooseRegion = (typeof chooseMapRegionBeforeLoad === 'function')
         ? chooseMapRegionBeforeLoad()
         : Promise.resolve(window.currentMapRegionId || null);
@@ -111,7 +109,6 @@ function startMapApp() {
         if (typeof setMapLoadingOverlayText === 'function') {
             setMapLoadingOverlayText('Ошибка загрузки');
         }
-        // Без токена/регионов карту не поднимаем — иначе пустой «Готово».
         if (!getAuthToken()) {
             try { window.location.href = 'auth.html'; } catch (eLoc) {}
             return;
@@ -124,7 +121,6 @@ function startMapApp() {
     refreshMapLimitsFromServer();
 }
 
-// ===== ЭКСПОРТЫ ДЛЯ OPTICAL-CALCULATOR.JS =====
 if (typeof getOtherEndOfCable === 'function') window.getOtherEndOfCable = getOtherEndOfCable;
 if (typeof traceFiberPathFromObject === 'function') window.traceFiberPathFromObject = traceFiberPathFromObject;
 if (typeof traceFromOLTPort === 'function') window.traceFromOLTPort = traceFromOLTPort;

@@ -1,6 +1,3 @@
-/**
- * Резервные копии организации в боковой панели.
- */
 function setupBackupsSection() {
     const refreshBtn = document.getElementById('backupsRefreshBtn');
     const listEl = document.getElementById('backupsList');

@@ -1,7 +1,3 @@
-/**
- * Эмоции ассистента Волы (Volsmap).
- * Файлы: public/icons/assistant/vola-*.png
- */
 (function (global) {
     var BASE = 'icons/assistant/';
 

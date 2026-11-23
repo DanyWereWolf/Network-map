@@ -1,7 +1,3 @@
-/**
- * Yandex Maps 2.1–совместимый слой поверх Leaflet для on-prem / ортофото.
- * Координаты: [lat, lon] как у ymaps.
- */
 (function (global) {
     'use strict';
 
@@ -153,7 +149,6 @@
         return !(val === false || val === 0 || val === 'false' || val === '0');
     }
 
-    /** Как ymaps options.visible: скрыть/показать слой, не отвязывая geoObject от коллекции. */
     function applyGeoObjectVisibility(geoObj) {
         if (!geoObj) return;
         var map = geoObj._map;
@@ -376,7 +371,6 @@
 
         var self = this;
         this.options._emitChange = function (changed) {
-            // visible всегда применяем: фильтр вида часто ставит только его.
             applyGeoObjectVisibility(self);
             if (changed && Object.prototype.hasOwnProperty.call(changed, 'visible') &&
                 self.options.get('visible') === false) {
@@ -475,7 +469,6 @@
     };
     bindParentApi(Polygon.prototype);
 
-    /** ymaps.Circle([center, radiusMeters], props, options) */
     function GeometryCircle(centerAndRadius) {
         var c = Array.isArray(centerAndRadius) ? centerAndRadius : [centerAndRadius, 0];
         this._center = Array.isArray(c[0]) ? c[0].slice() : [0, 0];
@@ -620,7 +613,6 @@
         this._map._leaflet.invalidateSize();
     };
 
-    // Web Mercator helpers (approx ymaps.projection.wgs84Mercator)
     var EARTH = 6378137;
     var MAX_LAT = 85.05112878;
     function projectMercator(lat, lon) {
@@ -653,9 +645,9 @@
             bootType = 'leaflet#none';
         }
         this._type = bootType;
-        this._basemapLayer = null; // legacy alias → первый слой стека
+        this._basemapLayer = null; 
         this._altLayer = null;
-        this._basemapStack = []; // активные слои подложки (взаимоисключающие)
+        this._basemapStack = []; 
         this._basemapLoadId = 0;
         this._lastManifest = null;
         this._packId = null;
@@ -668,8 +660,6 @@
         this.container = new Container(this);
         this.layers = [];
 
-        // Яндекс.Карты обычно дают ~19–21; у Leaflet дефолт maxZoom=18 — из‑за этого
-        // «старый» зум на ортофото упирался раньше. Overzoom тайлов — через maxNativeZoom слоя.
         this._leaflet = L.map(el, {
             center: center,
             zoom: zoom,
@@ -709,13 +699,11 @@
         });
 
         if (this._type === 'leaflet#orthophoto') {
-            // Старт карты: без баннера — подсказка только при ручном выборе «Ортофото».
             this._loadBasemap({ silent: true });
         } else {
             this._applyBasemapType(this._type);
         }
 
-        // tilesload approximation
         setTimeout(function () {
             self.events.fire('tilesload', { target: self });
         }, 400);
@@ -757,7 +745,6 @@
         fetch(this._apiBase() + '/api/basemap/active', { headers: headers })
             .then(function (r) { return r.json().catch(function () { return {}; }); })
             .then(function (data) {
-                // Пользователь уже ушёл на Яндекс/OSM — не возвращаем ортофото поверх.
                 if (loadId !== self._basemapLoadId) return;
                 if (self._type && self._type !== 'leaflet#orthophoto') {
                     self._showNoBasemapBanner(false);
@@ -765,7 +752,6 @@
                 }
                 if (!data || !data.packId) {
                     try { global._volsmapHasActiveBasemap = false; } catch (eNo) {}
-                    // Баннер только если пользователь сам выбрал «Ортофото» в меню слоёв.
                     self._showNoBasemapBanner(!silent);
                     if (silent) {
                         try { self._applyBasemapType('leaflet#none'); } catch (eNone) {}
@@ -809,7 +795,6 @@
         el.style.display = 'block';
     };
 
-    /** Снять ВСЕ слои подложки (ортофото и Яндекс независимы — на карте только один набор). */
     MapShim.prototype._clearBasemapStack = function () {
         var map = this._leaflet;
         var stack = this._basemapStack || [];
@@ -847,11 +832,6 @@
         } catch (e) {}
     };
 
-    /**
-     * Включить ровно один тип подложки. Предыдущий набор полностью снимается.
-     * @param {string} type
-     * @param {object} [ctx] контекст для ортофото (tileUrl, …)
-     */
     MapShim.prototype._setBasemapStack = function (type, ctx) {
         var stackApi = global.VolsmapBasemapStack;
         if (!stackApi || typeof stackApi.createLayersForType !== 'function') {
@@ -873,7 +853,6 @@
                 console.warn('[LeafletYmaps] basemap add failed', eAdd);
             }
         }
-        // совместимость со старым кодом
         this._basemapLayer = this._type === 'leaflet#orthophoto' ? (this._basemapStack[0] || null) : null;
         this._altLayer = this._type !== 'leaflet#orthophoto' ? (this._basemapStack[0] || null) : null;
 
@@ -886,7 +865,6 @@
         this._lastManifest = manifest;
         this._packId = manifest.packId;
         try { global._volsmapHasActiveBasemap = true; } catch (eFlag) {}
-        // Веб: ортофото не включаем даже при наличии пакета на сервере
         if (this._type !== 'leaflet#orthophoto') {
             return;
         }
@@ -916,7 +894,6 @@
     };
 
     MapShim.prototype._setAltBasemapLayer = function (layer, type) {
-        // совместимость: один слой через общий стек
         this._basemapLoadId = (this._basemapLoadId || 0) + 1;
         this._type = type || 'leaflet#none';
         this._showNoBasemapBanner(false);
@@ -935,9 +912,7 @@
 
     MapShim.prototype._applyBasemapType = function (type) {
         var next = type || 'leaflet#none';
-        // Облачная веб-версия: ортофото отключено (остаётся в Portable)
         if (next === 'leaflet#orthophoto') next = 'leaflet#none';
-        // Все типы — фабрики VolsmapBasemapStack (без GeoTIFF-пакетов)
         this._setBasemapStack(next, {});
     };
 
@@ -1010,7 +985,6 @@
     };
     MapShim.prototype.setType = function (type) {
         var next = type || this._type;
-        // Яндекс-слои — через независимый нативный рантайм (не смешивать в Leaflet)
         if (String(next).indexOf('yandex#') === 0 &&
             !this._runtimeRedirect &&
             global.MapRuntime && typeof global.MapRuntime.applyBasemapType === 'function') {
@@ -1040,7 +1014,6 @@
         try { this._leaflet.remove(); } catch (e) {}
     };
 
-    // Approximate converter used by some modules
     MapShim.prototype.converter = {
         globalToPage: function () { return [0, 0]; },
         pageToGlobal: function () { return [0, 0]; }
@@ -1093,7 +1066,6 @@
         Map: MapShim
     };
 
-    // CSS helpers
     if (!document.getElementById('volsmapLeafletShimCss')) {
         var style = document.createElement('style');
         style.id = 'volsmapLeafletShimCss';
@@ -1105,9 +1077,7 @@
         document.head.appendChild(style);
     }
 
-    // Passive: dual-boot на нативном Яндексе — шим только в __ymapsShim, не трогаем window.ymaps
     if (global.VolsmapShimPassive) {
-        // no-op for global ymaps / ready — нативный API уже ведёт карту
     } else {
         global.ymaps = ymapsShim;
         fireReady();

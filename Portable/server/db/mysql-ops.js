@@ -1,9 +1,5 @@
 'use strict';
 
-/**
- * Shared MySQL ops for CLI scripts and site-admin API.
- * Never returns passwords.
- */
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -29,9 +25,6 @@ function countOr(rows, key) {
     return v == null ? 0 : Number(v);
 }
 
-/**
- * @returns {Promise<object>} status payload without secrets
- */
 async function getStorageStatus() {
     var cfg = loadServerConfig();
     var storage = String(process.env.STORAGE || cfg.storage || 'json').toLowerCase();
@@ -117,10 +110,6 @@ function listMysqlDumps() {
     }
 }
 
-/**
- * Create mysqldump into data/backups/full/.
- * @returns {{ ok: boolean, path?: string, filename?: string, error?: string }}
- */
 function createMysqlDump() {
     ensureFullBackupsDir();
     var cfg = getMysqlConfig();
@@ -156,12 +145,6 @@ function createMysqlDump() {
     return { ok: true, path: dumpPath, filename: dumpName };
 }
 
-/**
- * Restore from a dump file under data/backups/full/.
- * Caller should flush/rehydrate app store after this.
- * @param {string} filename
- * @returns {{ ok: boolean, error?: string }}
- */
 function restoreMysqlDump(filename) {
     var trimmed = typeof filename === 'string' ? filename.trim() : '';
     if (!isSafeDumpFilename(trimmed)) {

@@ -1,7 +1,3 @@
-/**
- * Поля выбора муфты при разрезе кабеля.
- */
-/** Поля выбора типа муфты при разрезе кабеля (опора / линия кабеля). */
 function buildCableSplitSleeveFieldsHtml(selectedType) {
     var sel = selectedType || 'SNR-FOSC-L';
     var html = '<div class="cable-split-sleeve-fields">';

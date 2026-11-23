@@ -1,6 +1,3 @@
-/**
- * Оживление лендинга: появление секций при скролле, лёгкий параллакс карты.
- */
 (function() {
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var root = document.body;

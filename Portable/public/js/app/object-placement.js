@@ -1,12 +1,8 @@
-/**
- * Размещение объектов на карте: координаты, тип, pan-lock.
- */
 let objectPlacementMode = false;
 let currentPlacementType = null;
 let currentPlacementName = null;
 let currentPlacementNodeKind = 'network';
 
-/** Имя из поля боковой панели (актуальное), иначе кэш при старте режима размещения. */
 function getPlacementObjectName() {
     var inp = document.getElementById('objectName');
     return (inp ? inp.value.trim() : '') || currentPlacementName || '';
@@ -319,7 +315,6 @@ function setupObjectPlacementCoordsControls() {
     }
 }
 
-/** null — поля пустые; false — ошибка валидации; [lat, lon] — готовые координаты */
 function getObjectPlacementCoordsFromForm() {
     var latEl = document.getElementById('objectPlacementLat');
     var lonEl = document.getElementById('objectPlacementLon');
@@ -362,7 +357,6 @@ function getPlacemarksAtCoords(coords, placementType) {
     var scanList = objects;
     if (typeof MapPerf !== 'undefined' && MapPerf.querySpatialNearCoords) {
         var near = MapPerf.querySpatialNearCoords(coords, getObjectPlacementGroupType(placementType) ? 2 : 1);
-        // Пустой near означает «никого рядом» только если spatial-индекс уже наполнен.
         if (near && (near.length > 0 || (typeof MapPerf.shouldUseViewportCull === 'function' && MapPerf.shouldUseViewportCull()))) {
             scanList = near;
         }
@@ -538,7 +532,6 @@ function placeObjectAtCoords(coords) {
 let placementPanBlockClickUntil = 0;
 const placementPanPointer = { down: false, startX: 0, startY: 0, moved: false };
 const PLACEMENT_PAN_DRAG_THRESHOLD_PX = 5;
-/** Короткое окно после pan — только чтобы не поставить объект «хвостом» жеста перетаскивания. */
 const PLACEMENT_PAN_CLICK_BLOCK_MS = 40;
 let placementObjectDragPanSuspended = false;
 
@@ -635,8 +628,8 @@ function handleAddObject() {
     if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') {
         cancelRadioBridgeRouting();
     }
-    
-    if (fiberRoutingMode) {
+
+        if (fiberRoutingMode) {
         cancelFiberRouting();
     }
 
@@ -647,8 +640,8 @@ function handleAddObject() {
     if (type === 'node' || type === 'cross') {
         const name = document.getElementById('objectName').value.trim();
         if (!name) {
-            
-            if (objectPlacementMode) {
+
+                        if (objectPlacementMode) {
                 cancelObjectPlacement();
             }
             showWarning(type === 'cross' ? 'Введите имя кросса' : 'Введите имя узла', 'Требуется имя');
@@ -673,8 +666,8 @@ function handleAddObject() {
             }
             return;
         }
-        
-        objectPlacementMode = true;
+
+                objectPlacementMode = true;
         currentPlacementType = type;
         currentPlacementName = name;
         if (myMap && myMap.container) {
@@ -735,16 +728,11 @@ function cancelObjectPlacement() {
             mapEl.classList.remove('map-crosshair-active');
         }
     }
-    
-    setAddObjectButtonPlacementMode(false);
+
+        setAddObjectButtonPlacementMode(false);
     syncMapPanLockForEditTools();
 }
 
-/**
- * Включить размещение кликом по карте (после выбора инструмента).
- * Не использует форму координат — только клик.
- * @returns {boolean} удалось ли включить режим
- */
 function startClickPlacementMode(opts) {
     opts = opts || {};
     try {
@@ -820,7 +808,6 @@ function startClickPlacementMode(opts) {
             currentPlacementName = (document.getElementById('objectName') && document.getElementById('objectName').value.trim()) || '';
         }
 
-        // Форма координат не должна мешать клику по карте
         clearObjectPlacementCoordsForm();
 
         objectPlacementMode = true;
@@ -1116,7 +1103,6 @@ function setAddObjectButtonPlacementMode(active) {
     }
 }
 
-/** На touch при размещении объектов pan отключён — иначе не двигается «фантом». На мыши pan включён. */
 function isMapPanLockedForObjectPlacement() {
     if (!objectPlacementMode) return false;
     try {
@@ -1130,7 +1116,6 @@ function isCableLayingWithSource() {
     return !!(currentCableTool && cableSource && isEditMode);
 }
 
-/** На touch при прокладке кабеля (есть начальная точка) pan отключён; на мыши — ЛКМ перетаскивает карту. */
 function isMapPanLockedForCableTool() {
     if (!isCableLayingWithSource()) return false;
     try {
@@ -1140,7 +1125,6 @@ function isMapPanLockedForCableTool() {
     return false;
 }
 
-/** На touch при прокладке GPON-волокна (OLT, ONU, сплиттер) pan отключён; на мыши — ЛКМ перетаскивает карту. */
 function isMapPanLockedForFiberRouting() {
     if (!fiberRoutingMode && !splitterFiberRoutingMode && !radioBridgeRoutingMode) return false;
     try {
@@ -1154,12 +1138,6 @@ function isMapPanDragTrackingActive() {
     return objectPlacementMode || isCableLayingWithSource() || fiberRoutingMode || splitterFiberRoutingMode || radioBridgeRoutingMode;
 }
 
-/**
- * На сенсорных экранах поведение «перетаскивание» карты перехватывает движение пальца,
- * из‑за чего не срабатывает предпросмотр кабеля / «фантом» при размещении объектов.
- * Пока активны эти режимы, отключаем pan (drag); масштаб жестами и кнопками зума сохраняется.
- * На мыши в размещении объектов, прокладке кабеля и GPON-волокон pan (ЛКМ + перетаскивание) включён; клик после pan не ставит точку.
- */
 function syncMapPanLockForEditTools() {
     if (!myMap || !myMap.behaviors) return;
     var lockPan = !!(isMapPanLockedForObjectPlacement() || isMapPanLockedForCableTool() ||

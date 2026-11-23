@@ -1,7 +1,3 @@
-/**
- * Проверка бессрочной офлайн-лицензии Portable (fingerprint + Ed25519).
- * Без phone-home. При отсутствии/битой лицензии — отказ в работе, данные не трогаем.
- */
 'use strict';
 
 const crypto = require('crypto');
@@ -15,7 +11,6 @@ const DATA_DIR = path.join(ROOT_DIR, 'data');
 const LICENSE_PATH = path.join(DATA_DIR, 'license.json');
 const LOCAL_MACHINE_ID_PATH = path.join(DATA_DIR, '.machine-id');
 
-/** В релизной сборке можно зашить публичный ключ из site-admin. */
 const EMBEDDED_PUBLIC_KEY = '';
 
 var _cache = null;
@@ -108,11 +103,6 @@ function getPublicKey(config) {
     ).trim();
 }
 
-/**
- * Разработка: portableLicenseRequired: false или нет ключа.
- * Релизная сборка (зашит EMBEDDED_PUBLIC_KEY): всегда включено;
- * отключить можно только env PORTABLE_LICENSE_REQUIRED=0 (для поддержки вендора).
- */
 function isEnforced(config) {
     config = config || {};
     var env = String(process.env.PORTABLE_LICENSE_REQUIRED || '').trim().toLowerCase();

@@ -1,11 +1,3 @@
-/**
- * Конвертация проекта NeD (.ned) → JSON-массив Network-map
- * через tools/ned-import/NedToNetworkMap (.NET).
- *
- * Собранный конвертер лежит в репозитории (tools/ned-import/dist, `npm run ned:build`).
- * Для запуска нужен только .NET Runtime 10: если его нет, он скачивается (~37 МБ)
- * и распаковывается в tools/.dotnet без прав администратора.
- */
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -25,7 +17,6 @@ const REQUIRED_MAJOR = 10;
 
 let readyPromise = null;
 
-/** tools/.dotnet, а если папка проекта недоступна на запись — домашняя папка пользователя сервера. */
 function pickLocalDotnetDir() {
     const inRepo = path.join(ROOT_DIR, 'tools', '.dotnet');
     if (fs.existsSync(inRepo)) return inRepo;
@@ -174,7 +165,6 @@ async function installLocalRuntime() {
     try {
         await downloadWithProgress(url, archive);
         await extractArchive(archive, stagingDir);
-        // Другой процесс сервера мог успеть установить runtime, пока шла загрузка.
         if (!hasRuntime(LOCAL_DOTNET_EXE)) {
             fs.rmSync(LOCAL_DOTNET_DIR, { recursive: true, force: true });
             fs.renameSync(stagingDir, LOCAL_DOTNET_DIR);
@@ -212,7 +202,6 @@ async function prepare() {
     return { dotnet: dotnet, dll: dll };
 }
 
-/** Готовит .NET и конвертер; параллельные вызовы ждут одну и ту же подготовку. */
 function ensureConverterReady() {
     if (!readyPromise) {
         readyPromise = prepare().catch(function(err) {
@@ -223,17 +212,12 @@ function ensureConverterReady() {
     return readyPromise;
 }
 
-/** Фоновая подготовка при старте сервера, чтобы первый импорт не ждал загрузки. */
 function prepareInBackground() {
     ensureConverterReady().catch(function(err) {
         console.error('[ned-import] Импорт .ned недоступен:', err && err.message ? err.message : err);
     });
 }
 
-/**
- * @param {Buffer} nedBuffer
- * @returns {Promise<object[]>}
- */
 async function convertNedBuffer(nedBuffer) {
     if (!Buffer.isBuffer(nedBuffer) || nedBuffer.length < 48) {
         throw new Error('Пустой или повреждённый .ned файл');

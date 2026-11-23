@@ -1,21 +1,3 @@
-/**
- * Сборка пакета Portable для выдачи клиенту:
- * - копирует дерево без node_modules / data / рабочего server-config
- * - читает публичный ключ из server/config/portable-license-keypair.json (тот же, что site-admin)
- * - прошивает EMBEDDED_PUBLIC_KEY и portableLicenseRequired: true
- * - обфусцирует public/js только в копии для заказчика (рабочая папка Portable/ не меняется)
- * - пишет INSTALL.md и опционально zip
- *
- * Запуск из корня репо или из Portable:
- *   node Portable/scripts/build-release.js
- *   npm run release   (из Portable/)
- *
- * Опции:
- *   --no-zip          не создавать архив
- *   --no-obfuscate    оставить клиентский JS читаемым
- *   --out <dir>       каталог вывода (по умолчанию releases/)
- *   --keypair <path>  путь к keypair JSON
- */
 'use strict';
 
 const fs = require('fs');
@@ -44,7 +26,6 @@ const SKIP_FILE_NAMES = new Set([
     'Thumbs.db'
 ]);
 
-/** Как в scripts/build-client.js: глобальные имена между файлами не переименовываются. */
 var CLIENT_OBFUSCATOR_OPTIONS = {
     compact: true,
     controlFlowFlattening: true,
@@ -108,7 +89,6 @@ function resolveKeypairPath(cliPath) {
     var store = require(path.join(REPO_ROOT, 'server', 'lib', 'portable-license-keypair-store.js'));
     var bundled = store.getBundledKeypairPath();
     if (fs.existsSync(bundled)) return bundled;
-    // legacy fallbacks
     var candidates = [
         bundled,
         path.join(REPO_ROOT, 'data', 'portable-license-keypair.json'),
@@ -132,7 +112,6 @@ function shouldSkip(relPosix, name, isDir) {
     if (SKIP_DIR_NAMES.has(name) && isDir) return true;
     if (SKIP_FILE_NAMES.has(name) && !isDir) return true;
     if (name.endsWith('.log')) return true;
-    // внутренние артефакты разработки / сборки
     if (relPosix === 'scripts/apply-portable-strip.js') return true;
     if (relPosix === 'scripts/build-release.js') return true;
     return false;
@@ -159,11 +138,6 @@ function copyTree(srcRoot, destRoot) {
     walk('');
 }
 
-/**
- * cmd.exe ломает .bat/.cmd, если в файле UTF-8 (кириллица, chcp 65001) или только LF.
- * В архив для клиента всегда пишем ASCII + CRLF.
- * .ps1 с не-ASCII должен быть UTF-8 BOM, иначе Windows PowerShell 5.1 читает его как ANSI.
- */
 function copyReleaseFile(src, dest, relPosix) {
     var ext = path.extname(dest).toLowerCase();
     if (ext === '.bat' || ext === '.cmd') {
@@ -206,7 +180,6 @@ function patchEmbeddedPublicKey(licenseJsPath, publicKey) {
         "const EMBEDDED_PUBLIC_KEY = '" + publicKey.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "';"
     );
     if (next === src) {
-        // fallback: любая пустая константа
         next = src.replace(
             /const EMBEDDED_PUBLIC_KEY = '';/,
             "const EMBEDDED_PUBLIC_KEY = '" + publicKey.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "';"
@@ -221,7 +194,6 @@ function patchExampleConfig(examplePath, publicKey) {
     var cfg = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
     cfg.portableLicenseRequired = true;
     cfg.portableLicensePublicKey = publicKey;
-    // клиент должен сменить пароль
     if (!cfg.bootstrapAdminPassword || cfg.bootstrapAdminPassword === 'admin123') {
         cfg.bootstrapAdminPassword = 'CHANGE_ME_ON_INSTALL';
     }
@@ -241,7 +213,6 @@ function writeInstallMd(destRoot, meta) {
     if (text.indexOf('<!-- RELEASE_META -->') >= 0) {
         text = text.replace('<!-- RELEASE_META -->', stamp);
     } else {
-        // вставка после первого заголовка
         text = text.replace(/^(#[^\n]*\n\n)/, '$1' + stamp);
     }
     fs.writeFileSync(path.join(destRoot, 'INSTALL.md'), text, 'utf8');
@@ -301,7 +272,6 @@ function makeZip(folderPath, zipPath) {
     if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
     var parent = path.dirname(folderPath);
     var base = path.basename(folderPath);
-    // tar.zip доступен в Windows 10+ и в современных Unix
     var r = spawnSync('tar', ['-a', '-cf', zipPath, '-C', parent, base], { encoding: 'utf8' });
     if (r.status === 0 && fs.existsSync(zipPath)) return true;
     if (process.platform === 'win32') {
@@ -347,7 +317,6 @@ function main() {
     if (opts.obfuscate) obfuscatedFiles = obfuscateReleaseClient(outDir);
     else console.log('[release] Обфускация клиента пропущена (--no-obfuscate)');
 
-    // убрать из клиентского README внутренние детали разработки — оставим INSTALL.md как главный
     var meta = {
         name: 'network-map-portable',
         version: VERSION,
@@ -368,7 +337,6 @@ function main() {
     writeInstallMd(outDir, meta);
     writeReleaseMeta(outDir, meta);
 
-    // не тащим локальный README про strip — дополним секцией лицензии в копии
     var readmePath = path.join(outDir, 'README.md');
     if (fs.existsSync(readmePath)) {
         var extra = [

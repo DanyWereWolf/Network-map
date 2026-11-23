@@ -1,6 +1,3 @@
-/**
- * Подземные участки ВОЛС: между двумя колодцами (вход/выход), свободная геометрия pathCoords.
- */
 (function (global) {
     var UNDERGROUND_COLOR = '#dc2626';
     var UNDERGROUND_WIDTH = 3;
@@ -23,7 +20,6 @@
         return out;
     }
 
-    /** Нормализация записи участка (поддержка старого формата manholeId + supportId). */
     function normalizeSpanRecord(s) {
         if (!s) return null;
         return {
@@ -45,7 +41,6 @@
         return null;
     }
 
-    /** Воздушная геометрия кабеля: только точки маршрута, без pathCoords под землёй. */
     function buildAerialCableCoordsFromRoute(points) {
         if (!Array.isArray(points) || points.length < 2) return [];
         var out = [];
@@ -57,10 +52,6 @@
         return out.length >= 2 ? out : [];
     }
 
-    /**
-     * Участки зелёного (воздушного) кабеля: разрыв между колодцами, если между ними подземный span.
-     * Возвращает массив линий [[lat,lon], ...], ...
-     */
     function buildAerialDisplaySegments(points, undergroundSpans) {
         if (!Array.isArray(points) || points.length < 2) return [];
         var spans = undergroundSpans || [];
@@ -212,7 +203,6 @@
         return lines;
     }
 
-    /** Полная геометрия с pathCoords (legacy / расчёты). */
     function buildCableCoordsFromRoute(points, undergroundSpans) {
         if (!Array.isArray(points) || points.length < 2) return [];
         var spans = undergroundSpans || [];
@@ -267,7 +257,6 @@
         return [];
     }
 
-    /** Полная линия для сохранения/загрузки (воздух + pathCoords под землёй). */
     function getCableGeometryForSave(cable) {
         if (!cable || !cable.geometry) return null;
         var props = cable.properties;
@@ -520,7 +509,6 @@
         return dedupeConsecutiveRoutePoints(head.concat([entry, exit, last]));
     }
 
-    /** После загрузки: колодцы из undergroundSpans должны быть в points, иначе кабель не рисуется. */
     function ensureRouteIncludesUndergroundManholes(points, spans) {
         if (!Array.isArray(points) || points.length < 2 || !Array.isArray(spans) || !spans.length) {
             return points;
@@ -613,7 +601,6 @@
         }
     }
 
-    /** Полилиния подземного участка в порядке маршрута (от более ранней точки к более поздней). */
     function orderedSpanPolyline(span, routePoints) {
         var n = normalizeSpanRecord(span);
         if (!n || !n.entryManholeId || !n.exitManholeId || !Array.isArray(routePoints)) return null;
@@ -638,10 +625,6 @@
         };
     }
 
-    /**
-     * Разрез подземного участка в точке клика.
-     * pathA/pathB — промежуточные точки без концов (концы — объекты маршрута).
-     */
     function splitSpanForSleeve(routePoints, span, clickCoords) {
         if (!span || !clickCoords || clickCoords.length < 2) return null;
         if (typeof global.projectPointOntoPolyline !== 'function' || typeof global.splitPolylineCoords !== 'function') return null;
@@ -729,10 +712,6 @@
         }).filter(Boolean);
     }
 
-    /**
-     * Любые соседние колодцы на маршруте — подземный участок.
-     * Воздух только когда трасса выходит на опору/крепление (или конец).
-     */
     function ensureAdjacentManholeUndergroundSpans(points, spans) {
         var out = cloneSpans(spans);
         if (!Array.isArray(points) || points.length < 2) return out;

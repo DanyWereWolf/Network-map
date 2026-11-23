@@ -1,6 +1,3 @@
-/**
- * Удаление кабелей с карты.
- */
 function getDeleteCableConfirmDetails(cableUniqueId) {
     var cable = objects.find(function(obj) {
         return obj.properties && obj.properties.get('type') === 'cable' && obj.properties.get('uniqueId') === cableUniqueId;
@@ -58,8 +55,8 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
         obj.properties.get('type') === 'cable' &&
         obj.properties.get('uniqueId') === cableUniqueId
     );
-    
-    if (!cable) return;
+
+        if (!cable) return;
 
     if (!(opts && opts.skipSync) && cableUniqueId && isObjectLockedByOther(cableUniqueId)) {
         if (typeof showWarning === 'function') showWarning('Кабель редактирует другой пользователь', 'Удаление недоступно');
@@ -252,8 +249,8 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
     if (window.CableUnderground) CableUnderground.removeAllCableRouteOverlays(cable);
     myMap.geoObjects.remove(cable);
     objects = objects.filter(o => o !== cable);
-    
-    if (!(opts && opts.skipSync)) {
+
+        if (!(opts && opts.skipSync)) {
         if (typeof window.syncSendOp === 'function') {
             window.syncSendOp({ type: 'delete_cable', uniqueId: cableUniqueId });
         }
@@ -290,7 +287,6 @@ function deleteCableByUniqueId(cableUniqueId, opts) {
             updateStats();
         }
     } else if (opts && opts.remoteOp && typeof pruneCableLabelsAfterCableRemoval === 'function') {
-        // Кабель уже снят с карты — подчистить подписи в idle.
         var prune = function() {
             try { pruneCableLabelsAfterCableRemoval(); } catch (eP) {}
         };

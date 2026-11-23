@@ -1,11 +1,8 @@
-/**
- * Модалки назначения волокон: узел, ONU, сплиттер, GPON-маршрут.
- */
 function initNodeSelectionModal() {
     const modal = document.getElementById('nodeSelectionModal');
     if (!modal) return;
-    
-    const closeBtn = modal.querySelector('.close-node-selection');
+
+        const closeBtn = modal.querySelector('.close-node-selection');
     const cancelBtn = document.getElementById('cancelNodeSelection');
     const searchInput = document.getElementById('nodeSearchInput');
 
@@ -359,7 +356,6 @@ function getHostForSplitterOutputConn(outConn, splitterObj) {
     return null;
 }
 
-/** Другой конец кабеля относительно сплиттера (карта или встроенный в муфту/кросс). */
 function getOtherEndForSplitterCable(cable, splitterObj, cableId, fiberNumber) {
     if (!cable || !splitterObj) return null;
     var direct = getOtherEndOfCable(cable, splitterObj);
@@ -400,7 +396,6 @@ function resolveSplitterOutputPeer(splitterObj, outConn) {
         return c.properties && c.properties.get('type') === 'cable' && c.properties.get('uniqueId') === outConn.cableId;
     });
     if (!outCable) return null;
-    // Выход на волокно кабеля: точка посадки = hostId (или хост сплиттера), не «другой конец от сплиттера»
     var landing = getHostForSplitterOutputConn(outConn, splitterObj);
     if (landing) {
         var remote = typeof getOtherEndOfCable === 'function' ? getOtherEndOfCable(outCable, landing) : null;
@@ -437,7 +432,6 @@ function buildSplitterOutputToMediaConverterPathSteps(splitterObj, outConn) {
     ];
 }
 
-/** Drop-кабель от сплиттера/хоста до ONU (для трассы и расчёта дБм). */
 function resolveSplitterToOnuDropFiber(splitterObj, onuObj, outputEntry) {
     if (!onuObj || !onuObj.properties) return null;
     var onuUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(onuObj) : onuObj.properties.get('uniqueId');
@@ -518,7 +512,6 @@ function buildSplitterOutputToOnuPathSteps(splitterObj, onuObj, outputEntry) {
     return steps;
 }
 
-/** Физические волокна на порту кросса (fiberPorts), кроме указанной (обычно feeder сплиттера). */
 function findPhysicalFibersOnCrossPort(crossObj, portNumber, excludeCableId, excludeFiberNumber) {
     if (!crossObj || !crossObj.properties || portNumber == null) return [];
     var fiberPorts = crossObj.properties.get('fiberPorts') || {};
@@ -545,7 +538,6 @@ function findCableByUniqueIdLocal(cableId) {
     }) || null;
 }
 
-/** Длина линии связи хост → ONU (кросс/муфта → waypoints → ONU), м. */
 function measureHostToOnuDropDistanceM(hostObj, onuObj, routeIds) {
     if (!hostObj || !onuObj || !hostObj.geometry || !onuObj.geometry) return 0;
     var start;
@@ -577,8 +569,6 @@ function pushOnuDropStepsFromHost(steps, crossObj, cableId, fiberNumber, onuObj,
     var routeIds = (onuAss && onuAss.routeIds) || [];
     var distanceM = measureHostToOnuDropDistanceM(crossObj, onuObj, routeIds);
     var cable = (!opts.skipCable && cableId) ? findCableByUniqueIdLocal(cableId) : null;
-    // Отдельный drop-кабель: только если это не входная/логическое волокно сплиттера
-    // и второй конец кабеля — ONU.
     if (cable && !opts.logicalFiberOnly) {
         var otherEnd = typeof getOtherEndOfCable === 'function' ? getOtherEndOfCable(cable, crossObj) : null;
         var isDropCable = otherEnd && otherEnd.properties && otherEnd.properties.get('type') === 'onu';
@@ -624,16 +614,11 @@ function resolveOnuObjFromAss(onuAss) {
     }) || null;
 }
 
-/**
- * Продолжение после выхода сплиттера на порт кросса: разъём → drop (кабель или линия связи) → ONU.
- * feederCableId/feederFiber — входное волокно сплиттера (не считать его drop-кабелем).
- */
 function buildContinuationAfterSplitterCrossPort(crossObj, portNumber, feederCableId, feederFiberNumber, splitterObj, outConn) {
     if (!crossObj || portNumber == null) return [];
     var steps = [];
     var portNum = parseInt(portNumber, 10);
 
-    // 1) Выход сразу на ONU (onuId на выходе сплиттера)
     if (outConn && outConn.onuId) {
         var onuDirect = typeof getMapObjectByUid === 'function'
             ? getMapObjectByUid(outConn.onuId, 'onu')
@@ -646,7 +631,6 @@ function buildContinuationAfterSplitterCrossPort(crossObj, portNumber, feederCab
         }
     }
 
-    // 2) ONU на логическом волокне выхода сплиттера (линия связи кросс→ONU, часто без drop-кабеля)
     var logical = typeof resolveSplitterCrossPortLogicalFiber === 'function'
         ? resolveSplitterCrossPortLogicalFiber(crossObj, portNum)
         : null;
@@ -662,7 +646,6 @@ function buildContinuationAfterSplitterCrossPort(crossObj, portNumber, feederCab
         }
     }
 
-    // 3) Волокна на этом порту (fiberPorts), кроме feeder → ONU / drop-кабель
     var fibers = findPhysicalFibersOnCrossPort(crossObj, portNum, feederCableId, feederFiberNumber);
     if ((!fibers || !fibers.length) && feederCableId && feederFiberNumber != null &&
         typeof getCrossPortMateFibers === 'function') {
@@ -689,7 +672,6 @@ function buildContinuationAfterSplitterCrossPort(crossObj, portNumber, feederCab
         }
     }
 
-    // 4) Любая onuConnections, чья волокно относится к этому порту (физ. или логически)
     var onuMap = crossObj.properties.get('onuConnections') || {};
     var onuKeys = Object.keys(onuMap);
     for (var ok = 0; ok < onuKeys.length; ok++) {
@@ -721,7 +703,6 @@ function buildContinuationAfterSplitterCrossPort(crossObj, portNumber, feederCab
         return steps;
     }
 
-    // 5) ONU с incomingFiber на порту (отдельный drop-кабель)
     if (typeof objects !== 'undefined') {
         for (var oi = 0; oi < objects.length; oi++) {
             var cand = objects[oi];
@@ -748,7 +729,6 @@ function buildContinuationAfterSplitterCrossPort(crossObj, portNumber, feederCab
                 pushOnuDropStepsFromHost(steps, crossObj, inc.cableId, inc.fiberNumber, cand, null, {});
                 return steps;
             }
-            // Линия связи по логическом волокне
             if (logical && inc.cableId === logical.cableId &&
                 Number(inc.fiberNumber) === Number(logical.fiberNumber)) {
                 var hostAss = typeof getHostAssignment === 'function'
@@ -917,7 +897,6 @@ function appendSplitterDirectOutputSteps(path, splitterObj, outputConnections, t
     return false;
 }
 
-/** Вход сплиттера с муфты/кросса (splitterConnections) — основной источник физического подключения. */
 function getSplitterHostInputFiber(splitterObj) {
     var splitterId = getObjectUniqueId(splitterObj);
     if (!splitterId) return null;
@@ -1141,7 +1120,6 @@ function getAvailableHostsForSplitterOutput() {
 var _splitterOutputAtHostIndex = null;
 var _splitterOutputAtHostIndexObjectsLen = -1;
 
-/** Сброс индекса выходов сплиттеров (после изменения outputConnections / импорта). */
 function invalidateSplitterOutputAtHostIndex() {
     _splitterOutputAtHostIndex = null;
     _splitterOutputAtHostIndexObjectsLen = -1;
@@ -1533,8 +1511,8 @@ function completeSplitterFiberRouting() {
     var outputs = (sp.properties.get('outputConnections') || []).slice();
     while (outputs.length < ratio) outputs.push(null);
     if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
-    
-    var rootInput = getSplitterRootInputFiber(sp);
+
+        var rootInput = getSplitterRootInputFiber(sp);
     var existingOut = outputs[data.outIdx];
     if (data.targetType === 'onu') {
         if (!rootInput || !rootInput.cableId || rootInput.fiberNumber == null) {
@@ -1619,23 +1597,23 @@ function completeSplitterFiberRouting() {
                 routeIds: routeIds
             };
     }
-    
-    sp.properties.set('outputConnections', outputs);
+
+        sp.properties.set('outputConnections', outputs);
     if (sp._embedded && sp._host) {
         persistEmbeddedSplittersOnHost(sp._host);
     }
     saveData();
-    
-    if (splitterFiberPreviewLine) {
+
+        if (splitterFiberPreviewLine) {
         myMap.geoObjects.remove(splitterFiberPreviewLine);
         splitterFiberPreviewLine = null;
     }
-    
-    splitterFiberRoutingMode = false;
+
+        splitterFiberRoutingMode = false;
     splitterFiberRoutingData = null;
     splitterFiberWaypoints = [];
-    
-    updateSplitterOutputConnectionLines();
+
+        updateSplitterOutputConnectionLines();
     clearGponRoutingMapHighlight();
     clearSelection();
     refreshSplitterUiAfterChange(sp);

@@ -1,6 +1,3 @@
-/**
- * Сериализация, save/load, undo/redo, импорт/экспорт.
- */
 function serializeOneObject(obj) {
     if (!obj || objects.indexOf(obj) < 0) return null;
     return serializeMapItemFromObject(obj);
@@ -300,8 +297,6 @@ function serializeMapItemFromObject(obj) {
             if (props.serialNumber) result.serialNumber = props.serialNumber;
             if (props.ipAddress) result.ipAddress = props.ipAddress;
         }
-        // getAll() иногда не отдаёт cabinetId — берём через get()/getObjectCabinetId,
-        // иначе update уходит с cabinetId:null и у остальных стирается состав (у автора в памяти ещё есть).
         var cabIdSer = '';
         if (typeof getObjectCabinetId === 'function') {
             cabIdSer = getObjectCabinetId(obj) || '';
@@ -327,7 +322,6 @@ function serializeMapItemFromObject(obj) {
             if (typeof obj.properties.unset === 'function') obj.properties.unset('_syncClearCabinetId');
             else obj.properties.set('_syncClearCabinetId', false);
         } else if (typeof canBeCabinetMember === 'function' && canBeCabinetMember(props.type)) {
-            // null только при явном извлечении; иначе ключ не шлём — Object.assign на сервере сохранит cur.cabinetId.
             if (clearCabFlag) {
                 result.cabinetId = null;
                 if (typeof obj.properties.unset === 'function') obj.properties.unset('_syncClearCabinetId');
@@ -382,7 +376,6 @@ function cloneMapSnapshot(state) {
     return JSON.parse(JSON.stringify(state));
 }
 
-/** Map uniqueId → revision (number). Не только has/exists — чтобы sync не сканировал lastSavedState O(N). */
 var _lastSavedUidIndex = null;
 var _lastSavedUidIndexRef = null;
 
@@ -414,7 +407,6 @@ function ensureLastSavedUidIndex() {
     return idx;
 }
 
-/** Точечно обновить индекс после инкрементального патча — без полного O(N) rebuild. */
 function updateLastSavedUidIndexForItems(serializedItems) {
     if (!serializedItems || !serializedItems.length) return;
     var idx = ensureLastSavedUidIndex();
@@ -439,7 +431,6 @@ function snapshotHasUniqueId(uid) {
     return !!(idx && idx.has(String(uid)));
 }
 
-/** O(1) revision из индекса снимка (для sync baseRevision). */
 function getSnapshotRevisionFromIndex(uid) {
     if (uid == null || uid === '') return null;
     var idx = ensureLastSavedUidIndex();
@@ -449,16 +440,10 @@ function getSnapshotRevisionFromIndex(uid) {
 }
 window.getSnapshotRevisionFromIndex = getSnapshotRevisionFromIndex;
 
-/**
- * Прогрев кэшей редактирования после загрузки — чтобы первый move не платил O(N).
- * Вызывать из idle после markMapDataReady / import.
- */
 function warmMapEditCaches() {
     try {
         if (typeof MapPerf !== 'undefined' && MapPerf.warmIndexes) MapPerf.warmIndexes();
     } catch (eWarmPerf) {}
-    // Не гоняем getSerializedData() на 25k сразу после загрузки — это главный фриз после «Готово».
-    // lastSavedState уже должен быть из API (finishRemoteApply). Полный rebuild — только если совсем пусто.
     try {
         var liveLen = (typeof objects !== 'undefined' && Array.isArray(objects)) ? objects.length : 0;
         var needFull = liveLen > 100 &&
@@ -506,8 +491,6 @@ function indexMapSnapshot(state) {
 
 function snapshotItemEquals(a, b) {
     if (!a || !b) return false;
-    // Разная revision — точно разные. Одинаковая revision НЕ гарантирует равенство:
-    // перемещение патчит geometry в lastSavedState до (или без) bump revision в снимке.
     if (a.revision != null && b.revision != null && Number(a.revision) !== Number(b.revision)) {
         return false;
     }
@@ -691,7 +674,6 @@ function patchSnapshotItems(snapshot, serializedItems) {
         byUid[String(it.uniqueId)] = it;
         pending++;
     }
-    // Shallow-копия для undo (slice быстрее ручного new Array + цикл).
     var next = snapshot.slice();
     var patched = 0;
     for (var j = 0; j < next.length && patched < pending; j++) {
@@ -724,7 +706,6 @@ function collectSerializedPatchItems(opts) {
         out.push(item);
         return true;
     }
-    // Временный индекс objects→index для сериализации кабелей (иначе objects.indexOf = O(N) на каждый конец).
     var needsCableIndex = !!(opts.cable || (opts.cables && opts.cables.length) ||
         (opts.objects && opts.objects.some(function(o) {
             return o && o.properties && o.properties.get('type') === 'cable';
@@ -836,8 +817,6 @@ function clearUndoRedoStacks() {
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
 }
 
-// Полная сериализация карты дорогая: при потоке входящих правок пересобираем снимок не чаще раза
-// в REMOTE_SNAPSHOT_DEBOUNCE_MS. НИКОГДА не делать это синхронно в saveData на 30k — это 1–3с фриз.
 var REMOTE_SNAPSHOT_DEBOUNCE_MS = 400;
 var _remoteSnapshotIdleScheduled = false;
 
@@ -870,10 +849,6 @@ function scheduleDeferredRemoteSnapshotRefresh() {
     }
 }
 
-/**
- * @param {boolean} [forceSync] — только для undo/redo, где снимок должен быть актуален сразу.
- * Обычный save/move НЕ должен форсировать: иначе первый move = getSerializedData() всей карты.
- */
 function flushPendingRemoteSnapshot(forceSync) {
     if (!_remoteUndoInvalidateTimer && !_remoteSnapshotIdleScheduled) return;
     if (_remoteUndoInvalidateTimer) {
@@ -892,7 +867,6 @@ window.flushPendingRemoteSnapshot = flushPendingRemoteSnapshot;
 function invalidateUndoAfterRemoteChange() {
     clearUndoRedoStacks();
     if (_remoteUndoInvalidateTimer) clearTimeout(_remoteUndoInvalidateTimer);
-    // Не setTimeout→sync serialize: уводим в idle, чтобы не попасть под первый saveData.
     _remoteUndoInvalidateTimer = null;
     scheduleDeferredRemoteSnapshotRefresh();
 }
@@ -965,7 +939,6 @@ function upsertSnapshotItems(snapshot, serializedItems) {
 function saveData(opts) {
     opts = opts || {};
     if (currentModalObject && infoModalEditModeSession && !infoModalEditMode && !opts.fiberSchemeViewOnly) return;
-    // Голый saveData() при открытой модалке → патч текущего объекта (как уже делает pushSaveDataToSync).
     if (!opts.addObject && !opts.removeUniqueIds && !opts.removeObject && !opts.syncFull && !opts._flushFullSave &&
         !opts.object && !opts.cable && !(opts.objects && opts.objects.length) && !(opts.cables && opts.cables.length) &&
         currentModalObject && currentModalObject.properties) {
@@ -974,9 +947,7 @@ function saveData(opts) {
     bumpMapDataEpoch();
     var hasIncrementalTarget = !!(opts.addObject || opts.removeUniqueIds || opts.removeObject ||
         opts.object || opts.cable || (opts.objects && opts.objects.length) || (opts.cables && opts.cables.length));
-    // Инкрементальный save: НЕ форсировать полный getSerializedData (это и был фриз 1–3с на первом move).
     flushPendingRemoteSnapshot(false);
-    // Инкрементальный add: без полной сериализации и deep-clone всей карты (критично для INP).
     if (opts.addObject && !inUndoRedo) {
         var addItem = serializeMapItemFromObject(opts.addObject);
         if (addItem) {
@@ -1011,7 +982,6 @@ function saveData(opts) {
             return;
         }
     }
-    // Инкрементальное удаление по uniqueId (+ опциональный патч затронутых объектов).
     if (!inUndoRedo && Array.isArray(lastSavedState) && opts.removeUniqueIds && opts.removeUniqueIds.length) {
         var filteredState = filterSnapshotByRemovedUids(lastSavedState, opts.removeUniqueIds);
         if (filteredState) {
@@ -1038,7 +1008,6 @@ function saveData(opts) {
             }
         }
     }
-    // Инкрементальный update (перемещение / правка): патч только затронутых uniqueId.
     if (!inUndoRedo && hasIncrementalTarget &&
         (opts.object || opts.cable || (opts.objects && opts.objects.length) || (opts.cables && opts.cables.length))) {
         var patchItems = collectSerializedPatchItems(opts);
@@ -1046,7 +1015,6 @@ function saveData(opts) {
         if (patchItems && Array.isArray(lastSavedState) && lastSavedState.length) {
             patchedState = patchLastSavedStateItems(patchItems);
         }
-        // Если снимок ещё пустой/неполный (типично сразу после load) — upsert без полной сериализации.
         if (!patchedState && patchItems) {
             patchedState = upsertSnapshotItems(lastSavedState, patchItems);
         }
@@ -1067,7 +1035,6 @@ function saveData(opts) {
             return;
         }
     }
-    // Полный JSON.stringify ~30k — coalesce только голые вызовы без целевого объекта.
     if (!opts._flushFullSave && !opts.syncFull && !inUndoRedo && !hasIncrementalTarget &&
         Array.isArray(lastSavedState) && lastSavedState.length > 800) {
         _saveDataFullPendingOpts = opts;
@@ -1087,8 +1054,6 @@ function saveData(opts) {
         _saveDataFullTimer = null;
         _saveDataFullPendingOpts = null;
     }
-    // Инкрементальный target есть, но патч не удался — всё равно НЕ делаем полный serialize на move.
-    // Отложим полный снимок в idle; sync op уже уйдёт через pushSaveDataToSync по объектам.
     if (hasIncrementalTarget && !opts._flushFullSave && !opts.syncFull && !inUndoRedo) {
         if (!opts.skipSync) pushSaveDataToSync(opts);
         scheduleDeferredRemoteSnapshotRefresh();
@@ -1181,7 +1146,6 @@ function updateUndoRedoButtons() {
 
 function applyMapStartFromSettings(mapStart, force) {
     if (!mapStart || !Array.isArray(mapStart.center) || mapStart.center.length < 2) return false;
-    // После импорта NeD по координатам карта открыта на новых объектах — не уводим её на начальную точку.
     if (window._mapFocusOnceActive) return false;
     if (!force && window._mapStartApplied) return false;
     if (typeof myMap === 'undefined' || !myMap) {
@@ -1318,7 +1282,6 @@ function loadData() {
                 try {
                     if (s.groupNames.cross && typeof s.groupNames.cross === 'object') Object.keys(s.groupNames.cross).forEach(function(k) { crossGroupNames.set(k, s.groupNames.cross[k]); });
                     if (s.groupNames.node && typeof s.groupNames.node === 'object') Object.keys(s.groupNames.node).forEach(function(k) { nodeGroupNames.set(k, s.groupNames.node[k]); });
-                    // Не пересобирать display во время первичной загрузки — importDataPostProcess сделает это сам.
                     if (!_mapInitialLoadPending && !_mapApplyInProgress) {
                         if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
                         if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
@@ -1380,7 +1343,6 @@ function loadData() {
     (function scheduleMapDataReadyFallback() {
         function tick() {
             if (_mapDataReady || _mapStateReceived) return;
-            // Не снимать оверлей, пока открыт выбор региона (раньше зря ждали 15 с под ним).
             if (window._mapRegionPickerAwaiting || (typeof isMapRegionPickerAwaiting === 'function' && isMapRegionPickerAwaiting())) {
                 setTimeout(tick, 500);
                 return;
@@ -1808,11 +1770,9 @@ function shouldApplyRemoteMapState(organizationId) {
 
 var _mapApiReloadTimer = null;
 var _mapApplyInProgress = false;
-/** Анти-дубль: sync hello шлёт map_refresh сразу после /api/map → карта грузилась дважды. */
 var _lastMapLoadedFromApiAt = 0;
 var _lastMapLoadedOrgId = null;
 var MAP_SYNC_RELOAD_DEDUP_MS = 8000;
-/** uid → timestamp: локально созданные объекты, которых ещё может не быть в /api/map. */
 var _pendingLocalMapAdds = typeof Map !== 'undefined' ? new Map() : null;
 var PENDING_LOCAL_MAP_ADD_GRACE_MS = 120000;
 
@@ -1854,10 +1814,8 @@ function isPendingLocalMapAdd(obj, now) {
 }
 
 function shouldSkipSyncMapRefresh(organizationId) {
-    // Импортёр сам делает location.reload после POST /api/map — не гоняем forceFull apply.
     if (typeof window !== 'undefined' && window._skipMapRefreshUntilReload) return true;
     if (typeof window !== 'undefined' && window.__mapRegionSwitching) return true;
-    // Пока идёт первичная/текущая apply из /api/map — hello map_refresh не нужен.
     if (_mapInitialLoadPending || _mapApplyInProgress) return true;
     if (!_lastMapLoadedFromApiAt) return false;
     if ((Date.now() - _lastMapLoadedFromApiAt) > MAP_SYNC_RELOAD_DEDUP_MS) return false;
@@ -1887,7 +1845,6 @@ function reloadMapFromApi(meta) {
             || window.currentMapRegionId
             || (meta.regionId != null ? String(meta.regionId) : '');
         if (!regionId) return;
-        // Чужой регион в map_refresh — не перезатираем текущий срез
         if (meta.regionId != null && meta.regionId !== '' && String(meta.regionId) !== String(regionId)) {
             return;
         }
@@ -1934,9 +1891,6 @@ function applyRemoteState(data, meta) {
     if (_mapDataReady && !_mapInitialLoadPending) {
         clearUndoRedoStacks();
     }
-    // После первичной загрузки обычно merge: иначе map_refresh = clearMap+importData
-    // (ощущение «перезагрузки страницы» при чужом удалении/full state).
-    // forceFull — импорт/восстановление: полная пересборка карты организации.
     var preferMerge = !meta.forceFull && (
         meta.merge === true || (_mapDataReady && !_mapInitialLoadPending && objects && objects.length > 0)
     );
@@ -1977,18 +1931,14 @@ function applyRemoteState(data, meta) {
         function finishRemoteApply() {
             if (applyFinished) return;
             applyFinished = true;
-            // Всегда снимаем apply-флаг первым — иначе sync/save остаются заблокированы.
             _mapApplyInProgress = false;
-            // Дешёвый снимок сразу (без JSON deep-clone) — иначе idle через 2с клинит вкладку.
             try {
                 if (meta && meta.fromApi && Array.isArray(data)) {
                     lastSavedState = data;
                     invalidateLastSavedUidIndex();
                 }
             } catch (eSnapEarly) {}
-            // Сначала снимаем оверлей — JSON-снимок и stats не должны его держать.
             try { markMapDataReady(); } catch (eReady) {}
-            // Снимок только что собран — отменить отложенный полный rebuild от remote ops.
             if (_remoteUndoInvalidateTimer) {
                 clearTimeout(_remoteUndoInvalidateTimer);
                 _remoteUndoInvalidateTimer = null;
@@ -2003,7 +1953,6 @@ function applyRemoteState(data, meta) {
                     }
                 } catch (eSnap) {}
                 try { updateStats(); } catch (eStats) {}
-                // Офлайн-кэш на большой карте не пишем автоматически (stringify 25k клинит UI).
                 try {
                     var nObj = (typeof objects !== 'undefined' && objects) ? objects.length : 0;
                     if (nObj < 5000 && typeof OfflineMapCache !== 'undefined' && OfflineMapCache.scheduleSave) {
@@ -2056,7 +2005,6 @@ function applyRemoteStateMerged(data) {
     var refs = [];
     var refIndexByDataIndex = {};
     var i, item, existing, created, label;
-    // uid → первый подходящий объект (как objects.find); созданные по ходу добавляются сразу.
     var regionByUid = new Map();
     var placemarkByUid = new Map();
     function indexPlacemark(o) {
@@ -2105,8 +2053,6 @@ function applyRemoteStateMerged(data) {
     var refsSet = new Set(refs);
     var mergeNow = Date.now();
     pruneExpiredPendingLocalMapAdds(mergeNow);
-    // Не вычищать только что созданные локально объекты: /api/map или чужой state
-    // часто ещё без их uid → иначе placemark мигает и пропадает («карта перезагрузилась»).
     var toRemoveObjs = objects.filter(function(o) {
         var t = o.properties && o.properties.get('type');
         if (!t || t === 'cable' || t === 'cableLabel') return false;
@@ -2178,8 +2124,8 @@ function applyRemoteStateMerged(data) {
     incomingCables.forEach(function(item) {
         var coords = normalizeCableGeometry(item.geometry);
         var fromObj = null, toObj = null;
-        
-        if (item.fromUniqueId) {
+
+                if (item.fromUniqueId) {
             fromObj = refByUidMerge.get(item.fromUniqueId);
         }
         if (item.toUniqueId) {
@@ -2197,8 +2143,6 @@ function applyRemoteStateMerged(data) {
         }
         if (!fromObj || !toObj) {
             if (coords && coords.length >= 2) {
-                // Для ВОЛС при коллизии координат предпочитаем кросс/муфту/OLT; для меди концы —
-                // узел, коммутатор, камера, МК. Иначе МК у кросса ошибочно привязывается к кроссу.
                 var preferFiberEndpoint = item.cableType !== 'copper';
                 fromObj = fromObj || findRefClosestToCoord(refs, coords[0], undefined, preferFiberEndpoint, item.fromUniqueId);
                 toObj = toObj || findRefClosestToCoord(refs, coords[coords.length - 1], undefined, preferFiberEndpoint, item.toUniqueId);
@@ -2345,8 +2289,8 @@ function applyRemoteStateMerged(data) {
         validateAndFixCableGeometryOnLoad();
         refreshAllCableUndergroundOverlays();
         updateCableVisualization();
-        
-        lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
+
+                lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
     }, 0);
 
     var objectsSetAfterMerge = selectedObjects.length ? new Set(objects) : null;
@@ -2364,7 +2308,6 @@ function refreshOpenCabinetModalForMember(member) {
     if (!cabId) return;
     var openUid = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(currentModalObject) : currentModalObject.properties.get('uniqueId');
     if (String(openUid) !== String(cabId)) return;
-    // Soft-refresh: без showCabinetInfo/refreshObjectModal (повторный lock + showObjectInfoBody стирали «Состав»).
     if (typeof paintCabinetModalBody === 'function') {
         try { paintCabinetModalBody(currentModalObject, { openShell: false }); } catch (eCabModal) {}
         return;
@@ -2383,7 +2326,6 @@ function refreshRemoteObjectVisuals(obj) {
     } catch (eHov) {}
     var type = obj.properties.get('type');
     var inCabinet = typeof getObjectCabinetId === 'function' && !!getObjectCabinetId(obj);
-    // Члены ящика (в т.ч. cross/node): сначала кабинет — иначе remote не видит добавление.
     if (inCabinet && typeof updateCabinetAfterMemberChange === 'function') {
         updateCabinetAfterMemberChange(obj);
     } else if (type === 'cross') {
@@ -2415,7 +2357,6 @@ function refreshRemoteObjectVisuals(obj) {
             } catch (e) {}
         }
     }
-    // После remount remote-update восстановить selected-иконку (иначе «не выделяется»).
     try {
         if (typeof selectedObjects !== 'undefined' && selectedObjects && selectedObjects.indexOf(obj) >= 0) {
             if (!(typeof isEditMode !== 'undefined' && isEditMode && type !== 'crossGroup' && type !== 'nodeGroup')) {
@@ -2447,7 +2388,6 @@ function applyOperationToMap(op) {
                 return t && t !== 'cable' && t !== 'cableLabel' && o.properties.get('uniqueId') === addUid;
             });
             if (existingAdd) {
-                // Повторный add / add без cabinetId + поздний payload — дотянуть membership.
                 if (op.data) {
                     populatePlacemarkFromSerializedData(existingAdd, op.data);
                     refreshRemoteObjectVisuals(existingAdd);
@@ -2661,7 +2601,6 @@ function importDataCreatePlacemarkRef(item) {
     return createObjectFromData(item, null, { bulkImport: true });
 }
 
-/** Точка/линия/полигон пересекает bounds (для приоритетного импорта viewport). */
 function serializedGeometryTouchesBounds(geometry, bounds) {
     if (!bounds || geometry == null) return true;
     if (typeof geometry[0] === 'number') {
@@ -2696,10 +2635,6 @@ function serializedGeometryTouchesBounds(geometry, bounds) {
         maxLon < bounds.minLon || minLon > bounds.maxLon);
 }
 
-/**
- * Маска «создать сразу»: объекты в viewport + концы кабелей, видимых на экране.
- * Остальное догружается после снятия оверлея.
- */
 function buildViewportPriorityCreateMask(data, bounds) {
     var n = data.length;
     var createNow = new Array(n);
@@ -2747,7 +2682,6 @@ function buildViewportPriorityCreateMask(data, bounds) {
     return createNow;
 }
 
-/** Подпись + hover после mount (при bulk на загрузке не создаём). */
 function ensureMapObjectDecorations(obj) {
     if (!obj || !obj.properties) return;
     var type = obj.properties.get('type');
@@ -2812,7 +2746,6 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
             toObj = toObj || objectRefs[item.to];
         }
     }
-    // NeD/legacy: конец на node — подменить на муфту/кросс в той же точке (иначе кабель не создаётся).
     function remapImportCableEndpointToFiberHost(obj, coordHint) {
         if (!obj || !obj.properties) return obj;
         var t = obj.properties.get('type');
@@ -2913,7 +2846,6 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
     }
     var cable = (item.uniqueId != null && cableByUid[item.uniqueId]) || null;
     if (!cable) {
-        // Существующих кабелей с этим uid нет (проверено выше) — новый кабель addCable дописал в конец objects.
         var scanFrom = refIndex.cablesPrefilled ? objectsLenBeforeAdd : 0;
         for (var ci = scanFrom; ci < objects.length; ci++) {
             var cObj = objects[ci];
@@ -2945,7 +2877,6 @@ function importDataRunOneCable(item, objectRefs, refIndex, cableByUid) {
         if (typeof applySerializedCableProduct === 'function') applySerializedCableProduct(cable, item);
         applySerializedUndergroundToCable(cable, item, cable.properties.get('points'));
         applyImportedCableFiberProps(cable, item);
-        // Без этого все кабели после load имеют mapRevision=0 → первый move = op_conflict × N.
         if (item.revision != null && typeof setMapRevision === 'function') {
             setMapRevision(cable, item.revision);
         }
@@ -3078,7 +3009,6 @@ function importDataPostProcess(opts, onDone) {
         if (typeof setMapLoadingOverlayText === 'function' && !deferHeavy) {
             setMapLoadingOverlayText(opts && opts.bulkImport ? 'Финализация импорта…' : 'Подготовка карты…');
         }
-        // Лёгкий путь после early-reveal на большой карте: только то, что нужно для видимого viewport.
         var postSteps = litePost ? [
             function() {
                 if (typeof syncAllCabinetMembersToCabinets === 'function') {
@@ -3191,7 +3121,6 @@ function importDataPostProcess(opts, onDone) {
         var baseText = opts && opts.bulkImport ? 'Финализация импорта…' : 'Подготовка карты…';
         var stepIdx = 0;
         function scheduleNextPostStep() {
-            // После reveal даём UI дышать между шагами (rAF alone не помогает при 200мс+ шаге).
             if (deferHeavy) setTimeout(runPostStep, 80);
             else scheduleMapImportStep(runPostStep);
         }
@@ -3201,7 +3130,6 @@ function importDataPostProcess(opts, onDone) {
                 try {
                     console.info('[MapLoad] подготовка карты: ' + Math.round(mapImportNow() - postStart) + ' мс', stepTimings);
                 } catch (eLog) {}
-                // На lite/large НЕ ставим таймеры full-scan — они клинили вкладку через N секунд.
                 finish();
                 return;
             }
@@ -3232,14 +3160,12 @@ function importData(data, opts, done) {
     var useBulk = !!opts.bulkImport || undoRedo || (Array.isArray(data) && data.length >= bulkMinItems);
     var importBatchSize = undoRedo ? MAP_UNDO_REDO_BATCH_SIZE : MAP_BULK_IMPORT_BATCH_SIZE;
     _mapBulkImportActive = useBulk;
-    // merge: добавить к текущей карте без очистки (импорт NeD и т.п.)
     if (!opts.merge) {
         clearMap(opts || {});
     }
     importDataAssignUniqueIds(data);
 
     function completeImport(err) {
-        // Объекты и кабели уже на карте — снимаем оверлей до тяжёлого post-process.
         var earlyReveal = !!_mapInitialLoadPending && useBulk && !undoRedo;
         var largeMap = Array.isArray(objects) && objects.length >= 5000;
         if (earlyReveal && typeof markMapDataReady === 'function') {
@@ -3251,8 +3177,6 @@ function importData(data, opts, done) {
             } catch (eIdxEarly) {}
             try { markMapDataReady(); } catch (eEarly) {}
         }
-        // На большой карте после reveal не гоняем полный post-process синхронно —
-        // иначе UI «зависает после загрузки» на десятки секунд.
         var postOpts = opts || {};
         if (earlyReveal && largeMap) {
             postOpts = Object.assign({}, postOpts, { litePostProcess: true, deferHeavyPost: true });
@@ -3264,8 +3188,6 @@ function importData(data, opts, done) {
                 else if (typeof applyMapFilter === 'function' && !largeMap) applyMapFilter();
             } catch (eLodApply) {}
             if (typeof done === 'function') done(err || null);
-            // На большой карте НЕ запускаем отложенный тяжёлый проход через N секунд —
-            // именно он клинил UI «через несколько секунд после загрузки».
             if (largeMap) return;
             setTimeout(function() {
                 try {
@@ -3430,7 +3352,6 @@ function populatePlacemarkFromSerializedData(placemark, data) {
         var forceUndoGeom = typeof inUndoRedo !== 'undefined' && inUndoRedo;
         var incomingRev = data.revision != null && !isNaN(Number(data.revision)) ? Number(data.revision) : null;
         var localRev = typeof getMapRevision === 'function' ? getMapRevision(placemark) : 0;
-        // Undo/redo намеренно откатывает к меньшей revision — иначе объект остаётся на новом месте.
         if (forceUndoGeom || incomingRev == null || incomingRev >= localRev) {
             placemark.geometry.setCoordinates(data.geometry);
             var geomLabel = placemark.properties.get('label');
@@ -3445,7 +3366,6 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (type) placemark.properties.set('type', type);
     if (data.name != null) {
         placemark.properties.set('name', data.name);
-        // При bulk-загрузке подписи создаём лениво (на mount) — иначе ×2 Placemark на объект.
         if (!(typeof isMapBulkImportActive === 'function' && isMapBulkImportActive()) &&
             typeof updateObjectLabel === 'function') {
             updateObjectLabel(placemark, data.name);
@@ -3782,14 +3702,12 @@ function createObjectFromData(data, opts, createOpts) {
         hasBalloon: false,
         openBalloonOnClick: false
     };
-    
-    const placemark = new ymaps.Placemark(geometry, {
+
+        const placemark = new ymaps.Placemark(geometry, {
         type: type,
         name: name
     }, placemarkOptions);
 
-    // Не вешать отдельный dragend с полным updateCross/NodeDisplay —
-    // на 30k это убивает INP; финализация только через finalizeMapObjectDragEnd (scoped).
 
     if (uniqueId) {
         placemark.properties.set('uniqueId', uniqueId);
@@ -3821,28 +3739,28 @@ function createObjectFromData(data, opts, createOpts) {
             if (Date.now() < placementPanBlockClickUntil) return;
             var objId = getObjectUniqueId(placemark);
             var objType = type;
-            
-            if (objId === splitterFiberRoutingData.targetId ||
+
+                        if (objId === splitterFiberRoutingData.targetId ||
                 (typeof isGponFiberRoutingTargetReachableClick === 'function' &&
                     isGponFiberRoutingTargetReachableClick(splitterFiberRoutingData, placemark))) {
                 completeSplitterFiberRouting();
                 return;
             }
-            
-            if (objType === 'support' || objType === 'attachment') {
+
+                        if (objType === 'support' || objType === 'attachment') {
                 addSplitterFiberWaypoint(placemark);
                 updateSplitterFiberPreview();
                 return;
             }
-            
-            var spRouteAnchor = getGponFiberRoutingSourceAnchor(splitterFiberRoutingData);
+
+                        var spRouteAnchor = getGponFiberRoutingSourceAnchor(splitterFiberRoutingData);
             if (isGponFiberRoutingSourceUid(splitterFiberRoutingData, objId)) {
                 splitterFiberWaypoints = [];
                 updateSplitterFiberPreview();
                 return;
             }
-            
-            var targetName = getFiberRoutingTargetLabel(splitterFiberRoutingData.targetType, splitterFiberRoutingData.targetObj);
+
+                        var targetName = getFiberRoutingTargetLabel(splitterFiberRoutingData.targetType, splitterFiberRoutingData.targetObj);
             showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
             return;
         }
@@ -3855,25 +3773,25 @@ function createObjectFromData(data, opts, createOpts) {
             }
             var objId = getObjectUniqueId(placemark);
             var objType = type;
-            
-            if (objId === fiberRoutingData.targetId) {
+
+                        if (objId === fiberRoutingData.targetId) {
                 completeFiberRouting();
                 return;
             }
-            
-            if (objType === 'support' || objType === 'attachment') {
+
+                        if (objType === 'support' || objType === 'attachment') {
                 addFiberRoutingWaypoint(placemark);
                 updateFiberRoutingPreview();
                 return;
             }
-            
-            if (objId === getObjectUniqueId(fiberRoutingData.sleeveObj)) {
+
+                        if (objId === getObjectUniqueId(fiberRoutingData.sleeveObj)) {
                 fiberRoutingWaypoints = [];
                 updateFiberRoutingPreview();
                 return;
             }
-            
-            var targetName = getFiberRoutingTargetLabel(fiberRoutingData.targetType, fiberRoutingData.targetObj);
+
+                        var targetName = getFiberRoutingTargetLabel(fiberRoutingData.targetType, fiberRoutingData.targetObj);
             showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
             return;
         }
@@ -4011,8 +3929,8 @@ function createObjectFromData(data, opts, createOpts) {
         if (!isEditMode) {
             return;
         }
-        
-        if (selectedObjects.includes(placemark)) {
+
+                if (selectedObjects.includes(placemark)) {
             deselectObject(placemark);
         } else {
             selectObject(placemark);
@@ -4020,7 +3938,6 @@ function createObjectFromData(data, opts, createOpts) {
     });
 
     placemark.events.add('dragstart', function() {
-        // Страховка: если idle-прогрев ещё не успел — собрать индексы до движения.
         try {
             if (typeof MapPerf !== 'undefined' && MapPerf.ensureCableLinksIndex) MapPerf.ensureCableLinksIndex();
             if (typeof ensureLastSavedUidIndex === 'function') ensureLastSavedUidIndex();
@@ -4030,7 +3947,6 @@ function createObjectFromData(data, opts, createOpts) {
             typeof beginSleevePathDrag === 'function') {
             beginSleevePathDrag(placemark);
         }
-        // Снять подпись один раз на старте — не на каждый кадр drag (geoObjects.remove = O(mounted)).
         var labelStart = placemark.properties.get('label');
         if (labelStart) {
             try { myMap.geoObjects.remove(labelStart); } catch (eLblStart) {}
@@ -4105,7 +4021,6 @@ function createObjectFromData(data, opts, createOpts) {
 
     var bulkCreate = !!(createOpts && createOpts.bulkImport) ||
         (typeof isMapBulkImportActive === 'function' && isMapBulkImportActive());
-    // Bulk: без второй Placemark-подписи и hover — иначе на 10–20k карта «висит» минутами.
     if (!bulkCreate) {
         updateObjectLabel(placemark, name);
         if (type === 'camera') refreshCameraMapPresentation(placemark);
@@ -4472,7 +4387,6 @@ function collectSnapshotBoundsFromData(data) {
         if (!item || !item.geometry) return;
         if (item.type === 'cableLabel' || item.type === 'regionLabel' || type === 'zoneLabel') return;
         visitCoord(item.geometry);
-        // Приоритет для bounds: реальные объекты и связи, но не регион-полигон.
         if (item.type !== 'region') visitCoreCoord(item.geometry);
     });
     if (Number.isFinite(coreMinLat) && Number.isFinite(coreMinLon) && Number.isFinite(coreMaxLat) && Number.isFinite(coreMaxLon)) {
@@ -4618,7 +4532,6 @@ function isMapPdfDarkTheme() {
 function applyMapPdfLabelInlineStyles(labelEl) {
     if (!labelEl || !labelEl.style) return;
     var isDark = isMapPdfDarkTheme();
-    // Без CSS transform: html2canvas часто теряет/смещает элементы с transform.
     labelEl.style.display = 'inline-block';
     labelEl.style.position = 'relative';
     labelEl.style.left = '0';
@@ -4809,8 +4722,6 @@ function isYmapsTileLikeNode(node) {
     if (!node || !node.className) return false;
     var cls = String(node.className);
     if (cls.indexOf('ymaps') === -1) return false;
-    // Только подложка/тайлы. places/overlays panes содержат метки объектов —
-    // сброс их transform уводит иконки за кадр в html2canvas.
     if (/places|overlay|copyright|control|hint|balloon|event/i.test(cls)) return false;
     return /ground|tiles?|layer/i.test(cls);
 }
@@ -5122,7 +5033,6 @@ function prepareMapVisibilityForPdfCapture(boundsRect, opts) {
             if (typeof updateAllConnectionLines === 'function') updateAllConnectionLines();
         } catch (eLines) {}
     }
-    // Во время PDF-захвата applyConnectionLinesVisibility — no-op; не вызываем лишний раз.
     refreshVisibleMapLabelsForPdfCapture(boundsRect, opts);
     applyMapPdfLabelStylesInRoot(document.getElementById('map'));
 }
@@ -5398,7 +5308,6 @@ async function openPdfExportWindow(data, exportOptions) {
     beginMapPdfExportCapture();
     try {
         if (mode === 'viewport') {
-            // Не меняем zoom: режим «Как на экране» должен совпадать с текущим видом.
             await waitForMapViewChange({ renderDelay: 400 });
             await prepareMapFrameForPdfCapture(
                 viewportBounds,
@@ -5577,7 +5486,6 @@ function exportData(preferredFormat) {
 
 function clearMap(opts) {
     opts = opts || {};
-    // preserveUiState: фоновая гидратация opposite-слота — не трогаем selection/кэши активной карты
     if (!opts.preserveUiState) {
         if (window.CameraPlayer && CameraPlayer.stopStreamMonitor) CameraPlayer.stopStreamMonitor();
     }

@@ -1,11 +1,5 @@
 'use strict';
 
-/**
- * Print MySQL / storage status for console ops (no passwords).
- *
- *   node scripts/mysql-status.js
- *   npm run db:status
- */
 const { getStorageStatus, closePool } = require('../server/db/mysql-ops');
 
 async function main() {

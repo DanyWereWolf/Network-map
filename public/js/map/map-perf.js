@@ -1,6 +1,3 @@
-/**
- * Индекс объектов, отсечение по viewport, виртуализация geoObjects, spatial index.
- */
 (function(global) {
     var objectsById = new Map();
     var VIEWPORT_CULL_MIN_OBJECTS = 120;
@@ -26,15 +23,12 @@
     function isZoneOrRegionType(type) {
         return type === 'region' || type === 'zone';
     }
-    /** uid объекта → Set кабелей, касающихся from/to/points. Лениво пересобирается при dirty. */
     var cablesByObjectUid = new Map();
     var cableLinksDirty = true;
 
-    /** То же, что geoObjects.indexOf(obj) !== -1, но обычно за O(1) через getParent(). */
     function isGeoObjectOnMap(obj) {
         if (!obj || !global.myMap || !global.myMap.geoObjects) return false;
         var coll = global.myMap.geoObjects;
-        // Leaflet shim: _parent выставляется в GeoObjectCollection.add/remove.
         if (obj._parent === coll) return true;
         if (typeof obj.getParent === 'function') {
             try {
@@ -64,7 +58,6 @@
         if (typeIndexed.has(obj)) return;
         typeIndexed.add(obj);
         objectsByType[type].push(obj);
-        // Инкрементально поддерживаем reverse-индекс; полный dirty — только clear/bulk.
         if (type === 'cable' && !cableLinksDirty) indexSingleCableLinks(obj);
     }
 
@@ -78,7 +71,6 @@
         var idx = bucket.indexOf(obj);
         if (idx !== -1) bucket.splice(idx, 1);
         if (type === 'cable') {
-            // Точечное удаление из reverse-индекса дороже полного dirty при редких delete — dirty OK.
             cableLinksDirty = true;
         }
     }
@@ -144,7 +136,6 @@
         cableLinksDirty = false;
     }
 
-    /** Переиндексировать один кабель без полного rebuild (после смены points). */
     function reindexOneCableLinks(cable) {
         if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return;
         if (cableLinksDirty) {
@@ -215,11 +206,9 @@
         clearObjectsIndex();
         if (!Array.isArray(list)) return;
         for (var i = 0; i < list.length; i++) registerMapObject(list[i]);
-        // Сразу собрать reverse cable index — иначе первый move платит O(все кабели).
         ensureCableLinksIndex();
     }
 
-    /** Прогрев индексов после загрузки карты (до первого редактирования). */
     function warmIndexes() {
         ensureCableLinksIndex();
     }
@@ -374,7 +363,6 @@
         }
         var cellCount = (maxLatCell - minLatCell + 1) * (maxLonCell - minLonCell + 1);
         if (cellCount > spatialGrid.size) {
-            // При сильном отдалении ячеек в области больше, чем заполненных — обходим только заполненные.
             spatialGrid.forEach(function(bucket) {
                 if (bucket.latCell >= minLatCell && bucket.latCell <= maxLatCell &&
                     bucket.lonCell >= minLonCell && bucket.lonCell <= maxLonCell) take(bucket);
@@ -392,7 +380,6 @@
 
     var viewportCountCache = { key: '', gen: 0, count: 0 };
 
-    /** Примерное число объектов (без дублей не считаем) в границах; кэш по границам. */
     function countObjectsInBounds(bounds) {
         if (!bounds) return 0;
         var key = bounds.minLat + ',' + bounds.minLon + ',' + bounds.maxLat + ',' + bounds.maxLon;
@@ -420,7 +407,6 @@
         return count;
     }
 
-    /** Слишком много объектов в видимой области, чтобы показывать подписи (DOM на каждую подпись). */
     function isLabelDensityExceeded(map) {
         var budget = typeof global.getPerfLabelBudget === 'function' ? global.getPerfLabelBudget() : 500;
         if (!budget || spatialGrid.size === 0) return false;
@@ -491,8 +477,6 @@
                     return false;
                 }
                 if (Array.isArray(c[0]) && Array.isArray(c[0][0])) {
-                    // Polygons: AABB overlap, not only vertices — otherwise zooming
-                    // into a large region (all vertices off-screen) unmounts it.
                     for (var ri = 0; ri < c.length; ri++) {
                         if (ringAabbOverlapsBounds(c[ri], bounds)) return true;
                     }
@@ -522,8 +506,6 @@
     function isObjectInViewport(obj, bounds) {
         if (!obj || !bounds) return true;
         var type = obj.properties && obj.properties.get('type');
-        // Never viewport-cull zones (same as applyViewportCullToMap). Their area
-        // can still cover the view when every vertex is off-screen after a deep zoom-in.
         if (isZoneOrRegionType(type)) return true;
         if (type === 'cable') return cableInViewport(obj, bounds);
         if (type === 'cableLabel') {
@@ -603,7 +585,6 @@
         var type = obj.properties.get('type');
         if (isCabinetMember(obj)) return false;
         if (obj.properties.get('_mapFilterVisible') === false) return false;
-        // Зоны (legacy: region) остаются на карте при hideObjects — как и раньше region.
         if (ctx.hideObjects && !isZoneOrRegionType(type)) return false;
         if (ctx.hideRegions && isZoneOrRegionType(type)) return false;
         if (ctx.bounds && !isObjectInViewport(obj, ctx.bounds)) return false;
@@ -629,7 +610,6 @@
         if (!uid || mountedUids.has(uid)) return;
         if (!shouldMountObject(obj, ctx)) return;
         try {
-            // Bulk-загрузка откладывает label/hover — создаём при первом появлении в viewport.
             if (typeof global.ensureMapObjectDecorations === 'function') {
                 try { global.ensureMapObjectDecorations(obj); } catch (eDec) {}
             }
@@ -678,8 +658,6 @@
     function mapAdd(obj) {
         if (!obj) return;
         registerSpatial(obj);
-        // Always use current zoom/bounds — stale mountContext caused newly created
-        // objects to stay mounted at low zoom (expert hide ignored).
         var ctx = buildDefaultMountContext();
         mountContext = ctx;
         if (!shouldUseVirtualization()) {
@@ -750,7 +728,6 @@
         });
         for (var i = 0; i < toUnmount.length; i++) unmountObject(toUnmount[i]);
 
-        // Снять «сирот», добавленных мимо MapPerf (например raw geoObjects.add при импорте).
         if (!Array.isArray(global.objects)) return;
         for (var j = 0; j < global.objects.length; j++) {
             var o = global.objects[j];
@@ -802,7 +779,6 @@
             }
         }
 
-        // Avoid full objects[] scan: typed indexes for cables and zones (legacy region).
         var typedLists = [objectsByType.cable, objectsByType.cableLabel, objectsByType.region, objectsByType.zone];
         for (var tl = 0; tl < typedLists.length; tl++) {
             var list = typedLists[tl];

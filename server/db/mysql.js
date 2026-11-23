@@ -46,7 +46,6 @@ function isMysqlEnabled() {
 async function getPool() {
     if (pool) return pool;
     const conf = getMysqlConfig();
-    // Ensure database exists
     const { database, ...serverConf } = conf;
     const boot = await mysql.createConnection(serverConf);
     try {

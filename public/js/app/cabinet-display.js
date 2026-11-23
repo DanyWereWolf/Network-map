@@ -1,6 +1,3 @@
-/**
- * Ящики (cabinet): контейнер для кроссов, узлов, OLT и др.
- */
 var CABINET_MEMBER_TYPES = ['cross', 'spliceCassette', 'node', 'olt', 'mediaConverter', 'onu'];
 var CABINET_EXTRACT_OFFSET = 0.00008;
 
@@ -347,7 +344,6 @@ function getCabinetCableLayOnTarget() {
     return typeof processFiberCableEndpointClick === 'function' ? processFiberCableEndpointClick : function() {};
 }
 
-/** Совпадение объектов на маршруте кабеля (по ссылке, uniqueId или ящик ↔ его содержимое). */
 function traceRouteObjectsMatch(a, b) {
     if (!a || !b) return false;
     if (a === b) return true;
@@ -393,7 +389,6 @@ function findCabinetMembersUsingCableFiber(members, cableId, fiberNum) {
     });
 }
 
-/** Кросс/муфта/OLT внутри ящика, к которому относится данный кабель. */
 function findCabinetMemberOnCable(cabinet, cable, opts) {
     opts = opts || {};
     if (!cabinet || !cable) return null;
@@ -441,7 +436,6 @@ function findCabinetMemberOnCable(cabinet, cable, opts) {
     return members.length === 1 ? members[0] : null;
 }
 
-/** Ящик на маршруте → реальный endpoint (кросс/муфта/OLT); остальные объекты без изменений. */
 function resolveTraceRouteObject(obj, cable, opts) {
     if (!obj || !obj.properties || !cable) return obj;
     var type = obj.properties.get('type');
@@ -917,7 +911,6 @@ function clearObjectCabinetId(obj) {
     if (typeof obj.properties.unset === 'function') obj.properties.unset('cabinetId');
     else obj.properties.set('cabinetId', '');
     clearCabinetMemberOrder(obj);
-    // Чтобы serialize отправил cabinetId:null (иначе update без ключа оставит membership у remote).
     obj.properties.set('_syncClearCabinetId', true);
 }
 
@@ -938,16 +931,10 @@ function isCabinetVirtualizationActive() {
     return typeof MapPerf !== 'undefined' && typeof MapPerf.shouldUseVirtualization === 'function' && MapPerf.shouldUseVirtualization();
 }
 
-/**
- * opts.mountCtx — общий контекст монтирования (на больших картах объект попадает
- * на карту только если он в зоне видимости); opts.skipConnectionLines — линии
- * пересчитает вызывающий одним проходом.
- */
 function showCabinetMemberOnMap(obj, opts) {
     if (!obj || !myMap || !obj.properties) return;
     if (getObjectCabinetId(obj)) return;
     var type = obj.properties.get('type');
-    // Кроссы и узлы снова отрисовывает updateCrossDisplay / updateNodeDisplay.
     if (type === 'cross' || type === 'node') return;
     opts = opts || {};
 
@@ -973,7 +960,6 @@ function showCabinetMemberOnMap(obj, opts) {
     }
 }
 
-/** Выносит из ящиков объекты типов, которые больше нельзя туда помещать (напр. камеры). */
 function releaseUnsupportedCabinetMembers(opts) {
     opts = opts || {};
     if (!Array.isArray(objects)) return 0;
@@ -1039,7 +1025,6 @@ function getCabinetGroupScopeKey(cabinet) {
     return null;
 }
 
-/** Точечное обновление после добавления/удаления объекта в ящике (без полной перестройки карты). */
 function updateCabinetAfterMemberChange(member, cabinet) {
     if (!member || !member.properties) return;
     var cab = cabinet;
@@ -1124,7 +1109,6 @@ function updateCabinetDisplay(opts) {
         }
     });
 
-    // opts.skipDependents: кроссы/узлы, фильтр и линии вызывающий обновит сам (загрузка карты).
     if (opts.skipDependents) return;
     if (typeof updateCrossDisplay === 'function') updateCrossDisplay();
     if (typeof updateNodeDisplay === 'function') updateNodeDisplay();
@@ -1793,7 +1777,6 @@ function bindCabinetCardControls(root, cabinet) {
     bindCabinetMemberDragReorder(root, cabinet);
 }
 
-/** Перерисовать тело модалки ящика без повторного lock (состав не должен стираться). */
 function paintCabinetModalBody(cabinet, opts) {
     opts = opts || {};
     if (!cabinet || !cabinet.properties || cabinet.properties.get('type') !== 'cabinet') return false;

@@ -33,7 +33,6 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Plexus / AI-style фон */
 .auth-bg {
     position: fixed;
     inset: 0;
@@ -759,7 +758,6 @@ label.checkbox-label {
     align-items: center;
 }
 
-/* Иконка слева (только прямой потомок, не внутри кнопки) */
 .input-wrapper > svg {
     position: absolute;
     left: 13px;
@@ -785,7 +783,6 @@ label.checkbox-label {
     color: #0f172a;
 }
 
-/* Поля с кнопкой показа пароля */
 .input-wrapper.has-toggle input {
     padding-right: 48px;
 }
@@ -819,7 +816,6 @@ label.checkbox-label {
     transition: background-color 99999s ease-out 0s;
 }
 
-/* Кнопка показа/скрытия пароля */
 .toggle-password {
     position: absolute;
     right: 4px;
@@ -1221,7 +1217,6 @@ label.checkbox-label {
     border-color: rgba(74, 222, 128, 0.35);
 }
 
-/* ==================== Мобильные: auth, pricing, checkout, site-admin ==================== */
 html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;

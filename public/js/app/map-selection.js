@@ -1,6 +1,3 @@
-/**
- * Выделение объектов на карте.
- */
 function createSelectionPulse(obj) {
     if (!obj || !obj.geometry || !myMap || !window.ymaps) return;
     removeSelectionPulse(obj);
@@ -89,7 +86,6 @@ function applyCableSelectionHighlight(cable) {
     var baseWidth = typeof getCableWidth === 'function' ? getCableWidth(cable) : (cable.options.get('strokeWidth') || 2);
     var baseColor = cable.options.get('strokeColor') ||
         (typeof getCableColor === 'function' ? getCableColor(cable) : '#0f766e');
-    // If currently hovered, prefer the stored pre-hover color as base.
     var hoverOrig = cable.properties.get('originalCableOptions');
     if (hoverOrig && hoverOrig.strokeColor) baseColor = hoverOrig.strokeColor;
     if (hoverOrig && hoverOrig.strokeWidth != null) baseWidth = hoverOrig.strokeWidth;
@@ -108,7 +104,6 @@ function clearCableSelectionHighlight(cable) {
     if (!cable || !cable.properties || !cable.options) return;
     var original = cable.properties.get('originalCableSelectOptions');
     if (!original) return;
-    // Hover may own the live stroke; don't clobber an active hover restore path.
     if (typeof hoveredObject !== 'undefined' && hoveredObject === cable &&
         cable.properties.get('originalCableOptions')) {
         cable.properties.unset('originalCableSelectOptions');
@@ -130,10 +125,10 @@ function selectObject(obj) {
     clearShowOnMapHighlight();
     if (!selectedObjects.includes(obj)) {
         selectedObjects.push(obj);
-        
-        const type = obj.properties.get('type');
-        
-        if (isEditMode && type !== 'crossGroup' && type !== 'nodeGroup') {
+
+                const type = obj.properties.get('type');
+
+                if (isEditMode && type !== 'crossGroup' && type !== 'nodeGroup') {
             return;
         }
 
@@ -149,11 +144,6 @@ function selectObject(obj) {
 
 var dragUpdateRafId = null;
 var dragUpdatePlacemark = null;
-/**
- * На больших картах во время drag НЕ трогаем кабели и GPON-линии (YMaps setCoordinates
- * по тысячам geoObjects = главный фриз). Только pulse / Alt-path муфты / hover card.
- * Кабели и линии догоняют один раз на dragend.
- */
 function scheduleDragUpdate(pm) {
     dragUpdatePlacemark = pm;
     if (dragUpdateRafId != null) return;
@@ -196,15 +186,15 @@ function deselectObject(obj) {
     selectedObjects = selectedObjects.filter(o => o !== obj);
 
     removeSelectionPulse(obj);
-    
-    const type = obj.properties.get('type');
+
+        const type = obj.properties.get('type');
 
     if (type === 'cable') {
         clearCableSelectionHighlight(obj);
         return;
     }
-    
-    if (isEditMode && type !== 'crossGroup' && type !== 'nodeGroup') {
+
+        if (isEditMode && type !== 'crossGroup' && type !== 'nodeGroup') {
         return;
     }
 
@@ -220,12 +210,11 @@ function clearSelection() {
 }
 
 function addCable(fromObj, toObj, cableType, existingCableId = null, fiberNumber = null, skipHistoryLog = false, skipSync = false, copperMeta = null) {
-    
-    if (Array.isArray(toObj)) {
+
+        if (Array.isArray(toObj)) {
         return createCableFromPoints(toObj, cableType, existingCableId, null, skipHistoryLog, skipSync, copperMeta);
     }
 
     return createCableFromPoints([fromObj, toObj], cableType, existingCableId, fiberNumber, skipHistoryLog, skipSync, copperMeta);
 }
 
-/** Метаданные меди из JSON / op.data для createCableFromPoints */

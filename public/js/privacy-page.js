@@ -17,7 +17,7 @@
     function getApiBase() {
         try {
             if (typeof window.getApiBase === 'function') return window.getApiBase() || '';
-        } catch (e) { /* ignore */ }
+        } catch (e) {  }
         return '';
     }
 

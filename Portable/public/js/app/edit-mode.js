@@ -1,6 +1,3 @@
-/**
- * Режим просмотра/редактирования, иконки объектов, импорт файла.
- */
 function isNedImportFile(file) {
     if (!file || !file.name) return false;
     return /\.ned$/i.test(file.name);
@@ -32,7 +29,6 @@ async function convertNedFileViaApi(file) {
     return body.data;
 }
 
-/** Новые uniqueId для merge-импорта; обновляет все ссылки внутри массива. */
 function remapImportUniqueIds(data) {
     if (!Array.isArray(data)) return data;
     var seq = 0;
@@ -73,7 +69,6 @@ function remapImportUniqueIds(data) {
             if (idMap[k] != null) {
                 nk = idMap[k];
             } else {
-                // usedFibers: cableId → [...]; fiberLabels: cableId-fiberN → text
                 for (var oldId in idMap) {
                     if (Object.prototype.hasOwnProperty.call(idMap, oldId) &&
                         k.length > oldId.length && k.indexOf(oldId + '-') === 0) {
@@ -135,10 +130,6 @@ function remapImportUniqueIds(data) {
 
 var MAP_FOCUS_ONCE_KEY = 'volsmap.mapFocusOnce';
 
-/**
- * Охват координат импорта: центр и границы по 2–98 перцентилям (без выбросов).
- * null, если координаты не похожи на реальные WGS84.
- */
 function getImportGeoExtent(data) {
     if (!Array.isArray(data)) return null;
     var lats = [], lons = [];
@@ -159,7 +150,6 @@ function getImportGeoExtent(data) {
     var south = q(lats, 0.02), north = q(lats, 0.98), west = q(lons, 0.02), east = q(lons, 0.98);
     if (south < -85 || north > 85 || west < -180 || east > 180) return null;
     if (Math.abs(q(lats, 0.5)) < 0.5 && Math.abs(q(lons, 0.5)) < 0.5) return null;
-    // Крупный город / область: до ~10° (~1100 км). Больше — скорее битые координаты.
     if (north - south > 10 || east - west > 10) return null;
     return {
         center: [(south + north) / 2, (west + east) / 2],
@@ -167,7 +157,6 @@ function getImportGeoExtent(data) {
     };
 }
 
-/** Сдвинуть все geometry так, чтобы центроид совпал с targetCenter [lat, lon]. */
 function shiftMapDataToCenter(data, targetCenter) {
     if (!Array.isArray(data) || !targetCenter || targetCenter.length < 2) return data;
     var sumLat = 0, sumLon = 0, n = 0;
@@ -249,8 +238,6 @@ function handleFileImport(e) {
         var regionId = (typeof getCurrentMapRegionId === 'function' && getCurrentMapRegionId())
             || (typeof window !== 'undefined' && window.currentMapRegionId) || '';
         var payload = { data: serialized };
-        // Явная замена карты (confirm в UI) — иначе MAP_DANGEROUS_SHRINK отклоняет POST,
-        // а локальный importData уже нарисован → после F5 импорт «пропадает».
         if (persistOpts.allowShrink) payload.allowShrink = true;
         if (regionId) {
             payload.regionId = String(regionId);
@@ -293,7 +280,6 @@ function handleFileImport(e) {
         }
         var opts = Object.assign({ skipSave: true, skipHistory: true }, importOpts || {});
         if (bulkImport) opts.bulkImport = true;
-        // replace (не merge) — осознанная замена региона/карты после confirm.
         var allowShrinkOnPersist = !(importOpts && importOpts.merge);
         await new Promise(function(resolve, reject) {
             importData(data, opts, function(err) {
@@ -308,8 +294,6 @@ function handleFileImport(e) {
                 requestAnimationFrame(function() {
                     (async function() {
                         try {
-                            // Всегда свежий снимок с карты: saveData может no-op (модал/view-session),
-                            // а lastSavedState останется доимпортным → POST «успех» со старыми данными.
                             var serialized = typeof getSerializedData === 'function' ? getSerializedData() : null;
                             if (!Array.isArray(serialized)) {
                                 throw new Error('Не удалось сериализовать карту для сохранения');
@@ -343,7 +327,6 @@ function handleFileImport(e) {
                         } catch (saveErr) {
                             try { window._skipMapRefreshUntilReload = false; } catch (eClear) {}
                             hideImportOverlay();
-                            // Локальная карта уже заменена importData — без успешного POST откатываем F5.
                             try {
                                 showError(
                                     (saveErr && saveErr.message ? saveErr.message : 'Не удалось сохранить импорт') +
@@ -372,7 +355,6 @@ function handleFileImport(e) {
                 return;
             }
 
-            // replace: importData сам вызовет clearMap
             await runImportData(data, {}, 'Карта импортирована (' + data.length + ' объектов)', 'json');
         } catch (error) {
             console.error('Ошибка при импорте файла:', error);
@@ -426,7 +408,7 @@ function handleFileImport(e) {
             if (useOriginalCoords) {
                 try {
                     sessionStorage.setItem(MAP_FOCUS_ONCE_KEY, JSON.stringify({ bounds: extent.bounds }));
-                } catch (eStore) { /* без фокуса карта откроется на начальной точке */ }
+                } catch (eStore) {  }
             } else {
                 shiftMapDataToCenter(data, myMap.getCenter());
             }
@@ -437,7 +419,7 @@ function handleFileImport(e) {
                 'ned'
             );
         } catch (error) {
-            try { sessionStorage.removeItem(MAP_FOCUS_ONCE_KEY); } catch (eClear) { /* ignore */ }
+            try { sessionStorage.removeItem(MAP_FOCUS_ONCE_KEY); } catch (eClear) {  }
             console.error('Ошибка импорта NeD:', error);
             if (!(error && error._importPersistHandled)) {
                 showError(
@@ -499,7 +481,6 @@ function handleFileImport(e) {
     reader.readAsText(file);
 }
 
-/** Узкая ширина как у телефона: только просмотр (согласовано с app-mobile.css, 768px). */
 function isNetworkMapMobileViewOnly() {
     try {
         return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
@@ -528,12 +509,12 @@ function switchToViewMode(silent) {
     if (objectPlacementMode) {
         cancelObjectPlacement();
     }
-    
-    if (splitterFiberRoutingMode) {
+
+        if (splitterFiberRoutingMode) {
         cancelSplitterFiberRouting();
     }
-    
-    if (fiberRoutingMode) {
+
+        if (fiberRoutingMode) {
         cancelFiberRouting();
     }
 
@@ -542,15 +523,15 @@ function switchToViewMode(silent) {
     }
 
     if (regionDrawMode && typeof cancelRegionDraw === 'function') cancelRegionDraw();
-    
-    if (wasEditMode && !silent) {
+
+        if (wasEditMode && !silent) {
         showInfo('Переключено в режим просмотра', 'Режим');
     }
-    
-    removeCablePreview();
+
+        removeCablePreview();
     updateUIForMode();
-    
-    clearSelection();
+
+        clearSelection();
 
     if (hoveredObject) {
         clearHoverHighlight();
@@ -560,8 +541,8 @@ function switchToViewMode(silent) {
         mapEl.style.cursor = '';
         mapEl.classList.remove('map-crosshair-active');
     }
-    
-    updateEditControls();
+
+        updateEditControls();
     makeObjectsNonDraggable();
     syncMapPanLockForEditTools();
     if (typeof renderRegionsSidebarList === 'function') renderRegionsSidebarList();
@@ -573,8 +554,8 @@ function switchToViewMode(silent) {
 }
 
 function switchToEditMode() {
-    
-    if (!canEdit()) {
+
+        if (!canEdit()) {
         showWarning('Редактирование доступно только администраторам', 'Нет доступа');
         return;
     }
@@ -593,8 +574,8 @@ function switchToEditMode() {
         );
         return;
     }
-    
-    isEditMode = true;
+
+        isEditMode = true;
     updateUIForMode();
     updateEditControls();
     makeObjectsDraggable();
@@ -607,8 +588,8 @@ function updateUIForMode() {
     const viewBtn = document.getElementById('viewMode');
     const editBtn = document.getElementById('editMode');
     const badge = document.getElementById('mapEditModeBadge');
-    
-    if (viewBtn) viewBtn.classList.toggle('active', !isEditMode);
+
+        if (viewBtn) viewBtn.classList.toggle('active', !isEditMode);
     if (editBtn) editBtn.classList.toggle('active', isEditMode);
 
     document.body.classList.toggle('edit-mode-active', !!isEditMode);
@@ -738,7 +719,6 @@ function applyMapPlacemarkIcon(target, type, variant, source) {
     return icon;
 }
 
-/** Пересобрать SVG-иконки на карте после смены светлой/тёмной темы. */
 function refreshMapPlacemarkIcons() {
     if (!window.MapIcons || typeof objects === 'undefined') return;
 

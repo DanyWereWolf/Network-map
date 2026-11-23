@@ -1,12 +1,9 @@
-/**
- * Поиск по карте.
- */
 function setupMapSearch() {
     const searchInput = document.getElementById('mapSearch');
     const searchResults = document.getElementById('searchResults');
     const clearBtn = document.getElementById('clearSearch');
-    
-    if (!searchInput || !searchResults) return;
+
+        if (!searchInput || !searchResults) return;
 
     var searchBox = searchInput.closest('.header-search');
     function syncSearchChrome() {
@@ -14,8 +11,8 @@ function setupMapSearch() {
         if (searchBox) searchBox.classList.toggle('is-filled', filled);
         if (clearBtn) clearBtn.style.display = filled ? 'flex' : 'none';
     }
-    
-    let searchTimeout = null;
+
+        let searchTimeout = null;
 
     searchInput.addEventListener('input', function() {
         const query = this.value.trim();

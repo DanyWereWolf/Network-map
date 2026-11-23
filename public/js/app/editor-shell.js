@@ -1,6 +1,3 @@
-/**
- * Editor shell: flat edit tools + tool properties panel + info-dock.
- */
 (function () {
     'use strict';
 
@@ -275,7 +272,6 @@
             });
         }
 
-        // Гасим восстановленные браузером open (история / session restore).
         collapseAllSections();
         requestAnimationFrame(function () {
             collapseAllSections();
@@ -331,7 +327,6 @@
         setupEditToolsStrip();
         setupInfoDock();
         syncEditToolbarVisibility();
-        // start with tool props hidden
         closeToolProps();
     }
 

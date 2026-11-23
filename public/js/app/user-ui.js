@@ -1,15 +1,11 @@
-/**
- * Авторизация сессии, профиль, пользователи, организации, лимиты карты.
- */
 function checkAuth() {
     if (typeof AuthSystem === 'undefined') {
         console.warn('AuthSystem не загружен');
         return true; 
     }
-    
-    const session = AuthSystem.getCurrentSession();
+
+        const session = AuthSystem.getCurrentSession();
     var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
-    // Сессия без токена = «пустая» карта (API 401) и ложный «Готово».
     if (!session || !token) {
         try {
             sessionStorage.removeItem('networkMap_session');
@@ -21,8 +17,8 @@ function checkAuth() {
         window.location.href = 'auth.html';
         return false;
     }
-    
-    currentUser = session;
+
+        currentUser = session;
     if (session.organization && session.organization.mapLimits) {
         applyMapLimitsCache(session.organization.mapLimits);
     } else {
@@ -195,8 +191,8 @@ function initUserUI() {
     const userAvatar = document.getElementById('userAvatar');
     const userName = document.getElementById('userName');
     const userRole = document.getElementById('userRole');
-    
-    if (userAvatar) {
+
+        if (userAvatar) {
         applyAvatarToElement(userAvatar, currentUser);
         userAvatar.addEventListener('click', openProfileModal);
         userAvatar.addEventListener('keydown', function(e) {
@@ -239,8 +235,8 @@ function initUserUI() {
     if (editModeBtn && currentUser.role !== 'admin') {
         editModeBtn.style.display = 'none';
     }
-    
-    if (currentUser.role !== 'admin') {
+
+        if (currentUser.role !== 'admin') {
         hideAdminOnlyElements();
         if (typeof switchToViewMode === 'function') switchToViewMode(false);
     }
@@ -253,8 +249,8 @@ function initUserUI() {
             }
         });
     }
-    
-    if (usersManageBtn) {
+
+        if (usersManageBtn) {
         usersManageBtn.addEventListener('click', openUsersModal);
     }
 
@@ -582,8 +578,8 @@ function closeProfileModal() {
 }
 
 function hideAdminOnlyElements() {
-    
-    const objectsAccordion = document.querySelector('[data-accordion="objects"]');
+
+        const objectsAccordion = document.querySelector('[data-accordion="objects"]');
     if (objectsAccordion) {
         objectsAccordion.parentElement.style.display = 'none';
     }
@@ -620,7 +616,6 @@ function openUsersModal() {
     const modal = document.getElementById('usersModal');
     const content = modal && modal.querySelector('.users-modal-content');
 
-    // Сначала собираем разметку, потом показываем — без «вырастания» из пустого состояния
     prepareUsersModalLayout();
     renderUsersList();
 
@@ -1203,10 +1198,10 @@ function renderUsersList() {
     const pendingContainer = document.getElementById('pendingUsersList');
     const pendingSection = document.getElementById('pendingUsersSection');
     const pendingCountBadge = document.getElementById('pendingCount');
-    
-    if (!container || typeof AuthSystem === 'undefined') return;
-    
-    const users = AuthSystem.getUsers();
+
+        if (!container || typeof AuthSystem === 'undefined') return;
+
+        const users = AuthSystem.getUsers();
 
     const pendingUsers = users.filter(u => u.status === 'pending');
     const activeUsers = users.filter(u => u.status !== 'pending' && u.status !== 'rejected');
@@ -1216,12 +1211,12 @@ function renderUsersList() {
         if (pendingUsers.length > 0) {
             pendingSection.style.display = 'block';
             pendingCountBadge.textContent = pendingUsers.length;
-            
-            let pendingHtml = '';
+
+                        let pendingHtml = '';
             pendingUsers.forEach(user => {
                 const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
-                
-                pendingHtml += `
+
+                                pendingHtml += `
                     <div class="pending-user-item">
                         ${buildUserAvatarHtml(user, '')}
                         <div class="user-item-info">
@@ -1247,8 +1242,8 @@ function renderUsersList() {
                     </div>
                 `;
             });
-            
-            pendingContainer.innerHTML = pendingHtml;
+
+                        pendingContainer.innerHTML = pendingHtml;
         } else {
             pendingSection.style.display = 'none';
         }
@@ -1264,19 +1259,19 @@ function renderUsersList() {
             : '<div class="users-list-empty">Нет пользователей</div>';
         return;
     }
-    
-    let html = '';
-    
-    const onlineIds = (typeof window.syncOnlineUserIds !== 'undefined' && Array.isArray(window.syncOnlineUserIds)) ? window.syncOnlineUserIds : [];
-    
-    activeUsers.forEach(user => {
+
+        let html = '';
+
+        const onlineIds = (typeof window.syncOnlineUserIds !== 'undefined' && Array.isArray(window.syncOnlineUserIds)) ? window.syncOnlineUserIds : [];
+
+        activeUsers.forEach(user => {
         const roleClass = user.role === 'admin' ? 'admin' : 'user';
         const roleText = user.role === 'admin' ? 'Администратор' : 'Пользователь';
         const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
         const isCurrentUser = user.id === currentUser.userId;
         const isOnline = onlineIds.some(id => id == user.id);
-        
-        var orgLine = (user.organizationName ? ' · ' + escapeHtml(user.organizationName) : '');
+
+                var orgLine = (user.organizationName ? ' · ' + escapeHtml(user.organizationName) : '');
         html += `
             <div class="user-item">
                 ${buildUserAvatarHtml(user, roleClass)}
@@ -1308,8 +1303,8 @@ function renderUsersList() {
 
     rejectedUsers.forEach(user => {
         const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
-        
-        html += `
+
+                html += `
             <div class="user-item" style="opacity: 0.6;">
                 ${buildUserAvatarHtml(user, '')}
                 <div class="user-item-info">
@@ -1334,8 +1329,8 @@ function renderUsersList() {
             </div>
         `;
     });
-    
-    container.innerHTML = html;
+
+        container.innerHTML = html;
 }
 window.renderUsersList = renderUsersList;
 
@@ -1512,18 +1507,18 @@ function saveUser() {
     const fullNameInput = document.getElementById('editFullName');
     const passwordInput = document.getElementById('editPassword');
     const roleSelect = document.getElementById('editRole');
-    
-    const userId = userIdInput.value;
+
+        const userId = userIdInput.value;
     const username = usernameInput.value.trim();
     const fullName = fullNameInput.value.trim();
     const password = passwordInput.value;
     const role = roleSelect.value;
-    
-    const users = AuthSystem.getUsers();
-    
-    if (userId) {
-        
-        const userIndex = users.findIndex(u => u.id === userId);
+
+        const users = AuthSystem.getUsers();
+
+        if (userId) {
+
+                const userIndex = users.findIndex(u => u.id === userId);
         if (userIndex === -1) {
             showError('Пользователь не найден');
             return;
@@ -1582,8 +1577,8 @@ function saveUser() {
         AuthSystem.saveUsers(users);
         showSuccess('Пользователь обновлён');
     } else {
-        
-        if (!username) { showError('Введите имя пользователя'); return; }
+
+                if (!username) { showError('Введите имя пользователя'); return; }
         if (!password) { showError('Введите пароль'); return; }
         if (password.length < 6) { showError('Пароль должен быть не менее 6 символов'); return; }
         if (AuthSystem.findUserByUsername(username)) { showError('Пользователь с таким именем уже существует'); return; }
@@ -1636,11 +1631,11 @@ function editUser(userId) {
 function deleteUser(userId) {
     (async function() {
         if (!(await showConfirm('Вы уверены, что хотите удалить этого пользователя?', 'Удалить пользователя', { confirmText: 'Удалить' }))) return;
-    
-    const users = AuthSystem.getUsers();
+
+        const users = AuthSystem.getUsers();
     const userIndex = users.findIndex(u => u.id === userId);
-    
-    if (userIndex === -1) {
+
+        if (userIndex === -1) {
         showError('Пользователь не найден');
         return;
     }
@@ -1659,8 +1654,8 @@ function deleteUser(userId) {
         showError('Нельзя удалить единственного администратора организации');
         return;
     }
-    
-    const username = users[userIndex].username;
+
+        const username = users[userIndex].username;
 
     if (getApiBase()) {
         fetch(getApiBase() + '/api/users/' + encodeURIComponent(userId), {
@@ -1694,13 +1689,13 @@ window.editUser = editUser;
 window.openUsersModal = openUsersModal;
 
 function setupUsersModalHandlers() {
-    
-    const closeUsersBtn = document.querySelector('.close-users');
+
+        const closeUsersBtn = document.querySelector('.close-users');
     if (closeUsersBtn) {
         closeUsersBtn.addEventListener('click', closeUsersModal);
     }
-    
-    const usersModal = document.getElementById('usersModal');
+
+        const usersModal = document.getElementById('usersModal');
     if (usersModal) {
         usersModal.addEventListener('click', function(e) {
             if (e.target === usersModal) closeUsersModal();
@@ -1724,8 +1719,8 @@ function setupUsersModalHandlers() {
     if (closeUserEditBtn) {
         closeUserEditBtn.addEventListener('click', closeUserEditModal);
     }
-    
-    const userEditModal = document.getElementById('userEditModal');
+
+        const userEditModal = document.getElementById('userEditModal');
     if (userEditModal) {
         userEditModal.addEventListener('click', function(e) {
             if (e.target === userEditModal) closeUserEditModal();
@@ -1736,8 +1731,8 @@ function setupUsersModalHandlers() {
     if (saveUserBtn) {
         saveUserBtn.addEventListener('click', saveUser);
     }
-    
-    const cancelUserEditBtn = document.getElementById('cancelUserEditBtn');
+
+        const cancelUserEditBtn = document.getElementById('cancelUserEditBtn');
     if (cancelUserEditBtn) {
         cancelUserEditBtn.addEventListener('click', closeUserEditModal);
     }

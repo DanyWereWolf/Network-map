@@ -1,12 +1,5 @@
 'use strict';
 
-/**
- * Небольшой пул worker_threads для CPU-задач (stringify / clone),
- * чтобы не блокировать Express + WebSocket event loop.
- *
- * Размер: CPU_POOL_SIZE или все ядра, кроме одного (на нём основной поток сервера).
- * Потоки создаются по мере нагрузки, первый — сразу. Отключить: CPU_POOL_SIZE=0
- */
 const { Worker } = require('worker_threads');
 const path = require('path');
 const { cpuCount } = require('./threadpool');
@@ -38,7 +31,6 @@ function ensureWorkers() {
     if (!workers.length) spawnOne();
 }
 
-/** Добавляет поток, если все заняты, есть очередь и лимит не исчерпан. */
 function growIfNeeded() {
     if (destroyed || POOL_SIZE <= 0) return;
     var toSpawn = Math.min(waitQueue.length - idle.length, POOL_SIZE - workers.length);
@@ -79,7 +71,6 @@ function spawnOne() {
 function failBusyOrRecreate(worker, err) {
     worker.__busy = false;
     pending.forEach(function (entry, id) {
-        // Не знаем, какой id висел на этом worker — безопаснее не трогать чужие.
         void id;
         void entry;
     });

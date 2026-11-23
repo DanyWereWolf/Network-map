@@ -1,7 +1,3 @@
-/**
- * Стили для нативного приложения Volsmap (класс volsmap-android-app на <html>).
- * Подключается на auth, index и site-admin; дополняет app-mobile.css.
- */
 
 html.volsmap-android-app {
     -webkit-tap-highlight-color: transparent;
@@ -43,7 +39,6 @@ html.volsmap-android-app .map-area-wrapper .map {
     touch-action: pan-x pan-y pinch-zoom;
 }
 
-/* Вход: без ссылок на лендинг */
 html.volsmap-android-app .auth-main-link {
     display: none !important;
 }
@@ -53,7 +48,6 @@ html.volsmap-android-app.auth-page .auth-subtitle {
     line-height: 1.45;
 }
 
-/* Подсказка о режиме просмотра под шапкой карты */
 .volsmap-android-readonly-bar {
     flex-shrink: 0;
     padding: 7px 14px;
@@ -71,7 +65,6 @@ html.volsmap-android-app.auth-page .auth-subtitle {
     border-bottom-color: var(--border-color, #334155);
 }
 
-/* Чат поддержки и cookie — отступы от системной панели */
 html.volsmap-android-app .support-chat-fab-wrap {
     right: max(16px, var(--volsmap-safe-right, 0px), env(safe-area-inset-right, 0px));
     bottom: max(16px, var(--volsmap-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));

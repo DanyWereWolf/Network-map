@@ -1,12 +1,5 @@
 'use strict';
 
-/**
- * Restore MySQL database from a mysqldump .sql file under data/backups/full/.
- * Stop the API before running from CLI. Requires --yes.
- *
- *   npm run restore:mysql -- --dump mysqldump-network_map-….sql --yes
- *   npm run restore:mysql -- --dump path/to/file.sql --yes
- */
 const path = require('path');
 const fs = require('fs');
 const { restoreMysqlDump, FULL_BACKUPS_DIR, isSafeDumpFilename } = require('../server/db/mysql-ops');
@@ -39,7 +32,6 @@ function main() {
     }
 
     var filename = path.basename(dumpPath);
-    // Allow absolute/relative paths: copy or resolve into full backups dir if needed
     if (!isSafeDumpFilename(filename)) {
         console.error('[restore] Filename must match mysqldump-*.sql');
         process.exit(1);

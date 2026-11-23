@@ -1,6 +1,3 @@
-/**
- * Маршруты кабелей, подземные участки, разрез ВОЛС.
- */
 function getCablesThroughObject(obj) {
     if (!objects || !obj) return [];
     var uid = getObjectUniqueId(obj);
@@ -681,9 +678,6 @@ function setupUndergroundEditBar() {
     };
 }
 
-/**
- * Клик по красному пунктиру: поставить муфту в точке клика или переложить участок.
- */
 function showUndergroundSpanActionDialog(cable, spanIndex, coords) {
     if (!cable || !cable.properties || !isEditMode || (typeof canEdit === 'function' && !canEdit())) return;
     if (typeof isCopperCableType === 'function' && isCopperCableType(cable.properties.get('cableType'))) {
@@ -773,7 +767,6 @@ window.showUndergroundSpanActionDialog = showUndergroundSpanActionDialog;
 
 window.setupUndergroundEditBar = setupUndergroundEditBar;
 
-/** Записать черновик pathCoords подземного участка на кабель и сохранить на диск. */
 function applyUndergroundSpanDraft(cable, spanIndex, pathCoords, skipSave) {
     if (!cable || !cable.properties || spanIndex < 0) return false;
     var spans = (cable.properties.get('undergroundSpans') || []).slice();
@@ -814,7 +807,6 @@ function saveUndergroundSpanEdit() {
     return true;
 }
 
-/** Перепрокладка подземного участка заново (колодцы те же, трасса с нуля). */
 function startUndergroundSpanRelayout(cable, spanIndex) {
     if (!cable || !cable.properties || !canEdit()) return;
     if (isCopperCableType(cable.properties.get('cableType'))) return;
@@ -846,8 +838,6 @@ function handleManholeCableLayClick(manholeObj) {
         return true;
     }
     var lastWp = cableWaypoints.length ? cableWaypoints[cableWaypoints.length - 1] : null;
-    // Колодец → колодец всегда подземный. Иначе после выхода из MH2 клик по MH3
-    // начинал новый участок «от MH3» и пара MH2–MH3 оставалась воздушной.
     if (lastWp && lastWp !== manholeObj && lastWp.properties && lastWp.properties.get('type') === 'manhole') {
         cableUndergroundActive = true;
         cableUndergroundManhole = lastWp;
@@ -953,7 +943,6 @@ function findCablesNearPoint(coords, maxDistance, options) {
         if (options.fiberOnly && isCopperCableType(cable.properties.get('cableType'))) continue;
         var geom = cable.geometry && cable.geometry.getCoordinates();
         if (!geom || geom.length < 2) continue;
-        // BBox cull до дорогого projectPointOntoPolyline.
         var cMinLat = Infinity, cMaxLat = -Infinity, cMinLon = Infinity, cMaxLon = -Infinity;
         for (var gi = 0; gi < geom.length; gi++) {
             var g = geom[gi];
@@ -977,7 +966,6 @@ function findFiberCablesNearPoint(coords, maxDistance) {
     return findCablesNearPoint(coords, maxDistance, { fiberOnly: true }).map(function(x) { return x.cable; });
 }
 
-/** Нельзя вставлять опору/крепление внутрь подземного участка. */
 function isCableSegmentUnderground(cable, afterIndex) {
     var points = getCableRoutePoints(cable);
     if (!points || afterIndex < 0 || afterIndex >= points.length - 1) return false;
@@ -993,10 +981,6 @@ function isCableSegmentUnderground(cable, afterIndex) {
     return true;
 }
 
-/**
- * Вставить опору/крепление в маршрут кабеля по проекции на линию.
- * @returns {boolean}
- */
 function insertWaypointIntoCableRoute(cable, waypointObj, proj) {
     if (!cable || !cable.properties || !waypointObj || !proj) return false;
     var points = getCableRoutePoints(cable);
@@ -1022,7 +1006,6 @@ function insertWaypointIntoCableRoute(cable, waypointObj, proj) {
     return true;
 }
 
-/** Сессия Alt+drag муфты вдоль трассы (не трогает обычный free-drag). */
 var _sleevePathDragSession = null;
 
 function ensureMapAltKeyTracker() {
@@ -1078,7 +1061,6 @@ function getSleeveEndpointFiberCables(sleeve) {
     return out;
 }
 
-/** Точки от дальнего конца к соседу муфты (без муфты). */
 function getSleeveCableArmTowardSleeve(cable, sleeve) {
     var points = getCableRoutePoints(cable);
     if (!points || points.length < 2) return null;
@@ -1088,7 +1070,6 @@ function getSleeveCableArmTowardSleeve(cable, sleeve) {
     return null;
 }
 
-/** Точки от соседа муфты к дальнему концу (без муфты). */
 function getSleeveCableArmAwayFromSleeve(cable, sleeve) {
     var points = getCableRoutePoints(cable);
     if (!points || points.length < 2) return null;
@@ -1172,10 +1153,6 @@ function redistributeSleevePathCables(session, fraction) {
     return true;
 }
 
-/**
- * Начать Alt+drag муфты вдоль трассы. Без Alt / при неподходящей топологии — no-op (free-drag).
- * @returns {boolean}
- */
 function beginSleevePathDrag(sleeve) {
     endSleevePathDrag();
     if (!sleeve || !sleeve.properties || !sleeve.geometry) return false;
@@ -1228,7 +1205,6 @@ function beginSleevePathDrag(sleeve) {
     return true;
 }
 
-/** Применить path-constraint во время drag. Вызывать до updateConnectedCables. */
 function applySleevePathDrag(sleeve) {
     var session = _sleevePathDragSession;
     if (!session || !sleeve || session.sleeve !== sleeve) return false;
@@ -1279,7 +1255,6 @@ function applySleevePathDrag(sleeve) {
     var proj = projectPointOntoPolyline(cursor, spineCoords);
     if (!proj || !proj.point) return false;
 
-    // Не схлопывать сегменты: fraction между первой и последней вершиной spine.
     var fracTp = proj.fraction;
     var minFrac = 0;
     var maxFrac = 1;
@@ -1337,10 +1312,6 @@ function isSleevePathDragActive(sleeve) {
 
 ensureMapAltKeyTracker();
 
-/**
- * При размещении/перемещении опоры или крепления на кабель — закрепить кабель за этой точкой.
- * @returns {number} сколько кабелей привязано
- */
 function tryAttachWaypointToNearbyCables(waypointObj, options) {
     options = options || {};
     if (!waypointObj || !waypointObj.properties || !waypointObj.geometry) return 0;
@@ -1355,7 +1326,6 @@ function tryAttachWaypointToNearbyCables(waypointObj, options) {
     }
     if (!coords || coords.length < 2) return 0;
 
-    // Жёсткий радиус: нужно почти на линии (не как у разреза кабеля ~0.0004).
     var maxDist = options.maxDistance;
     if (maxDist == null) {
         var zoom = (typeof myMap !== 'undefined' && myMap && myMap.getZoom) ? myMap.getZoom() : 15;

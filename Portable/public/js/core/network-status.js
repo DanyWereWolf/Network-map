@@ -1,6 +1,3 @@
-/**
- * Показ ошибки сети и кнопка «Повторить».
- */
 (function() {
     var banner = null;
     var retryBtn = null;

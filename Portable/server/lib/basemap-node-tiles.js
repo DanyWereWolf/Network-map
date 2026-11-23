@@ -1,9 +1,3 @@
-/**
- * Нарезка GeoTIFF в XYZ PNG-тайлы без GDAL (geotiff + sharp).
- * Стратегия скорости:
- *  1) режем только maxZoom из исходника (параллельно);
- *  2) нижние уровни собираем пирамидой из 4 дочерних тайлов.
- */
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -201,7 +195,6 @@ async function sampleTileRgba(meta, z, tx, ty) {
     var winH = winMaxY - winMinY;
     if (winW < 1 || winH < 1) return null;
 
-    // Read at most ~512px window — enough for 256 tile after resize
     var readW = Math.min(winW, 512);
     var readH = Math.min(winH, 512);
 
@@ -338,7 +331,6 @@ async function generateTiles(options) {
     var outDir = ensureDir(options.outDir);
     var minZoom = Math.max(0, Number(options.minZoom) || 12);
     var maxZoom = Math.min(22, Number(options.maxZoom) || 16);
-    // Node path: keep range tight
     if (maxZoom - minZoom > 6) maxZoom = minZoom + 6;
     if (maxZoom > 18) maxZoom = 18;
     if (minZoom > maxZoom) minZoom = Math.max(0, maxZoom - 4);
@@ -382,7 +374,6 @@ async function generateTiles(options) {
         throw new Error('Не удалось создать тайлы — проверьте геопривязку GeoTIFF');
     }
 
-    // Pyramid: maxZoom-1 … minZoom
     for (var z = maxZoom - 1; z >= minZoom; z--) {
         var range = tileRangeForBounds(sw, ne, z);
         var parents = [];

@@ -1,6 +1,3 @@
-/**
- * Логические регионы-разделы карты: выбор при загрузке, переключение, перенос выделенных.
- */
 (function (global) {
     var MAP_REGION_SOFT_LIMIT = 10000;
     var MAP_REGION_SOFT_WARN_AT = 9000;
@@ -380,9 +377,6 @@
             el.style.display = 'none';
             el.setAttribute('aria-hidden', 'true');
         }
-        // Заставку «Загрузка карты» переигрываем только после реального выбора
-        // на первом входе. Закрытие окна без смены региона карту не трогает:
-        // иначе оверлей включается снова, а снять его уже некому.
         var stillInitial = typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending;
         if (opts.replayEntrance && stillInitial && typeof resetAppEntranceTimer === 'function') {
             try { resetAppEntranceTimer(); } catch (eReset) {}
@@ -402,7 +396,6 @@
         return '';
     }
 
-    /** Регион перед загрузкой карты: уже открытый, единственный или регион по умолчанию. */
     function chooseMapRegionBeforeLoad() {
         var existing = getCurrentMapRegionId();
         if (existing) return Promise.resolve(existing);
@@ -485,7 +478,6 @@
         }
         if (typeof clearMap === 'function') {
             try { clearMap({ skipSave: true }); } catch (e2) {
-                // fallback: снять объекты с карты вручную
                 if (typeof objects !== 'undefined' && Array.isArray(objects) && typeof myMap !== 'undefined' && myMap) {
                     while (objects.length) {
                         var o = objects.pop();
@@ -507,7 +499,6 @@
         return z;
     }
 
-    /** Границы объектов региона. Полигоны зон — только если точек и кабелей нет. */
     function boundsFromSerializedRegion(data) {
         var list = Array.isArray(data) ? data : [];
         var minLat = Infinity;
@@ -738,7 +729,6 @@
         }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
             .then(function (res) {
                 if (!res.ok) throw new Error((res.body && res.body.error) || 'Не удалось перенести');
-                // Убрать с текущей карты объекты, ушедшие в другой регион
                 objs.forEach(function (o) {
                     if (!o || !o.properties) return;
                     var uid = o.properties.get('uniqueId');

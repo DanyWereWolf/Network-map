@@ -1,7 +1,3 @@
-/**
- * Логические регионы-разделы карты + миграция полигонов region→zone.
- * Чистые функции без доступа к store — используются database.js и sync.
- */
 'use strict';
 
 var MAP_REGION_SOFT_LIMIT = 10000;
@@ -68,10 +64,6 @@ function filterItemsByRegionId(arr, regionId) {
     });
 }
 
-/**
- * Заменяет в full все items региона regionId на slice (с проставленным mapRegionId).
- * Остальные регионы не трогает.
- */
 function mergeRegionSliceIntoFull(fullArr, regionId, sliceArr) {
     var rid = regionId != null ? String(regionId) : '';
     if (!rid) throw new Error('regionId required');
@@ -83,7 +75,6 @@ function mergeRegionSliceIntoFull(fullArr, regionId, sliceArr) {
     var tagged = slice.map(function (item) {
         if (!item || typeof item !== 'object') return item;
         var copy = item;
-        // shallow: callers usually pass plain JSON
         if (itemMapRegionId(copy) !== rid) {
             copy = Object.assign({}, item, { mapRegionId: rid });
         }
@@ -120,7 +111,6 @@ function assertRegionSliceNotDangerousShrink(previousFull, regionId, nextSlice, 
     var prevSlice = filterItemsByRegionId(previousFull, regionId);
     var prevLen = prevSlice.length;
     var nextLen = Array.isArray(nextSlice) ? nextSlice.length : 0;
-    // Раньше порог 50 + ratio 0.5: малые регионы тихо вычищались неполным WS state.
     var MAP_SHRINK_MIN_EXISTING = 5;
     var MAP_SHRINK_RATIO = 0.9;
     if (prevLen >= MAP_SHRINK_MIN_EXISTING) {

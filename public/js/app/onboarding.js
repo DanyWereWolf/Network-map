@@ -1,6 +1,3 @@
-/**
- * Приветственное окно и интерактивный тур по интерфейсу.
- */
 var WELCOME_DISMISSED_KEY = 'networkMap_welcomeDismissed';
 var ONBOARDING_COMPLETED_KEY = 'networkMap_onboardingCompleted';
 var ONBOARDING_PROGRESS_KEY = 'networkMap_onboardingProgress';
@@ -337,8 +334,6 @@ function isOnboardingAllowedForCurrentDevice() {
         if (typeof window.matchMedia === 'function') {
             isTouchLike = window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches;
         }
-        // Отключаем обучение только для сценария «похоже на телефон»:
-        // узкий экран + touch-управление.
         return !(isNarrow && isTouchLike);
     } catch (e) {
         return true;
@@ -402,7 +397,6 @@ function scheduleOnboardingReposition() {
         run();
     }
 
-    // Панель инструментов / props сдвигают layout после click — догоняем после reflow.
     [50, 120, 280, 450].forEach(function(ms) {
         onboardingState._repositionTimers.push(setTimeout(run, ms));
     });
@@ -919,8 +913,6 @@ function startOnboardingTour(options) {
     };
 
     var onAnyProgressSignal = function() {
-        // Дожидаемся завершения штатных обработчиков UI (переключение режимов и т.п.)
-        // и только потом проверяем выполнение шага + позицию подсветки после сдвига layout.
         setTimeout(function() {
             evaluateOnboardingStepCompletion();
             scheduleOnboardingReposition();

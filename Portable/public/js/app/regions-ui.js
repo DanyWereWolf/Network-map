@@ -1,6 +1,3 @@
-/**
- * UI регионов: рисование, боковая панель.
- */
 function getNextRegionDefaultName() {
     var n = 1;
     if (window.MapRegions) {
@@ -352,7 +349,6 @@ function focusRegionOnMap(regionObj) {
         { checkZoomRange: true, duration: typeof mapMotionDuration === 'function' ? mapMotionDuration(300) : 300 }
     );
 }
-
 
 function setRegionVisible(regionObj, visible, opts) {
     if (!regionObj || !regionObj.properties) return;

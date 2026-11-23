@@ -1,7 +1,3 @@
-/**
- * Extract logical sections from main.js into separate modules.
- * Usage: node scripts/extract-main-modules.js [phase]
- */
 const fs = require('fs');
 const path = require('path');
 

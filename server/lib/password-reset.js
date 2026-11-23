@@ -112,7 +112,6 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
-/** Маска для UI: support@volsmap.ru → s***@volsmap.ru */
 function maskEmail(email) {
     const raw = String(email || '').trim();
     const at = raw.indexOf('@');

@@ -1,6 +1,3 @@
-/**
- * Шапка лендинга: ссылки в строке, при нехватке места — список по кнопке «Разделы» (см. landing-nav.js).
- */
 
 body.landing-page .landing-nav-burger {
     display: none;
@@ -26,9 +23,6 @@ body.landing-page .landing-nav-actions > .btn-primary-hero {
     display: none;
 }
 
-/* CTA в шапке не показываем — место для пунктов меню; кнопки есть в hero и футере */
-
-/* Режим «не влезло» — выпадающий список */
 body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-burger {
     display: inline-flex;
 }
@@ -103,7 +97,6 @@ body.landing-page .landing-nav.landing-nav--menu-collapsed .landing-nav-menu a:h
     background: rgba(20, 184, 166, 0.14);
 }
 
-/* Обычный режим: одна строка */
 body.landing-page .landing-nav:not(.landing-nav--menu-collapsed) {
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto;
@@ -229,7 +222,6 @@ body.landing-page .landing-nav-actions .theme-toggle-btn {
     }
 }
 
-/* Fallback без container queries */
 @supports not (container-type: inline-size) {
     @media (max-width: 999px) {
         body.landing-page .landing-brand-sub {

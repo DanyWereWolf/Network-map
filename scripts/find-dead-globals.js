@@ -1,9 +1,3 @@
-/**
- * Поиск неиспользуемых top-level символов в проекте без ES-модулей.
- * Сканирует function/var/const и window/global-экспорты, считает вхождения по всем .js и .html.
- *
- * Запуск: npm run dead-code
- */
 const fs = require('fs');
 const path = require('path');
 
@@ -17,7 +11,6 @@ const SCAN_DIRS = [
 
 const HTML_DIR = path.join(ROOT, 'public');
 
-/** Имена, которые не считаем мёртвым кодом (внешние API, точки входа). */
 const BUILTIN_IGNORE = new Set([
     'require',
     'module',
@@ -121,9 +114,6 @@ function collectFiles() {
     return { js, html };
 }
 
-/**
- * @returns {{ name: string, file: string, line: number, kind: string }[]}
- */
 function extractSymbols(file, content) {
     const lines = content.split(/\r?\n/);
     const symbols = [];
@@ -203,7 +193,6 @@ function main() {
             continue;
         }
 
-        // Только в файле определения и ровно одно вхождение — тоже мёртвый
         if (total === local && local === 1) {
             dead.push({ ...sym, total, local });
             continue;
@@ -245,7 +234,6 @@ function main() {
     process.exit(dead.length > 0 ? 1 : 0);
 }
 
-/** Файлы, на которые нет <script src> и нет loadAppScript('...') в коде. */
 function findUnreferencedJsFiles(jsFiles, htmlFiles, fileContents) {
     const refs = new Set();
 

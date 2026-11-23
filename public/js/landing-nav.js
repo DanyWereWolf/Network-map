@@ -1,7 +1,3 @@
-/**
- * Шапка лендинга: если ссылки не помещаются — кнопка «Разделы» и выпадающий список.
- * На широкой оболочке меню всегда в строке (не прячем в «Разделы»).
- */
 (function() {
     var nav = document.getElementById('landingNav');
     var menu = document.getElementById('landingNavMenu');
@@ -30,7 +26,6 @@
         for (var i = 0; i < links.length; i++) {
             total += links[i].scrollWidth;
         }
-        // gap между пунктами (~8px) + внутренние отступы меню
         total += Math.max(0, links.length - 1) * 8 + 16;
         return total;
     }
@@ -52,7 +47,6 @@
         var wide = shellWidth() >= WIDE_INLINE_MIN;
         var wasCollapsed = nav.classList.contains(COLLAPSED_CLASS);
 
-        // Для замера ссылок нужны в строке
         if (wasCollapsed) nav.classList.remove(COLLAPSED_CLASS);
 
         var overflow = wide ? false : menuOverflows();

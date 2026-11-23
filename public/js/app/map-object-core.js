@@ -1,6 +1,3 @@
-/**
- * uniqueId объектов, mapPerf.
- */
 function getObjectUniqueId(obj) {
     if (!obj || !obj.properties) return null;
     let id = obj.properties.get('uniqueId');
@@ -8,7 +5,6 @@ function getObjectUniqueId(obj) {
         const type = obj.properties.get('type') || 'obj';
         id = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         obj.properties.set('uniqueId', id);
-        // Регистрируем только при создании id — не на каждый вызов (иначе spatial reindex на каждом RAF).
         if (typeof MapPerf !== 'undefined') MapPerf.registerMapObject(obj);
     }
     try {
@@ -43,7 +39,6 @@ function mapPerfRegister(obj) {
     disableNativePlacemarkBalloon(obj);
 }
 
-/** Нативные balloon/hint Яндекс.Карт не используем — инфо через модалки и карточку наведения. */
 function disableNativePlacemarkBalloon(obj) {
     if (!obj || !obj.options) return;
     try {

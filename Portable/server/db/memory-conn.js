@@ -1,9 +1,5 @@
 'use strict';
 
-/**
- * Minimal in-memory MySQL stand-in for assemble/disassemble parity tests (no server required).
- * Supports the query shapes used by map-assemble.js.
- */
 function createMemoryConn() {
     var tables = Object.create(null);
 
@@ -72,7 +68,6 @@ function createMemoryConn() {
             if (sm) {
                 var rows = ensure(sm[1]).filter(function (r) { return String(r.org_id) === String(params[0]); });
                 if (/ORDER BY/i.test(s)) {
-                    // Best-effort stable order for known patterns
                     if (/cable_unique_id, seq/i.test(s)) {
                         rows = rows.slice().sort(function (a, b) {
                             var c = String(a.cable_unique_id).localeCompare(String(b.cable_unique_id));

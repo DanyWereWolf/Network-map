@@ -1,6 +1,3 @@
-/**
- * Фото объектов карты: data/object-media/{orgId}/{mediaId}.{ext}
- */
 const fs = require('fs');
 const path = require('path');
 
@@ -271,4 +268,3 @@ module.exports = {
     checkUploadQuotas,
     getQuotaInfo
 };
-    

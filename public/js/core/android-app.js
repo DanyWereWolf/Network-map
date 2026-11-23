@@ -1,6 +1,3 @@
-/**
- * Режим нативного приложения Volsmap (WebView, User-Agent VolsmapAndroid).
- */
 (function(global) {
     'use strict';
 

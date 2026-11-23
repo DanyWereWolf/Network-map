@@ -1,6 +1,3 @@
-/**
- * Кроссировка портов панели между оптическими кроссами (логический патч-корд).
- */
 var schemeCrossPortLinkMode = false;
 var schemeCrossPortLinkSource = null;
 
@@ -23,7 +20,6 @@ function isCrossPortPatched(crossObj, portNum) {
     return !!getCrossPortPatch(crossObj, portNum);
 }
 
-/** Волокно на порту, который кроссирован с другим кроссом — только трассировка через патч. */
 function isFiberCrossPatchLocked(crossObj, cableId, fiberNumber) {
     if (!crossObj || !cableId || fiberNumber == null) return false;
     if (typeof getCrossPortForFiber !== 'function') return false;
@@ -269,8 +265,6 @@ function removeCrossPortPatchesReferencingCross(deletedCrossUid) {
     if (!deletedCrossUid) return;
     objects.forEach(function(obj) {
         if (!obj || !obj.properties || !isCrossLikeHostType(obj.properties.get('type'))) return;
-        // Не вызывать getObjectUniqueId: после mapPerfUnregister это снова
-        // регистрирует уже удалённый кросс в spatial-индексе → «призрак» на карте.
         var objUid = obj.properties.get('uniqueId');
         if (objUid != null && String(objUid) === String(deletedCrossUid)) return;
         var patches = getCrossPortPatches(obj);
@@ -674,10 +668,6 @@ function buildCrossPortPatchTableHtml(hostObj, crossPorts, isEditMode) {
         '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
 }
 
-/**
- * Продолжение трассировки через кроссировку портов.
- * Возвращает { outFiber, targetCross } или { ended: true } или null.
- */
 function tryTraverseCrossPortPatch(path, crossObj, cableId, fiberNumber, visitedPatchKeys, portNumOverride) {
     if (!crossObj || !path || !visitedPatchKeys) return null;
     if (crossObj.properties.get('type') !== 'cross') return null;

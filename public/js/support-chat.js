@@ -1,6 +1,3 @@
-/**
- * Виджет: FAQ-бот и переписка с владельцем (главный администратор).
- */
 (function() {
     var ASSISTANT_NAME = 'Вола';
     var ASSISTANT_TAGLINE = 'ассистент Volsmap';

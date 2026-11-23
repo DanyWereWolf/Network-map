@@ -12,7 +12,6 @@ const MAX_CTA_URL = 500;
 const MAX_BADGE = 60;
 const SEND_DELAY_MS = 350;
 
-/** Эмоции Волы, подходящие для письма об обновлении. */
 const VOLA_EMOTIONS = {
     cheer: 'vola-cheer.png',
     wave: 'vola-wave.png',
@@ -61,9 +60,6 @@ function isActiveUser(user) {
     return true;
 }
 
-/**
- * Уникальные адреса: пользовательский email или contactEmail организации.
- */
 function collectRecipients(serverConfig) {
     const users = db.getUsers().filter(isActiveUser);
     const byEmail = new Map();
@@ -226,7 +222,6 @@ function buildUpdateEmail(siteUrl, payload) {
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef2ff;padding:28px 12px;">',
         '<tr><td align="center">',
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 12px 40px rgba(15,23,42,0.08);">',
-        // header with Vola
         '<tr><td style="background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 55%,#0ea5e9 100%);padding:24px 28px 0 28px;">',
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>',
         '<td valign="top" style="font-family:Segoe UI,Arial,sans-serif;color:#ffffff;padding-bottom:24px;">',
@@ -239,7 +234,6 @@ function buildUpdateEmail(siteUrl, payload) {
         volaHeaderCell,
         '</tr></table>',
         '</td></tr>',
-        // body
         '<tr><td style="padding:28px 32px 8px 32px;">',
         '<h1 style="margin:0 0 16px 0;font-family:Segoe UI,Arial,sans-serif;font-size:26px;line-height:1.25;color:#0f172a;font-weight:700;">',
         escapeHtml(data.title),
@@ -249,7 +243,6 @@ function buildUpdateEmail(siteUrl, payload) {
         (bulletHtml ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 8px 0;">' + bulletHtml + '</table>' : ''),
         volaSignOff,
         '</td></tr>',
-        // CTA
         '<tr><td style="padding:8px 32px 36px 32px;" align="left">',
         '<a href="' + escapeHtml(newsUrl) + '" style="display:inline-block;background:#1d4ed8;color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:15px;font-weight:600;text-decoration:none;padding:14px 22px;border-radius:12px;box-shadow:0 8px 20px rgba(29,78,216,0.28);">',
         escapeHtml(data.ctaLabel),
@@ -259,7 +252,6 @@ function buildUpdateEmail(siteUrl, payload) {
         '<a href="' + escapeHtml(newsUrl) + '" style="color:#2563eb;word-break:break-all;">' + escapeHtml(newsUrl) + '</a>',
         '</p>',
         '</td></tr>',
-        // footer
         '<tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:22px 32px;">',
         '<p style="margin:0 0 6px 0;font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#64748b;">',
         'Вы получили это письмо, потому что указали контактный e-mail в аккаунте Volsmap.',

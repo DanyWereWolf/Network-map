@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Golden parity: JSON map → disassemble → assemble → compare.
- *
- * Usage:
- *   node scripts/mysql-parity-test.js                 # in-memory (no MySQL)
- *   node scripts/mysql-parity-test.js --mysql         # against configured MySQL
- *   node scripts/mysql-parity-test.js --org wew
- *   node scripts/mysql-parity-test.js --store data/store.json --org org_xxx
- */
 const fs = require('fs');
 const path = require('path');
 
@@ -25,7 +16,6 @@ function parseArgs(argv) {
     return opts;
 }
 
-/** Stable stringify for deep compare (sort object keys, drop null/empty collections). */
 function canonicalize(value) {
     if (value === null || value === undefined) return undefined;
     if (typeof value !== 'object') {
@@ -49,7 +39,6 @@ function canonicalize(value) {
                 return JSON.stringify(a.geometry || null).localeCompare(JSON.stringify(b.geometry || null));
             }).map(canonicalize);
         } else if (value.some(function (x) { return x === null; })) {
-            // Keep array length/slots for sparse outputConnections (null entries matter)
             arr = value.map(function (x) { return x === null ? null : canonicalize(x); });
         } else {
             arr = value.map(canonicalize).filter(function (x) { return x !== undefined; });
@@ -90,7 +79,6 @@ function findOrgId(store, hint) {
         return u && String(u.username || '').toLowerCase() === String(hint).toLowerCase();
     });
     if (user && user.organizationId) return user.organizationId;
-    // fuzzy org name
     var byName = (store.organizations || []).find(function (o) {
         return o && String(o.name || '').toLowerCase().indexOf(String(hint).toLowerCase()) >= 0;
     });
@@ -186,7 +174,6 @@ async function main() {
         process.exit(0);
     }
 
-    // Soft metrics: count by type
     function byType(arr) {
         var m = {};
         (arr || []).forEach(function (it) {

@@ -1,14 +1,9 @@
-/**
- * Админ-UI загрузки / обновления ортофото-подложки (GeoTIFF).
- * Дизайн: panel-glass + form-select / form-input, как у остальных модалок карты.
- */
 (function (global) {
     'use strict';
 
     var pollTimer = null;
     var escapeHandler = null;
     var prefsNetBound = false;
-    // Облако: онлайн — Яндекс; без сети — пустая подложка (ортофото только в Portable).
     var cachedPreferredType = 'yandex#map';
     var cachedOfflineType = 'leaflet#none';
     var ALLOWED_TYPES = {
@@ -51,7 +46,6 @@
         }
     }
 
-    /** Конфиг сервера — leaflet (dual), а не текущий runtime. */
     function isLeafletEngine() {
         try {
             if (typeof MapEngine !== 'undefined' && MapEngine.isDualMode && MapEngine.isDualMode()) return true;
@@ -72,7 +66,6 @@
         var s = value == null ? '' : String(value).trim();
         if (s === 'leaflet#orthophoto') return 'yandex#map';
         if (ALLOWED_TYPES[s]) return s;
-        // Dual (mapEngine=leaflet): при наличии сети предпочитаем Яндекс.
         return 'yandex#map';
     }
 
@@ -122,7 +115,6 @@
         return 'leaflet#none';
     }
 
-    /** Итоговый слой: онлайн → Яндекс (если ключ есть); офлайн / без ключа → пустая подложка. */
     function resolveBasemapType(preferred, offlineType) {
         preferred = normalizePreferredType(preferred);
         offlineType = normalizeOfflineType(offlineType);
@@ -147,7 +139,6 @@
             opts.offlineType != null ? opts.offlineType : cachedOfflineType
         );
         try {
-            // Личный выбор важнее орг. дефолта / offline fallback
             if (typeof MapRuntime !== 'undefined' && MapRuntime.hasUserBasemapPreference &&
                 MapRuntime.hasUserBasemapPreference()) {
                 var userType = MapRuntime.readUserBasemapType && MapRuntime.readUserBasemapType();
@@ -167,7 +158,6 @@
 
     function applyOrgBasemapSettings(settings, opts) {
         if (!settings) return;
-        // Личный выбор с сервера (пользователь уже выбирал слой)
         if (settings.userBasemapType && typeof MapRuntime !== 'undefined' && MapRuntime.persistUserBasemapType) {
             try {
                 MapRuntime.persistUserBasemapType(normalizePreferredType(settings.userBasemapType));
@@ -184,7 +174,6 @@
         }
         syncDefaultLayerControls();
         if (opts && opts.apply === false) return;
-        // Не навязывать орг. слой тем, кто уже выбрал свой
         if (typeof MapRuntime !== 'undefined' && MapRuntime.hasUserBasemapPreference &&
             MapRuntime.hasUserBasemapPreference()) {
             var userType = MapRuntime.readUserBasemapType && MapRuntime.readUserBasemapType();

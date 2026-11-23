@@ -10,7 +10,7 @@
             if(q.indexOf('embed=1')>=0||q.indexOf('embed=true')>=0||q.indexOf('embedToken=')>=0||q.indexOf('embed_token=')>=0)
                 document.documentElement.classList.add('volsmap-embed');
         }catch(e){}})();
-    </script>
+</script>
     <meta name="author" content="Карта оптической сети">
     <meta name="copyright" content="Copyright (c) 2024–2026 Карта оптической сети. Все права защищены.">
     <meta name="description" content="Карта оптической сети — программа для работы с оптической сетью в облаке volsmap.ru: интерактивная карта, кроссы и муфты со схемой волокон, GPON, синхронизация команды, история и бэкапы.">
@@ -42,7 +42,7 @@
         "url": "https://volsmap.ru/",
         "inLanguage": "ru"
     }
-    </script>
+</script>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=mark2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -85,7 +85,6 @@
                     return { userId: '', orgId: '' };
                 }
             }
-            /** 1) личный выбор пользователя 2) орг. дефолт 3) ортофото */
             function resolveBootBasemapType() {
                 try {
                     var ids = readSessionIds();
@@ -161,7 +160,6 @@
                 s.onerror = function() {
                     if (finished) return;
                     finished = true;
-                    // CDN Яндекса недоступен → Leaflet без ортофото (облако)
                     window.VolsmapMapEngine = 'leaflet';
                     window.VolsmapBootBasemapType = 'leaflet#orthophoto';
                     window.VolsmapShimPassive = false;
@@ -204,7 +202,6 @@
                         } catch (eRem) {}
                     };
                     if (cached.type) {
-                        // Личный или орг. кэш — старт сразу; сервер только обновляет кэш на будущее
                         startDual(cached.type);
                         peekBasemapBootPrefs().then(rememberPrefsFromServer);
                     } else {
@@ -238,7 +235,7 @@
                     : 'https://api-maps.yandex.ru/2.1/?lang=ru_RU');
             });
         })();
-    </script>
+</script>
     <script>
         (function() {
             try {
@@ -277,7 +274,7 @@
                 } catch (eAccent) {}
             } catch (e) {}
         })();
-    </script>
+</script>
     <link rel="stylesheet" href="css/styles.css?v=sch-badgefit1">
     <link rel="stylesheet" href="css/scrollbars.css">
     <link rel="stylesheet" href="css/app-motion.css">
@@ -286,7 +283,6 @@
     <link rel="stylesheet" href="css/cookie-consent.css">
     <link rel="stylesheet" href="css/maintenance-notice.css">
     <style>
-        /* Мгновенный полноэкранный вход до загрузки CSS */
         .app-entrance {
             position: fixed;
             inset: 0;
@@ -303,13 +299,10 @@
         html.app-entrance-active body {
             overflow: hidden !important;
         }
-    </style>
-    <!-- Защита от копирования -->
+</style>
+    
     <script>
-        // Контекстное меню не блокируем
-        // Отключение горячих клавиш разработчика
         document.addEventListener('keydown', function(e) {
-            // F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
             if (e.key === 'F12' || 
                 (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
                 (e.ctrlKey && (e.key === 'U' || e.key === 'u'))) {
@@ -317,31 +310,28 @@
                 return false;
             }
         });
-        // Отключение перетаскивания
         document.addEventListener('dragstart', function(e) {
             e.preventDefault();
             return false;
         });
-    </script>
+</script>
     <style>
-        /* Запрет выделения текста */
         body {
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
         }
-        /* Разрешить выделение в полях ввода */
         input, textarea, [contenteditable="true"] {
             -webkit-user-select: text;
             -moz-user-select: text;
             -ms-user-select: text;
             user-select: text;
         }
-    </style>
+</style>
 </head>
 <body>
-    <!-- Полноэкранный вход после логина / при открытии карты -->
+    
     <div id="appEntranceOverlay" class="app-entrance app-entrance--logo" role="status" aria-live="polite" aria-busy="true" aria-label="Загрузка приложения">
         <div class="app-entrance__bg" aria-hidden="true">
             <div class="app-entrance__sky"></div>
@@ -396,7 +386,7 @@
         </div>
     </div>
     <script>document.documentElement.classList.add('app-entrance-active');</script>
-    <!-- Верхняя панель на всю ширину -->
+    
     <header class="top-header">
         <div class="top-header-content">
             <div class="header-brand">
@@ -413,7 +403,7 @@
                 </div>
             </div>
             <div class="header-center">
-                <!-- Поиск по карте -->
+                
                 <div class="header-search">
                     <div class="search-wrapper">
                         <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -432,7 +422,7 @@
                     <div id="searchResults" class="search-results" style="display: none;"></div>
                 </div>
             </div>
-            <!-- Панель пользователя -->
+            
             <div class="user-panel">
                 <div class="user-info" id="userInfo">
                     <div class="user-avatar" id="userAvatar" role="button" tabindex="0" title="Открыть личный кабинет">А</div>
@@ -1172,7 +1162,7 @@
                         <div class="info-dock-section-body">
                             <div class="legend-panel" id="legend-content">
                                 <div class="info-dock-legend-inner">
-                                    <!-- Группы легенды — js/map-legend.js -->
+                                    
                                 </div>
                             </div>
                         </div>
@@ -1794,7 +1784,7 @@
                             <div class="cable-type-section cable-fiber-config-card">
                                 <p class="cable-type-section-label">ВОЛС</p>
                                 <div class="cable-type-picker" id="cableTypePicker" role="group" aria-label="Вид кабеля на карте">
-                                    <!-- Превью линии — js/fiber-cable-config.js -->
+                                    
                                 </div>
                                 <div class="cable-product-lay-section">
                                     <p class="cable-type-section-label">Тип кабеля</p>
@@ -1883,7 +1873,7 @@
 
 
 
-    <!-- Приветствие при первом входе (центр экрана, после закрытия не показывается) -->
+    
     <div id="portableSetupModal" class="modal welcome-modal portable-setup-modal" style="display: none;" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="portableSetupTitle">
         <div class="modal-content welcome-modal-content portable-setup-content">
             <div class="modal-header">
@@ -1917,7 +1907,7 @@
         </div>
     </div>
 
-    <!-- Приветствие при первом входе (центр экрана, после закрытия не показывается) -->
+    
     <div id="welcomeModal" class="modal welcome-modal" style="display: none;" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="welcomeModalTitle">
         <div class="modal-content welcome-modal-content">
             <div class="modal-header">
@@ -1983,7 +1973,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно для информации об объекте / рабочее место кросса и муфты -->
+    
     <div id="infoModal" class="modal" role="dialog" aria-labelledby="modalTitle" aria-modal="true">
         <div class="modal-content panel-glass">
             <div class="panel-glass-bg" aria-hidden="true">
@@ -2008,7 +1998,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно для выбора узла (оформление как у балуна групп — одна карточка) -->
+    
     <div id="nodeSelectionModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
@@ -2033,7 +2023,7 @@
                     <div class="form-group">
                         <label>Выберите узел</label>
                         <div id="nodeListContainer" class="node-list-container">
-                            <!-- Список узлов будет генерироваться динамически -->
+                            
                         </div>
                     </div>
                     <div class="node-selection-actions">
@@ -2044,7 +2034,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно для выбора ONU (подключение волокна к ONU) -->
+    
     <div id="onuSelectionModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
@@ -2069,7 +2059,7 @@
                     <div class="form-group">
                         <label>Выберите ONU</label>
                         <div id="onuListContainer" class="node-list-container">
-                            <!-- Список ONU генерируется динамически -->
+                            
                         </div>
                     </div>
                     <div class="node-selection-actions">
@@ -2080,7 +2070,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно для выбора сплиттера (подключение волокна к входу сплиттера) -->
+    
     <div id="splitterSelectionModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
@@ -2110,7 +2100,7 @@
         </div>
     </div>
 
-    <!-- Выбор ONU для выхода сплиттера -->
+    
     <div id="splitterOutputOnuModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
@@ -2129,7 +2119,7 @@
         </div>
     </div>
 
-    <!-- Выбор муфты/кросса и волокна для выхода сплиттера -->
+    
     <div id="splitterOutputHostModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
@@ -2149,7 +2139,7 @@
         </div>
     </div>
 
-    <!-- Выбор сплиттера для выхода сплиттера -->
+    
     <div id="splitterOutputSplitterModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
@@ -2168,7 +2158,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно: приход волокна от кросса/муфты к OLT (upstream → SFP) -->
+    
     <div id="oltSelectionModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
@@ -2202,7 +2192,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно выбора uplink-порта OLT -->
+    
     <div id="oltPortSelectionModal" class="modal">
         <div class="modal-content node-selection-modal-content">
             <div class="network-map-balloon node-selection-balloon">
@@ -2223,7 +2213,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно "Уровень сигнала на трассе" -->
+    
     <div id="signalTraceModal" class="modal">
         <div class="modal-content node-selection-modal-content signal-trace-modal-content panel-glass panel-glass--shell">
             <div class="network-map-balloon node-selection-balloon panel-glass signal-trace-balloon">
@@ -2245,7 +2235,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно управления пользователями -->
+    
     <div id="usersModal" class="modal">
         <div class="modal-content users-modal-content">
             <div class="modal-header users-modal-header">
@@ -2432,7 +2422,7 @@
                 </details>
                 </div>
 
-                <!-- Заявки на регистрацию -->
+                
                 <div id="pendingUsersSection" class="pending-users-section" style="display: none;">
                     <h3 class="section-title">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2443,11 +2433,11 @@
                         <span id="pendingCount" class="pending-badge">0</span>
                     </h3>
                     <div id="pendingUsersList" class="users-list">
-                        <!-- Заявки будут генерироваться динамически -->
+                        
                     </div>
                 </div>
                 
-                <!-- Активные пользователи -->
+                
                 <div class="users-section-head">
                     <h3 class="section-title users-list-section-title">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2471,13 +2461,13 @@
                     </div>
                 </div>
                 <div id="usersList" class="users-list">
-                    <!-- Список пользователей будет генерироваться динамически -->
+                    
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Модальное окно управления организациями -->
+    
     <div id="organizationsModal" class="modal">
         <div class="modal-content organizations-modal-content">
             <div class="modal-header">
@@ -2493,7 +2483,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно редактирования организации -->
+    
     <div id="organizationEditModal" class="modal">
         <div class="modal-content organization-edit-modal-content">
             <div class="modal-header">
@@ -2529,7 +2519,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно добавления/редактирования пользователя -->
+    
     <div id="userEditModal" class="modal">
         <div class="modal-content user-edit-modal-content">
             <div class="modal-header user-edit-modal-header">
@@ -2615,7 +2605,7 @@
         </div>
     </div>
 
-    <!-- Личный кабинет -->
+    
     <div id="profileModal" class="modal" role="dialog" aria-labelledby="profileModalTitle" aria-modal="true">
         <div class="modal-content profile-modal-content panel-glass">
             <div class="panel-glass-bg" aria-hidden="true">
@@ -2731,7 +2721,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно: цвета волокон кабеля -->
+    
     <div id="fiberPaletteModal" class="modal modal--centered" style="display: none;" role="dialog" aria-labelledby="fiberPaletteModalTitle" aria-modal="true" aria-hidden="true">
         <div class="modal-content fiber-palette-modal-content panel-glass">
             <div class="panel-glass-bg" aria-hidden="true">
@@ -2761,7 +2751,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно справки / информация о программе -->
+    
     <div id="helpModal" class="modal help-modal" role="dialog" aria-labelledby="helpModalTitle" aria-modal="true">
         <div class="modal-content help-modal-content panel-glass">
             <div class="panel-glass-bg" aria-hidden="true">
@@ -2785,12 +2775,12 @@
                 <span class="close close-help" title="Закрыть" role="button" tabindex="0">&times;</span>
             </header>
             <div class="help-modal-body">
-                <div id="helpModalContent" class="help-modal-scroll"><!-- Контент подставляется из JS --></div>
+                <div id="helpModalContent" class="help-modal-scroll"></div>
             </div>
         </div>
     </div>
 
-    <!-- Модальное окно истории изменений -->
+    
     <div id="historyModal" class="modal" role="dialog" aria-labelledby="historyModalTitle" aria-modal="true">
         <div class="modal-content history-modal-content">
             <div class="modal-header">
@@ -2870,13 +2860,13 @@
                 </details>
 
                 <div id="historyList" class="history-list" role="log" aria-live="polite">
-                    <!-- Записи журнала -->
+                    
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Модальное окно справочника устройств (только админ), полноэкранное -->
+    
     <div id="deviceCatalogModal" class="modal device-catalog-modal" role="dialog" aria-labelledby="deviceCatalogModalTitle" aria-modal="true">
         <div class="modal-content device-catalog-modal-content">
             <header class="modal-header device-catalog-modal-header">
@@ -3015,7 +3005,7 @@
         </div>
     </div>
 
-    <!-- Добавление производителя / модели в справочник -->
+    
     <div id="deviceCatalogEntryModal" class="modal device-catalog-entry-modal" role="dialog" aria-modal="true">
         <div class="modal-content device-catalog-entry-modal-content panel-glass">
             <div class="panel-glass-bg" aria-hidden="true">
@@ -3315,7 +3305,7 @@
         </div>
     </div>
 
-    <!-- Чат организации -->
+    
     <div id="orgChatBackdrop" class="org-chat-backdrop" hidden aria-hidden="true"></div>
     <aside id="orgChatPanel" class="org-chat-panel panel-glass" aria-hidden="true" aria-label="Чат организации">
         <div class="panel-glass-bg" aria-hidden="true">
@@ -3403,10 +3393,10 @@
         </footer>
     </aside>
 
-    <!-- Контейнер для уведомлений -->
+    
     <div id="toastContainer" class="toast-container"></div>
 
-    <!-- Настройки экспорта карты в PDF -->
+    
     <div id="mapPdfExportModal" class="modal">
         <div class="modal-content confirm-modal-content panel-glass panel-glass--lite map-pdf-export-modal-content">
             <div class="modal-header">
@@ -3446,7 +3436,7 @@
         </div>
     </div>
 
-    <!-- Модальное окно подтверждения (удаление и т.п.) -->
+    
     <div id="confirmModal" class="modal">
         <div class="modal-content confirm-modal-content">
             <div class="modal-header">

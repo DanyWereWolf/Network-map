@@ -1,8 +1,3 @@
-/**
- * js/optical-calculator.js
- * Калькулятор оптического бюджета + управление uplink-портами OLT + уровень сигнала на трассе.
- * Не заменяет существующую трассировку (traceModal) и приход OLT (oltSelectionModal).
- */
 (function() {
     'use strict';
 
@@ -42,7 +37,6 @@
         'onu': { tx: 1310, rx: 1490 }
     };
 
-    // Локальный fallback, если device-catalog ещё не загружен (deferred).
     var LOCAL_OLT_OPTICAL = {
         'Huawei': [
             { model: 'MA5608T', ponPorts: 8, uplinkSfpPorts: 2, uplinkSfpPlusPorts: 0,
@@ -187,7 +181,6 @@
                 return true;
             }
             if (cuid && typeof window.confirmAndDeleteCable === 'function') {
-                // без confirm при отмене выбора порта
                 if (typeof deleteCableByUniqueId === 'function') {
                     deleteCableByUniqueId(cuid, opts || {});
                     return true;
@@ -274,7 +267,6 @@
         if (km != null && km !== '' && !isNaN(parseFloat(km))) return parseFloat(km);
         var distM = cable.properties.get('distance');
         if (distM != null && distM !== '' && !isNaN(parseFloat(distM))) return parseFloat(distM) / 1000;
-        // Fallback: длина по геометрии полилинии
         try {
             if (cable.geometry && typeof cable.geometry.getCoordinates === 'function') {
                 var coords = cable.geometry.getCoordinates();
@@ -293,7 +285,6 @@
         return 0;
     }
 
-    /** Длина участка хост→ONU по линии связи (м). */
     function measureOnuLinkDistanceM(hostObj, onuObj, routeIds) {
         if (typeof measureHostToOnuDropDistanceM === 'function') {
             return measureHostToOnuDropDistanceM(hostObj, onuObj, routeIds) || 0;
@@ -368,7 +359,6 @@
         return null;
     }
 
-    /** SFP на PON-порту (portNumber 1-based) или на uplink (portIndex). */
     function getOltInstalledSfp(oltObj, opts) {
         opts = opts || {};
         if (!oltObj || !oltObj.properties) return null;
@@ -645,7 +635,6 @@
 
         function pushObj(obj) {
             if (!obj || seen.has(obj)) return;
-            // Embedded-facade: считаем по uniqueId, чтобы не дублировать.
             var uid = safeGetObjectUniqueId(obj);
             if (uid) {
                 for (var si = 0; si < pathObjects.length; si++) {
@@ -742,7 +731,6 @@
                 pushObj(step.onu);
             }
 
-            // Fallback: сплиттер на волокне кросса/муфты (в т.ч. embedded).
             var hostCand = step.object || step.sleeve || lastHost;
             if (hostCand && hostCand.properties && lastCableId != null && lastFiberNumber != null) {
                 var objType = hostCand.properties.get('type');
@@ -776,9 +764,6 @@
         }) || null;
     }
 
-    /**
-     * Расчёт дБм по шагам трассировки (учитывает выход сплиттера→порт кросса и drop до ONU).
-     */
     function calculateSignalAlongTracePath(tracePath, oltObj, calcOptions) {
         if (!tracePath || !tracePath.length || !oltObj || !oltObj.properties) return null;
         calcOptions = calcOptions || {};
@@ -831,7 +816,6 @@
             if (steps.length) steps[steps.length - 1].lengthKm = lengthKm;
         }
 
-        /** Потери на участке линии связи (кросс/порт → ONU), м. */
         function addDropLinkLoss(distanceM, label, hostObj) {
             var distM = Number(distanceM) || 0;
             if (distM <= 0) return;
@@ -891,7 +875,6 @@
         ] : []));
         oltAdded = true;
 
-        // Обогатить путь: если есть выход на порт кросса без ONU — достроить drop.
         var enriched = tracePath.slice();
         for (var ei = 0; ei < enriched.length; ei++) {
             var es = enriched[ei];
@@ -922,7 +905,6 @@
                 );
                 if (cont && cont.length) {
                     enriched = enriched.slice(0, ei + 1).concat(
-                        // сохранить object cross если уже есть следующим
                         (enriched[ei + 1] && enriched[ei + 1].type === 'object' && enriched[ei + 1].objectType === 'cross')
                             ? [enriched[ei + 1]].concat(cont)
                             : cont,
@@ -942,7 +924,6 @@
                 var t = obj.properties.get('type');
                 if (t === 'olt') {
                     if (!oltAdded) {
-                        /* already added */
                     }
                     continue;
                 }
@@ -955,7 +936,6 @@
                     continue;
                 }
                 if (t === 'cross' || t === 'sleeve' || t === 'spliceCassette') {
-                    // Порт выхода сплиттера уже учтён в splitterOutputToCrossPort
                     if (item.signalRole === 'splitter-out-port') continue;
                     var prev = enriched[i - 1];
                     if (prev && prev.type === 'splitterOutputToCrossPort') continue;
@@ -972,7 +952,6 @@
                     continue;
                 }
                 if (t === 'onu') {
-                    // финализируем ниже
                     pushStep(obj, 'onu', obj.properties.get('name') || 'ONU', 0, []);
                     continue;
                 }
@@ -1002,7 +981,6 @@
                     var drop = resolveSplitterToOnuDropFiber(item.splitter, item.onuObj, null);
                     if (drop && drop.cable) addCableLoss(drop.cable, drop.fiberNumber);
                 }
-                // Линия связи сплиттер/хост → ONU по routeIds
                 if (item.onuObj) {
                     var hostForOnu = (item.splitter && item.splitter._host) || null;
                     var routeIdsOnu = item.routeIds || [];
@@ -1022,8 +1000,6 @@
                 if (distLink == null) {
                     distLink = measureOnuLinkDistanceM(item.cross, item.onu, item.routeIds || []);
                 }
-                // Если перед этим уже учтён реальный drop-кабель — не дублируем длину линии,
-                // кроме случая когда кабель — feeder (логический), а длина — именно линия связи.
                 var prevItem = enriched[i - 1];
                 var prevWasDropCable = prevItem && prevItem.type === 'cable' && prevItem.cable &&
                     (function() {
@@ -1656,7 +1632,6 @@
         if (!body) return;
 
         if (freePorts.length === 0) {
-            // Не блокируем PON-кабели: просто не открываем модалку.
             if (typeof onCancel === 'function') onCancel(false);
             return;
         }
@@ -1804,7 +1779,6 @@
             counters.uplinkSfpPortsCount + counters.uplinkSfpPlusPortsCount);
     }
 
-    /** Фиксированные базы индексов — независимы друг от друга. */
     var OLT_PORT_TYPE_DEFS = [
         { type: 'pon', label: 'PON', counterKey: 'ponPorts', indexBase: 0, max: 64, speed: '2.5G',
           labelPrefix: 'GPON 0/1/', status: 'up' },
@@ -2098,11 +2072,9 @@
         }
         if (!oltEnd) return;
 
-        // Не мешаем PON: feeder к муфте/кроссу и уже назначенные portAssignments/incoming.
         if (isFiberHostEnd(otherEnd)) return;
         if (cableAssignedToOltPon(oltEnd, cableUniqueId)) return;
         if (findOltPortByCableId(oltEnd, cableUniqueId)) return;
-        // Направленная прокладка с карточки OLT (PON/SFP) — не открывать uplink-модалку.
         if (typeof isOltPortDirectedCableLayActive === 'function' && isOltPortDirectedCableLayActive()) return;
         if (typeof pendingOltPortPresetResult !== 'undefined' && pendingOltPortPresetResult) return;
 

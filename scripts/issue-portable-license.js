@@ -1,11 +1,3 @@
-/**
- * Выдача офлайн-лицензии Portable тем же keypair, которым собирается zip.
- * Нужно, чтобы подпись совпадала с EMBEDDED_PUBLIC_KEY в клиентской сборке.
- *
- *   node scripts/issue-portable-license.js --customer "ООО Ромашка" --machine "A7F3-..." [--note "..."]
- *   node scripts/issue-portable-license.js --pubkey
- *   node scripts/issue-portable-license.js --verify path/to/license.json
- */
 'use strict';
 
 const fs = require('fs');

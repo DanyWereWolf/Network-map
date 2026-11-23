@@ -1,7 +1,3 @@
-/**
- * Зона захвата объектива камеры видеонаблюдения (круг / направленный луч).
- * Дальность — в метрах, максимум 200 м.
- */
 var CAMERA_COVERAGE_DEFAULT_COLOR = '#22a06b';
 var CAMERA_COVERAGE_COLOR = CAMERA_COVERAGE_DEFAULT_COLOR;
 var CAMERA_COVERAGE_DEFAULT_M = 50;

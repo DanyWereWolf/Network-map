@@ -1,6 +1,3 @@
-/**
- * Режим встраивания карты (Zabbix URL widget и др.): ?embed=1&embedToken=emb_…
- */
 (function(global) {
     'use strict';
 
@@ -64,9 +61,6 @@
         } catch (e) {}
     }
 
-    /**
-     * @returns {Promise<boolean>} false — не продолжать загрузку карты (ошибка / редирект)
-     */
     function bootstrapAuth() {
         var q = parseQuery();
         var isEmbed = detectEmbedMode(q);

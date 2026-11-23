@@ -1,6 +1,3 @@
-/**
- * Галерея фото для объектов карты (кроме кабелей).
- */
 (function (global) {
     var MAX_PHOTOS = 20;
     var MAX_FILE_BYTES = 5 * 1024 * 1024;

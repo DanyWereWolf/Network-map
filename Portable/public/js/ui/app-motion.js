@@ -1,8 +1,3 @@
-/**
- * Живость UI/карты: вспышки при CRUD, звуки, HUD длины кабеля,
- * пульс трассы, анимация модалок, empty-state helper.
- * Учитывает areMapAnimationsEnabled / prefers-reduced-motion.
- */
 (function (global) {
     var SOUND_KEY = 'networkMap_uiSounds';
     var PREFS_KEY = 'networkMap_mapMotionPrefs';
@@ -202,7 +197,6 @@
         return fallback || '#0f766e';
     }
 
-    /** Одна аура: расширение + затухание заливки (без частой ряби). */
     function dropRippleAt(coords, options) {
         options = options || {};
         if (!isPrefEnabled('createRipple') && !options.force) {
@@ -238,7 +232,6 @@
         var t0 = performance.now();
         function tick(now) {
             var p = Math.min(1, (now - t0) / life);
-            // плавный ease-out — как прежний burst, без повторных волн
             var ease = 1 - Math.pow(1 - p, 2.4);
             var fade = 1 - ease;
             try {
@@ -486,7 +479,6 @@
     }
 
     function bindModalMotion() {
-        /* Модалки: класс/звук вешает modal-glass.js (onModalShown). */
     }
 
     function initUiSoundsToggle() {

@@ -1,7 +1,3 @@
-/**
- * One-shot transformer: strips SaaS routes from Portable/server/server-api.js
- * and injects on-prem bootstrap. Safe to re-run (idempotent markers).
- */
 'use strict';
 
 const fs = require('fs');
@@ -15,7 +11,6 @@ if (src.indexOf('PORTABLE_STRIP_APPLIED') !== -1) {
     process.exit(0);
 }
 
-/** Remove Express route handlers whose path matches any of the predicates. */
 function removeRoutes(code, shouldRemove) {
     const re = /\napp\.(get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\2/g;
     const matches = [];
@@ -28,28 +23,24 @@ function removeRoutes(code, shouldRemove) {
             quoteStart: m.index + m[0].indexOf(m[2])
         });
     }
-    // Walk from end so indices stay valid
     let out = code;
     for (let i = matches.length - 1; i >= 0; i--) {
         const cur = matches[i];
         if (!shouldRemove(cur.path, cur.method)) continue;
-        const start = cur.index; // includes leading \n
+        const start = cur.index; 
         const end = i + 1 < matches.length ? matches[i + 1].index : findRouteBlockEnd(out, start);
-        // Prefer next app.METHOD as end boundary when available
         let blockEnd;
         if (i + 1 < matches.length) {
             blockEnd = matches[i + 1].index;
         } else {
             blockEnd = findRouteBlockEnd(out, start + 1);
         }
-        // Also stop before non-route top-level declarations after last route in a cluster
         out = out.slice(0, start) + out.slice(blockEnd);
     }
     return out;
 }
 
 function findRouteBlockEnd(code, from) {
-    // Fallback: find next \napp. or \nfunction or \n// or end
     const slice = code.slice(from + 1);
     const next = slice.search(/\n(?:app\.(?:get|post|put|patch|delete|use)\(|function |\w+\.listen\(|\/\/ Storage bootstrap)/);
     if (next === -1) return code.length;
@@ -71,18 +62,16 @@ function shouldRemovePath(p) {
     if (p === '/api/auth/resend-verification') return true;
     if (p === '/api/auth/reset-password') return true;
     if (p === '/api/public-stats') return true;
-    if (p === '/api/organizations') return true; // GET list / POST create (exact)
+    if (p === '/api/organizations') return true; 
     if (p === '/pricing.html' || p === '/updates.html') return true;
     if (p === '/robots.txt' || p === '/sitemap.xml') return true;
-    // Platform org CRUD (not /me)
-    if (/^\/api\/organizations\/:[^/]+$/.test(p)) return true; // PATCH/DELETE :id
+    if (/^\/api\/organizations\/:[^/]+$/.test(p)) return true; 
     if (/^\/api\/organizations\/:[^/]+\/reset-password$/.test(p)) return true;
     return false;
 }
 
 src = removeRoutes(src, shouldRemovePath);
 
-// Remove SaaS requires
 src = src.replace(/\nconst newsMedia = require\('\.\/news-media'\);/, '');
 src = src.replace(/\nconst supportBot = require\('\.\/lib\/support-bot'\);/, '');
 src = src.replace(/\nconst mail = require\('\.\/lib\/mail'\);/, '');
@@ -91,7 +80,6 @@ src = src.replace(/\nconst emailVerify = require\('\.\/lib\/email-verify'\);/, '
 src = src.replace(/\nconst updateBroadcast = require\('\.\/lib\/update-broadcast'\);/, '');
 src = src.replace(/\n\/\*\* Блокировка параллельных массовых рассылок\. \*\/\nvar updateBroadcastInFlight = false;/, '');
 
-// Simplify reloadServerConfig (no mail)
 src = src.replace(
     /function reloadServerConfig\(options\) \{[\s\S]*?return serverConfig;\n\}/,
     `function reloadServerConfig(options) {
@@ -106,7 +94,6 @@ src = src.replace(
 }`
 );
 
-// Simplify logServerConfigWarnings (no SMTP)
 src = src.replace(
     /function logServerConfigWarnings\(\) \{[\s\S]*?\n\}/,
     `function logServerConfigWarnings() {
@@ -130,7 +117,6 @@ src = src.replace(
 }`
 );
 
-// Unlimited map objects by default in portable (-1 or unlocked)
 src = src.replace(
     /var FALLBACK_FREE_MAP_OBJECT_LIMIT = parseInt\(\s*process\.env\.FREE_MAP_OBJECT_LIMIT \|\| serverConfig\.freeMapObjectLimit \|\| '2000',\s*10\s*\);\s*if \(isNaN\(FALLBACK_FREE_MAP_OBJECT_LIMIT\) \|\| FALLBACK_FREE_MAP_OBJECT_LIMIT < 1\) \{\s*FALLBACK_FREE_MAP_OBJECT_LIMIT = 2000;\s*\}/,
     `var _rawMapLimit = process.env.FREE_MAP_OBJECT_LIMIT || serverConfig.mapObjectLimit || serverConfig.freeMapObjectLimit;
@@ -181,28 +167,23 @@ src = src.replace(
 }`
 );
 
-// Remove password-reset rate limit helpers
 src = src.replace(/\n\/\*\* Лимит запросов «забыли пароль» с одного IP[\s\S]*?return \{ windowMs: windowMs, maxAttempts: maxAttempts \};\n\}\n\n\/\*\* Лимит реальных писем[\s\S]*?return \{ windowMs: windowMs, maxAttempts: maxAttempts \};\n\}\n/, '\n');
 
-// validateCredentials: drop email verify
 src = src.replace(
     /if \(!emailVerify\.isEmailVerified\(currentUser\)\) \{\s*return \{\s*ok: false,\s*error: '[^']*',\s*code: 'email_not_verified'\s*\};\s*\}\s*/,
     ''
 );
 
-// completeUserLogin: soften pending org message, skip visit log optional ok
 src = src.replace(
     /error: 'Подтвердите e-mail по ссылке из письма — без этого организация ещё не активирована\.',\s*code: 'email_not_verified'/,
     "error: 'Организация ещё не активирована. Обратитесь к администратору.',\n                code: 'org_pending'"
 );
 
-// Map: don't block "global admin" — in portable admin always has org
 src = src.replace(
     /if \(isGlobalAdmin\(user\)\) \{\s*return res\.status\(403\)\.json\(\{ error: 'Главному администратору недоступен интерфейс карты\. Используйте панель администратора\.' \}\);\s*\}\s*/,
     ''
 );
 
-// Root → index.html
 src = src.replace(
     /\/\/ Лицевая страница по умолчанию — условия \(pricing\.html\)\napp\.get\('\/', \(req, res\) => \{\s*res\.setHeader\('Cache-Control', 'no-cache'\);\s*res\.sendFile\(path\.join\(PUBLIC_DIR, 'pricing\.html'\)\);\s*\}\);/,
     `// Portable: корень — карта (клиент редиректит на auth без сессии)
@@ -212,7 +193,6 @@ app.get('/', (req, res) => {
 });`
 );
 
-// public-config: portable flag
 src = src.replace(
     /res\.json\(\{\s*yandexMapsApiKey: key,\s*mapEngine: mapEngine,\s*publicSiteUrl: publicSiteUrl \? String\(publicSiteUrl\)\.trim\(\)\.replace\(\/\\\/\$\/, ''\) : '',\s*freeMapObjectLimit: getDefaultFreeMapObjectLimit\(\),\s*defaultMaxConcurrentUsers: getDefaultMaxConcurrentUsers\(\)\s*\}\);/,
     `res.json({
@@ -304,7 +284,6 @@ if (src.indexOf('PORTABLE_STRIP_APPLIED') === -1) {
     }
 }
 
-// Replace startup: skip SaaS initDefaultAdmin (creates org-less admin), use portable bootstrap
 src = src.replace(
     /db\.initStorage\(\)\.then\(function \(\) \{\s*db\.getDb\(\);\s*return db\.initDefaultAdmin\(\);\s*\}\)\.then\(function\(\) \{\s*server\.listen\(PORT, HOST, \(\) => \{[\s\S]*?logServerConfigWarnings\(\);\s*nedImport\.prepareInBackground\(\);\s*if \(mail\.isMailConfigured\(serverConfig\) && mail\.verifySmtp\) \{[\s\S]*?\}\s*\}\);\s*\}\)/,
     `db.initStorage().then(function () {
@@ -335,11 +314,9 @@ src = src.replace(
 fs.writeFileSync(API_PATH, src);
 console.log('Wrote stripped server-api.js');
 
-// Quick sanity: leftover requires
 const leftovers = [];
 ['news-media', 'support-bot', 'email-verify', 'update-broadcast', './lib/mail', 'password-reset'].forEach(function(name) {
     if (src.indexOf("require('./" + name) !== -1 || src.indexOf("require('./lib/" + name.replace('lib/', '')) !== -1) {
-        // check more carefully
     }
     if (new RegExp("require\\(['\\\"]\\.\\/" + name.replace('/', '\\/') + "['\\\"]\\)").test(src)) {
         leftovers.push(name);
@@ -349,7 +326,6 @@ const leftovers = [];
     if (src.indexOf(id) !== -1 && id !== 'mail.') leftovers.push('ref:' + id);
 });
 if (src.indexOf('mail.') !== -1 || src.indexOf('mail)') !== -1) {
-    // mail may still be referenced
     const mailRefs = (src.match(/\bmail\b/g) || []).length;
     if (mailRefs > 0) leftovers.push('mail refs: ' + mailRefs);
 }

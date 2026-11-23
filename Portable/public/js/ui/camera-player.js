@@ -1,6 +1,3 @@
-/**
- * Просмотр и настройка видеопотока камеры (HLS, HTTP, MJPEG, iframe, RTSP).
- */
 (function (global) {
     var STREAM_TYPES = [
         { id: 'none', label: 'Без видео' },

@@ -8,8 +8,11 @@
   },
   "scripts": {
     "build": "node scripts/build-client.js",
+    "build:ensure": "node scripts/ensure-obfuscated-client.js",
     "sync": "node server/server.js",
     "api": "node server/server-api.js",
+    "start": "node scripts/start-api.js",
+    "api:prod": "node scripts/start-api.js",
     "check": "node scripts/check-js-syntax.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

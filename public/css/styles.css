@@ -1,9 +1,7 @@
-/* ==================== CSS Переменные (тема) ==================== */
 :root {
     --font-sans: 'IBM Plex Sans', 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-display: 'Sora', 'IBM Plex Sans', sans-serif;
 
-    /* Светлая тема — как на главном лендинге */
     --bg-primary: #e8eef3;
     --bg-secondary: #ffffff;
     --bg-tertiary: #f1f5f9;
@@ -11,23 +9,23 @@
     --bg-hover: #f8fafc;
     --bg-accent: #e2e8f0;
     --bg-surface: #f1f5f9;
-    
-    --text-primary: #0a1628;
+
+        --text-primary: #0a1628;
     --text-secondary: #334155;
     --text-muted: #64748b;
-    
-    --border-color: #e2e8f0;
+
+        --border-color: #e2e8f0;
     --border-light: #f1f5f9;
-    
-    --shadow-sm: 0 1px 2px rgba(10, 22, 40, 0.06);
+
+        --shadow-sm: 0 1px 2px rgba(10, 22, 40, 0.06);
     --shadow-md: 0 4px 14px rgba(10, 22, 40, 0.08);
     --shadow-lg: 0 12px 32px rgba(10, 22, 40, 0.12);
     --shadow-map: 0 2px 16px rgba(10, 22, 40, 0.1);
-    
-    --header-bg: linear-gradient(128deg, #07111f 0%, #0a1c2e 42%, #0d3d3a 78%, #0f766e 128%);
+
+        --header-bg: linear-gradient(128deg, #07111f 0%, #0a1c2e 42%, #0d3d3a 78%, #0f766e 128%);
     --header-border: rgba(20, 184, 166, 0.2);
-    
-    --accent-primary: #0f766e;
+
+        --accent-primary: #0f766e;
     --accent-primary-soft: rgba(15, 118, 110, 0.12);
     --accent-primary-bright: #14b8a6;
     --accent-copper: #c2410c;
@@ -46,8 +44,8 @@
     --cable-split-accent: #dc2626;
     --cable-split-preview: #ef4444;
     --cable-split-preview-opacity: 0.38;
-    
-    --sidebar-width: 360px;
+
+        --sidebar-width: 360px;
     --info-dock-width: 340px;
     --toolbar-height: 46px;
     --header-height: 60px;
@@ -56,15 +54,15 @@
     --map-frame-border: color-mix(in srgb, var(--border-color) 85%, var(--accent-primary) 15%);
     --map-frame-well: color-mix(in srgb, var(--bg-primary) 72%, var(--bg-tertiary));
     --map-frame-ring: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 18%, transparent);
-    
-    --transition-fast: 0.15s ease;
+
+        --transition-fast: 0.15s ease;
     --transition-normal: 0.25s ease;
     --transition-slow: 0.4s ease;
 
     --theme-transition-duration: 0.45s;
     --theme-transition-ease: cubic-bezier(0.4, 0, 0.2, 1);
-    
-    --radius-sm: 4px;
+
+        --radius-sm: 4px;
     --radius-md: 6px;
     --radius-lg: 8px;
 
@@ -75,7 +73,6 @@
     --panel-glass-blur-sm: blur(12px) saturate(1.1);
 }
 
-/* Тёмная тема */
 [data-theme="dark"] {
     --bg-primary: #0b1526;
     --bg-secondary: #122033;
@@ -84,19 +81,19 @@
     --bg-hover: #1e364f;
     --bg-accent: #27425c;
     --bg-surface: #152841;
-    
-    --text-primary: #f1f5f9;
+
+        --text-primary: #f1f5f9;
     --text-secondary: #cbd5e1;
     --text-muted: #94a3b8;
-    
-    --border-color: #2a4058;
+
+        --border-color: #2a4058;
     --border-light: #35506a;
-    
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
-    
-    --header-bg: linear-gradient(128deg, #050d18 0%, #07111f 40%, #0a2f2c 78%, #0f766e 130%);
+
+        --header-bg: linear-gradient(128deg, #050d18 0%, #07111f 40%, #0a2f2c 78%, #0f766e 130%);
     --header-border: rgba(45, 212, 191, 0.16);
     --accent-primary: #14b8a6;
     --accent-primary-soft: rgba(20, 184, 166, 0.16);
@@ -120,7 +117,6 @@
     --edit-mode-accent-soft: rgba(251, 146, 60, 0.2);
 }
 
-/* Плавная смена светлой / тёмной темы */
 @media (prefers-reduced-motion: no-preference) {
     html.theme-changing,
     html.theme-changing *:not([class*="ymaps"]):not(canvas),
@@ -133,12 +129,10 @@
     }
 }
 
-/* ==================== РћСЃРЅРѕРІРЅС‹Рµ СЃС‚РёР»Рё ==================== */
 * {
     box-sizing: border-box;
 }
 
-/* Р‘РµР· СЃРєСЂРѕР»Р»Р° РєРѕСЂРЅСЏ: РёРЅР°С‡Рµ РЅР° iOS С€Р°РїРєР° В«РїР»С‹РІС‘С‚В» РїСЂРё overscroll Рё СЃРјРµРЅРµ РІС‹СЃРѕС‚С‹ РїР°РЅРµР»Рё Р±СЂР°СѓР·РµСЂР° */
 html {
     height: 100%;
     overflow: hidden;
@@ -161,7 +155,6 @@ body {
         color var(--theme-transition-duration) var(--theme-transition-ease);
 }
 
-/* РЎС‚РµРєР»Рѕ + РіСЂР°РґРёРµРЅС‚/plexus РЅР° РїР°РЅРµР»СЏС… РєР°СЂС‚С‹ */
 .panel-glass {
     position: relative;
     overflow: hidden;
@@ -209,7 +202,6 @@ body {
     z-index: 1;
 }
 
-/* РЎС‚РµРєР»СЏРЅРЅС‹Рµ РјРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° */
 .modal.modal--centered,
 .modal.help-modal {
     align-items: center;
@@ -259,7 +251,6 @@ body {
     background: transparent;
 }
 
-/* Р‘Р°Р»СѓРЅС‹ РІС‹Р±РѕСЂР° СѓР·Р»Р° / ONU / OLT */
 .modal-content.node-selection-modal-content .node-selection-balloon.panel-glass,
 .modal-content.node-selection-modal-content .network-map-balloon.panel-glass {
     background: var(--panel-glass-bg) !important;
@@ -306,7 +297,6 @@ body {
     background: color-mix(in srgb, var(--panel-glass-surface) 85%, transparent);
 }
 
-/* ==================== Р’РµСЂС…РЅСЏСЏ РїР°РЅРµР»СЊ ==================== */
 .top-header {
     background: var(--header-bg);
     color: white;
@@ -573,7 +563,6 @@ body {
     }
 }
 
-/* ==================== Поиск по карте ==================== */
 .header-search {
     flex: 1 1 auto;
     width: 100%;
@@ -798,7 +787,6 @@ body {
     overflow: hidden;
 }
 
-/* ==================== Р‘РѕРєРѕРІР°СЏ РїР°РЅРµР»СЊ ==================== */
 .sidebar {
     position: relative;
     left: 0;
@@ -812,7 +800,6 @@ body {
     z-index: 1000;
     flex-shrink: 0;
     box-shadow: 2px 0 28px rgba(15, 23, 42, 0.1), inset -1px 0 0 rgba(255, 255, 255, 0.35);
-    /* Размытие на самом .sidebar ломает нативные <select> в Chromium: список не открывается. */
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     transition: background var(--transition-normal), border-color var(--transition-normal), width var(--transition-normal), box-shadow var(--transition-normal);
@@ -834,7 +821,6 @@ body {
     overflow: visible;
 }
 
-/* РљРЅРѕРїРєР°-Р·Р°РєР»Р°РґРєР° вЂ” РІ .container, РЅР° РїСЂР°РІРѕРј РєСЂР°СЋ СЃР°Р№РґР±Р°СЂР° */
 .sidebar-toggle {
     position: absolute;
     top: 12px;
@@ -937,15 +923,12 @@ body.sidebar-collapsed .sidebar-content {
 
 body.sidebar-collapsed .map-area-wrapper,
 body.properties-hidden .map-area-wrapper {
-    /* map is flex:1 — no fixed width needed */
 }
 
 body.info-dock-collapsed .map-area-wrapper {
-    /* map is flex:1 */
 }
 
 body.sidebar-collapsed.info-dock-collapsed .map-area-wrapper {
-    /* map is flex:1 */
 }
 
 body.sidebar-collapsed .sidebar-toggle {
@@ -988,8 +971,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     display: block;
 }
 
-
-/* РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ С‚РµРјС‹ */
 .theme-toggle {
     position: relative;
     overflow: hidden;
@@ -1007,7 +988,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     display: block !important;
 }
 
-/* ==================== Панель пользователя ==================== */
 .user-panel {
     grid-area: tools;
     display: flex;
@@ -1183,7 +1163,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     background: rgba(255, 255, 255, 0.16);
 }
 
-/* ==================== РЎРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ ==================== */
 .users-actions {
     margin-bottom: 16px;
 }
@@ -1621,7 +1600,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     border: 1px solid var(--border-color);
 }
 
-/* РќР°РїРѕРјРёРЅР°РЅРёРµ Рѕ РїРѕС‡С‚Рё РёСЃС‡РµСЂРїР°РЅРЅРѕРј Р»РёРјРёС‚Рµ РѕР±СЉРµРєС‚РѕРІ (в‰Ґ98%) */
 .map-limit-banner {
     display: flex;
     align-items: center;
@@ -1702,7 +1680,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     font-size: 13px;
 }
 
-/* ==================== РЎРµРєС†РёСЏ Р·Р°СЏРІРѕРє РЅР° СЂРµРіРёСЃС‚СЂР°С†РёСЋ ==================== */
 .pending-users-section {
     background: color-mix(in srgb, #fef3c7 75%, var(--panel-glass-surface));
     border: 1px solid #fde68a;
@@ -1820,7 +1797,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     color: #d97706;
 }
 
-/* ==================== Журнал изменений ==================== */
 .user-menu-btn {
     position: relative;
     overflow: visible;
@@ -2443,7 +2419,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent-warning) 70%, transparent);
 }
 
-/* Карточка: режим + фильтр */
 .sidebar-controls-card {
     --sidebar-card-accent: var(--accent-primary);
     --sidebar-card-accent-hi: color-mix(in srgb, var(--accent-primary) 65%, #fff);
@@ -2848,7 +2823,6 @@ body.sidebar-collapsed .sidebar-toggle .arrow-right {
     line-height: 1.3;
 }
 
-/* Панель настроек приложения */
 .app-settings-section-desc {
     margin: 0 0 10px;
     font-size: 0.6875rem;
@@ -2891,8 +2865,6 @@ html.perf-plexus-off .auth-bg-plexus {
     display: none !important;
 }
 
-
-/* Карточки выбора в настройках */
 .settings-choice-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3238,7 +3210,6 @@ html.perf-plexus-off .auth-bg-plexus {
     flex: 0 0 auto;
 }
 
-/* Приветственное окно (первый вход, центр экрана) */
 .welcome-modal {
     z-index: 30000;
     align-items: center;
@@ -3834,7 +3805,6 @@ html.perf-plexus-off .auth-bg-plexus {
     color: var(--text-secondary, #64748b);
 }
 
-/* Загрузка трассы — полный экран панели, в духе входа / карты */
 .fiber-trace-loading-overlay {
     position: relative;
     flex: 1;
@@ -4226,7 +4196,6 @@ html[data-theme="light"] .fiber-trace-loading-bar,
     transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Пока тяжёлая отрисовка — hint «дышит», чтобы было видно что процесс идёт */
 .fiber-trace-loading-overlay[data-trace-busy="1"] .fiber-trace-loading-hint {
     animation: fiberTraceHintPulse 1.1s ease-in-out infinite;
 }
@@ -4681,7 +4650,6 @@ html[data-theme="light"] .fiber-trace-loading-back.trace-back-btn:focus-visible,
     letter-spacing: 0.01em;
 }
 
-/* ==================== РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ СЂРµР¶РёРјРѕРІ ==================== */
 .control-section {
     margin-bottom: 12px;
 }
@@ -4778,7 +4746,6 @@ button.is-edit-locked {
     line-height: 1.2;
 }
 
-/* ==================== РђРєРєРѕСЂРґРµРѕРЅ ==================== */
 .accordion-section {
     margin-bottom: 10px;
     background: var(--panel-glass-surface);
@@ -4941,7 +4908,6 @@ button.is-edit-locked {
     transform: translateY(0);
 }
 
-/* Dropdown экспорта не должен обрезаться границами секции "Файлы". */
 .accordion-section--files.active {
     overflow: visible;
 }
@@ -4958,7 +4924,6 @@ button.is-edit-locked {
     padding: 12px;
 }
 
-/* Р¤РёР»СЊС‚СЂ РєР°СЂС‚С‹ */
 #mapfilter-content.accordion-content,
 .accordion-section.active #mapfilter-content.accordion-content {
     padding: 0;
@@ -5220,7 +5185,6 @@ button.is-edit-locked {
 .map-filter-chip--teal { --filter-tone: #14b8a6; }
 .map-filter-chip--amber { --filter-tone: #f59e0b; }
 
-/* РЎРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ СЃРѕ СЃС‚Р°СЂС‹РјРё РєР»Р°СЃСЃР°РјРё (РјРѕР±РёР»СЊРЅС‹Рµ РїРµСЂРµРѕРїСЂРµРґРµР»РµРЅРёСЏ) */
 .map-filter-checkboxes {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -5240,7 +5204,6 @@ button.is-edit-locked {
     margin: 0;
 }
 
-/* РџР°РЅРµР»СЊ РґРѕР±Р°РІР»РµРЅРёСЏ РѕР±СЉРµРєС‚РѕРІ */
 .objects-panel-hint {
     margin: 0 0 12px;
     font-size: 0.75rem;
@@ -5815,7 +5778,6 @@ button.is-edit-locked {
     gap: 8px;
 }
 
-/* ==================== Р¤РѕСЂРјС‹ ==================== */
 .form-group {
     margin-bottom: 12px;
 }
@@ -5834,7 +5796,6 @@ button.is-edit-locked {
     letter-spacing: 0.4px;
 }
 
-/* РџРѕР»Рµ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊ/РјРѕРґРµР»СЊ: input + РєРЅРѕРїРєР° В«РґРѕР±Р°РІРёС‚СЊВ» */
 .device-field-row {
     display: flex;
     gap: 8px;
@@ -5872,7 +5833,6 @@ button.is-edit-locked {
     color: var(--accent-primary);
 }
 
-/* Р’С‹РїР°РґР°СЋС‰РёР№ СЃРїРёСЃРѕРє СЃ РїРѕРёСЃРєРѕРј (РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊ / РјРѕРґРµР»СЊ) */
 .device-combobox {
     position: relative;
     width: 100%;
@@ -6046,7 +6006,6 @@ textarea.form-input {
     cursor: pointer;
 }
 
-/* ==================== РљРЅРѕРїРєРё ==================== */
 button {
     font-family: inherit;
 }
@@ -6125,7 +6084,6 @@ button {
     transform: translateY(-2px);
 }
 
-/* РљРѕРјРїР°РєС‚РЅС‹Рµ РєРЅРѕРїРєРё РІ С‚СѓР»Р±Р°СЂР°С… (РєР°Р±РµР»СЊ, РєСЂРѕСЃСЃ) */
 .btn-inline,
 .cables-panel .btn-secondary.btn-inline,
 .cable-fiber-settings-toolbar .btn-primary,
@@ -6148,7 +6106,6 @@ button {
     flex-shrink: 0;
 }
 
-/* РљРЅРѕРїРєРё РІ РїР°РЅРµР»СЏС… Р¤Р°Р№Р»С‹, Р РµР·РµСЂРІРЅС‹Рµ РєРѕРїРёРё, Р¤РёР»СЊС‚СЂ РєР°СЂС‚С‹ вЂ” С‡СѓС‚СЊ Р·Р°РјРµС‚РЅРµРµ */
 #files-content .btn-secondary,
 #backups-content .btn-secondary,
 #backups-content .backups-refresh-btn,
@@ -6356,7 +6313,6 @@ button {
     border-color: #475569;
 }
 
-/* ==================== РљР°Р±РµР»Рё (СЃР°Р№РґР±Р°СЂ) ==================== */
 .cables-panel {
     display: flex;
     flex-direction: column;
@@ -6391,7 +6347,6 @@ button {
     border: 0;
 }
 
-/* вЂ”вЂ” Р’РћР›РЎ: РїСЂРѕРєР»Р°РґРєР°, РїР°Р»РёС‚СЂР° Р¶РёР», РЅР°СЃС‚СЂРѕР№РєРё РІ РєР°СЂС‚РѕС‡РєР°С… вЂ”вЂ” */
 .cable-fiber-config-card {
     padding: 10px 12px;
     margin-bottom: 4px;
@@ -6932,7 +6887,6 @@ button {
     z-index: 3600;
 }
 
-/* РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ РїР°Р»РёС‚СЂС‹ Р¶РёР» вЂ” РѕР±С‰Р°СЏ СЂР°Р·РјРµС‚РєР° .modal + .panel-glass */
 .fiber-palette-modal-content {
     width: min(560px, 100%);
     max-width: 560px;
@@ -7175,7 +7129,6 @@ button {
     border-color: transparent;
 }
 
-/* ==================== Р›РµРіРµРЅРґР° ==================== */
 .legend-panel {
     padding-top: 2px;
 }
@@ -7269,7 +7222,6 @@ button {
     vertical-align: middle;
 }
 
-/* ==================== РЎС‚Р°С‚РёСЃС‚РёРєР° ==================== */
 .stats-section {
     margin-top: 12px;
     padding: 0;
@@ -7530,12 +7482,10 @@ button {
     opacity: 0.5;
 }
 
-/* ==================== Р”РµР№СЃС‚РІРёСЏ ==================== */
 .actions-section {
     margin-top: 16px;
 }
 
-/* РћРїР°СЃРЅС‹Рµ РґРµР№СЃС‚РІРёСЏ вЂ” СЃРІС‘СЂРЅСѓС‚С‹Р№ Р±Р»РѕРє РІРЅРёР·Сѓ, С‡С‚РѕР±С‹ РЅРµ РЅР°Р¶Р°С‚СЊ СЃР»СѓС‡Р°Р№РЅРѕ */
 .accordion-section-danger .accordion-header {
     color: var(--accent-warning);
 }
@@ -7551,9 +7501,6 @@ button {
     margin-top: 0;
 }
 
-
-
-/* ==================== РљР°СЂС‚Р° ==================== */
 .map-area-wrapper {
     position: relative;
     flex: 1;
@@ -7583,7 +7530,6 @@ button {
     transition: box-shadow var(--transition-normal), border-color var(--transition-normal), border-radius var(--transition-normal);
 }
 
-/* Dual runtime: Яндекс и Leaflet живут рядом, переключение без destroy */
 .map-runtime-host {
     position: relative;
     flex: 1;
@@ -7747,7 +7693,6 @@ body.edit-mode-active:not(.underground-draw-active) .map-area-wrapper::after {
     to { transform: rotate(360deg); }
 }
 
-/* ==================== Полноэкранный вход (после логина) ==================== */
 .app-entrance {
     position: fixed;
     inset: 0;
@@ -8029,7 +7974,6 @@ html[data-theme="light"] .app-entrance--logo {
     animation: appEntranceGridDrift 42s linear infinite;
     will-change: transform;
 }
-
 
 .app-entrance--logo.app-entrance--reduced .app-entrance__mesh::before {
     animation: none;
@@ -9265,9 +9209,6 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* Скроллбары — единый стиль в css/scrollbars.css */
-
-/* Синхронизация (совместная работа) */
 .sidebar-sync-presence {
     margin: 0;
     padding: 0;
@@ -9717,7 +9658,6 @@ html[data-theme="light"] .app-entrance__status {
     cursor: not-allowed;
 }
 
-/* ==================== РњРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° ==================== */
 #confirmModal {
     z-index: 3500;
 }
@@ -9748,7 +9688,6 @@ html[data-theme="light"] .app-entrance__status {
     backdrop-filter: blur(20px);
 }
 
-/* РљСЂРѕСЃСЃ / РјСѓС„С‚Р°: РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРµ СЂР°Р±РѕС‡РµРµ РјРµСЃС‚Рѕ Р¶РёР» */
 #infoModal.fiber-management-modal-open {
     padding: 0;
     align-items: stretch;
@@ -11971,7 +11910,6 @@ html[data-theme="light"] .app-entrance__status {
     border-color: #fb923c;
 }
 
-/* Область схемы: прокрутка + масштаб */
 .fiber-scheme-viewport {
     flex: 1;
     min-height: 240px;
@@ -12545,7 +12483,6 @@ html[data-theme="light"] .app-entrance__status {
     pointer-events: none;
 }
 
-/* РЎРєСЂС‹С‚СЊ / РџРѕРєР°Р·Р°С‚СЊ СЃС…РµРјСѓ */
 .fiber-scheme-toggle-row {
     margin-bottom: 6px;
 }
@@ -12565,7 +12502,6 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--text-primary);
 }
 
-/* РџРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ РЎС…РµРјР° / РЎРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ */
 .fiber-view-toggle {
     display: flex;
     gap: 0;
@@ -12596,7 +12532,6 @@ html[data-theme="light"] .app-entrance__status {
     color: white;
 }
 
-/* РЎРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ (Р°Р»СЊС‚РµСЂРЅР°С‚РёРІР° СЃС…РµРјРµ) */
 .fiber-connections-list-wrap {
     max-height: 42vh;
     min-height: 120px;
@@ -12905,7 +12840,6 @@ html[data-theme="light"] .app-entrance__status {
     overflow-y: auto;
 }
 
-/* РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ СЃРїСЂР°РІРєРё */
 .help-modal-content {
     width: min(780px, 100%);
     max-width: 780px;
@@ -13337,7 +13271,6 @@ html[data-theme="light"] .app-entrance__status {
     margin-top: 0;
 }
 
-/* Users modal polish overrides */
 #usersModal .org-admin-settings {
     gap: 6px;
     margin-bottom: 18px;
@@ -14026,7 +13959,6 @@ html[data-theme="light"] .app-entrance__status {
     transform: none;
 }
 
-/* Окно обновлений */
 .updates-modal-content {
     max-width: 420px;
     width: min(420px, 100%);
@@ -14046,7 +13978,6 @@ html[data-theme="light"] .app-entrance__status {
     -webkit-backdrop-filter: var(--panel-glass-blur-sm);
 }
 
-/* Личный кабинет */
 .profile-modal-content {
     max-width: 460px;
     width: min(460px, 100%);
@@ -14130,7 +14061,6 @@ html[data-theme="light"] .app-entrance__status {
     background: color-mix(in srgb, var(--bg-primary) 92%, var(--bg-secondary));
 }
 
-/* ——— Профиль: главный блок ——— */
 .profile-user-card {
     display: flex;
     flex-direction: column;
@@ -14294,7 +14224,6 @@ html[data-theme="light"] .app-entrance__status {
     flex-shrink: 0;
 }
 
-/* ——— Организация: компактная строка ——— */
 .profile-hero {
     display: flex;
     align-items: center;
@@ -14408,7 +14337,6 @@ html[data-theme="light"] .app-entrance__status {
     border: 1px solid var(--border-color);
 }
 
-/* ——— Лимиты ——— */
 .profile-limits {
     padding: 16px 0 0;
     margin: 0;
@@ -14723,7 +14651,6 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--text-primary);
 }
 
-/* РЎС‚РёР»Рё РґР»СЏ РѕСЃС‚Р°Р»СЊРЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ РјРѕРґР°Р»СЊРЅС‹С… РѕРєРѕРЅ */
 .cable-info {
     margin-bottom: 20px;
     padding: 16px;
@@ -14862,7 +14789,6 @@ html[data-theme="light"] .app-entrance__status {
     color: #991b1b;
 }
 
-/* РЎРµРєС†РёСЏ С‚Р°Р±Р»РёС†С‹ РєР°Р±РµР»РµР№ Рё Р¶РёР» */
 .cross-fiber-table-section {
     margin-top: 10px;
 }
@@ -14874,7 +14800,6 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--text-primary);
 }
 
-/* РўР°Р±Р»РёС†Р° РєР°Р±РµР»РµР№/Р¶РёР» РІ РєСЂРѕСЃСЃРµ: РјР°РєСЃРёРјСѓРј РІРёРґРёРјРѕР№ РѕР±Р»Р°СЃС‚Рё, С„РёРєСЃРёСЂРѕРІР°РЅРЅС‹Р№ Р·Р°РіРѕР»РѕРІРѕРє, РїСЂРѕРєСЂСѓС‚РєР° */
 .cross-fiber-table-wrap {
     max-height: 55vh;
     min-height: 180px;
@@ -14885,7 +14810,6 @@ html[data-theme="light"] .app-entrance__status {
     background: var(--bg-card);
 }
 
-/* РљРѕРіРґР° СЃС…РµРјР° Рё СЃРїРёСЃРѕРє СЃРѕРµРґРёРЅРµРЅРёР№ СЃРєСЂС‹С‚С‹ вЂ” С‚Р°Р±Р»РёС†Р° Р·Р°РЅРёРјР°РµС‚ РїРѕС‡С‚Рё РІСЃС‘ РјРµСЃС‚Рѕ */
 .fiber-connections-container.scheme-hidden .cross-fiber-table-wrap {
     max-height: 82vh;
     min-height: 400px;
@@ -14896,7 +14820,6 @@ html[data-theme="light"] .app-entrance__status {
     min-height: 120px;
 }
 
-/* workspace: таблица/соединения — overflow; высоту задаёт fitFiberWorkspaceScrollAreas */
 .fiber-management-modal-open .fiber-ws-panel-table .cross-fiber-table-wrap,
 .fiber-management-modal-open .fiber-ws-panel-connections .fiber-connections-list-wrap {
     overflow: auto !important;
@@ -14906,7 +14829,6 @@ html[data-theme="light"] .app-entrance__status {
     max-height: 55vh;
 }
 
-/* legacy: cross-edit-mode Р±РѕР»СЊС€Рµ РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РІ workspace */
 .fiber-connections-container.cross-edit-mode .cross-fiber-table-wrap {
     max-height: none;
     min-height: 0;
@@ -15199,7 +15121,6 @@ html[data-theme="light"] .app-entrance__status {
     color: #fecaca;
 }
 
-/* Fiber table cells */
 .cross-fiber-table .fiber-item {
     cursor: pointer;
     display: flex;
@@ -15751,7 +15672,6 @@ html[data-theme="light"] .app-entrance__status {
     padding: 8px 6px;
 }
 
-/* РСЃРїРѕР»СЊР·СѓРµРјС‹Рµ Р¶РёР»С‹ РІ РєСЂРѕСЃСЃРµ вЂ” СЏСЂРєРѕ РєСЂР°СЃРЅС‹Рµ */
 .cross-fiber-table .fiber-item.cross-fiber-used,
 .cross-fiber-table .fiber-item.fiber-used {
     background: #fecaca !important;
@@ -15765,7 +15685,6 @@ html[data-theme="light"] .app-entrance__status {
     font-weight: 600;
 }
 
-/* Р’С‹Р±СЂР°РЅРЅР°СЏ Р¶РёР»Р° РґР»СЏ СЃРѕРµРґРёРЅРµРЅРёСЏ (РІ С‚Р°Р±Р»РёС†Рµ РєСЂРѕСЃСЃРµ) */
 .cross-fiber-table .fiber-item.fiber-selected {
     box-shadow: 0 0 0 2px #f59e0b;
     background: #fffbeb !important;
@@ -15782,7 +15701,6 @@ html[data-theme="light"] .app-entrance__status {
     border-color: #dc2626 !important;
 }
 
-/* Панель выбора волокна в кроссе / муфте */
 .fiber-selection-bar {
     padding: 8px 12px;
     margin: 0;
@@ -15824,7 +15742,6 @@ html[data-theme="light"] .app-entrance__status {
     background: #d97706;
 }
 
-/* РЎРІРѕСЂР°С‡РёРІР°РµРјР°СЏ РёРЅСЃС‚СЂСѓРєС†РёСЏ РІ РєСЂРѕСЃСЃРµ */
 .cross-instruction-details summary::-webkit-details-marker {
     display: none;
 }
@@ -15864,7 +15781,6 @@ html[data-theme="light"] .app-entrance__status {
     padding: 20px;
 }
 
-/* ==================== РњРѕРґР°Р»СЊРЅРѕРµ РѕРєРЅРѕ РІС‹Р±РѕСЂР° СѓР·Р»Р° (РєР°Рє Р±Р°Р»СѓРЅ РіСЂСѓРїРї вЂ” РѕРґРЅР° РєР°СЂС‚РѕС‡РєР°, Р±РµР· РґРІРѕР№РЅРѕРіРѕ Р±Р°Р»СѓРЅР°) ==================== */
 .modal-content.node-selection-modal-content {
     max-width: 500px;
     width: auto;
@@ -16037,7 +15953,6 @@ html[data-theme="light"] .app-entrance__status {
     margin-bottom: 0;
 }
 
-/* РџРѕРґСЃРІРµС‚РєР° РїРѕРёСЃРєР° */
 .node-list-item-name mark {
     background: #fef08a;
     color: inherit;
@@ -16049,7 +15964,6 @@ html[data-theme="light"] .app-entrance__status {
     background: rgba(255, 255, 255, 0.3);
 }
 
-/* ==================== Уведомления (Toast) ==================== */
 .toast-container {
     position: fixed;
     top: 20px;
@@ -16309,9 +16223,6 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* ==================== РђРґР°РїС‚РёРІРЅРѕСЃС‚СЊ ==================== */
-
-/* РЎСЂРµРґРЅРёРµ СЌРєСЂР°РЅС‹ (РїР»Р°РЅС€РµС‚С‹) */
 @media (max-width: 1024px) {
     :root {
         --sidebar-width: 300px;
@@ -16331,8 +16242,8 @@ html[data-theme="light"] .app-entrance__status {
         max-width: 100%;
         gap: 9px;
     }
-    
-    .header-title {
+
+        .header-title {
         font-size: 0.975rem;
     }
 
@@ -16362,36 +16273,36 @@ html[data-theme="light"] .app-entrance__status {
     .search-kbd {
         display: none;
     }
-    
-    .sidebar {
+
+        .sidebar {
         width: var(--sidebar-width);
     }
-    
-    .map-area-wrapper {
+
+        .map-area-wrapper {
         width: auto;
         flex: 1;
         min-width: 0;
     }
-    
-    .map {
+
+        .map {
         width: 100%;
     }
-    
-    .user-name {
+
+        .user-name {
         max-width: 100px;
     }
-    
-    .user-avatar {
+
+        .user-avatar {
         width: 30px;
         height: 30px;
     }
-    
-    .user-menu-btn {
+
+        .user-menu-btn {
         width: 32px;
         height: 32px;
     }
-    
-    .user-panel {
+
+        .user-panel {
         gap: 8px;
         padding-left: 0;
     }
@@ -16406,7 +16317,6 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* РњР°Р»РµРЅСЊРєРёРµ СЌРєСЂР°РЅС‹ (Р±РѕР»СЊС€РёРµ С‚РµР»РµС„РѕРЅС‹, РјР°Р»РµРЅСЊРєРёРµ РїР»Р°РЅС€РµС‚С‹) */
 @media (max-width: 768px) {
     .top-header {
         padding: 0 12px;
@@ -16415,40 +16325,40 @@ html[data-theme="light"] .app-entrance__status {
         padding-right: max(12px, env(safe-area-inset-right, 0px));
         height: 46px;
     }
-    
-    .header-title {
+
+        .header-title {
         font-size: 0.9rem;
     }
-    
-    .header-title-icon {
+
+        .header-title-icon {
         width: 32px;
         height: 32px;
     }
-    
-    .header-title-icon svg {
+
+        .header-title-icon svg {
         width: 18px;
         height: 18px;
     }
-    
-    .header-divider {
+
+        .header-divider {
         display: none;
     }
-    
-    .header-logo {
+
+        .header-logo {
         padding: 5px 10px 5px 6px;
     }
-    
-    .header-logo-icon {
+
+        .header-logo-icon {
         width: 24px;
         height: 24px;
     }
-    
-    .header-logo-icon svg {
+
+        .header-logo-icon svg {
         width: 16px;
         height: 16px;
     }
-    
-    .header-center {
+
+        .header-center {
         max-width: none;
         gap: 8px;
         margin: 0;
@@ -16464,13 +16374,13 @@ html[data-theme="light"] .app-entrance__status {
         max-width: none;
         margin: 0;
     }
-    
-    .search-input {
+
+        .search-input {
         padding: 6px 32px 6px 36px;
         font-size: 0.8125rem;
     }
-    
-    .search-icon {
+
+        .search-icon {
         width: 16px;
         height: 16px;
         left: 10px;
@@ -16479,20 +16389,20 @@ html[data-theme="light"] .app-entrance__status {
     .map-region-current-chip {
         max-width: 140px;
     }
-    
-    .user-panel {
+
+        .user-panel {
         gap: 8px;
         padding-left: 0;
         margin-left: 0;
     }
-    
-    .user-avatar {
+
+        .user-avatar {
         width: 28px;
         height: 28px;
         font-size: 11px;
     }
-    
-    .user-details {
+
+        .user-details {
         display: none;
     }
 
@@ -16502,22 +16412,22 @@ html[data-theme="light"] .app-entrance__status {
         border: none;
         box-shadow: none;
     }
-    
-    .user-menu {
+
+        .user-menu {
         gap: 3px;
     }
-    
-    .user-menu-btn {
+
+        .user-menu-btn {
         width: 28px;
         height: 28px;
     }
-    
-    .user-menu-btn svg {
+
+        .user-menu-btn svg {
         width: 16px;
         height: 16px;
     }
-    
-    .history-badge {
+
+        .history-badge {
         top: -2px;
         right: -2px;
         min-width: 14px;
@@ -16526,20 +16436,20 @@ html[data-theme="light"] .app-entrance__status {
         padding: 0 3px;
         border-width: 1.5px;
     }
-    
-    .container {
+
+        .container {
         flex-direction: column;
     }
-    
-    .map-area-wrapper {
+
+        .map-area-wrapper {
         width: 100%;
         min-height: 300px;
         padding: 0;
         padding-bottom: env(safe-area-inset-bottom, 0px);
         box-sizing: border-box;
     }
-    
-    .sidebar {
+
+        .sidebar {
         width: 100%;
         max-width: 100%;
         height: auto;
@@ -16547,8 +16457,8 @@ html[data-theme="light"] .app-entrance__status {
         border-right: none;
         border-bottom: 1px solid var(--border-color);
     }
-    
-    .map {
+
+        .map {
         width: 100%;
         flex: 1;
         min-height: 300px;
@@ -16564,8 +16474,8 @@ html[data-theme="light"] .app-entrance__status {
         border-radius: 0;
         box-shadow: none;
     }
-    
-    .sidebar-body {
+
+        .sidebar-body {
         overflow: visible;
     }
 
@@ -16579,14 +16489,13 @@ html[data-theme="light"] .app-entrance__status {
         height: 52px;
     }
 
-    
-    body.sidebar-collapsed .sidebar {
+        body.sidebar-collapsed .sidebar {
         max-height: 0;
         padding: 0;
         border-bottom: none;
     }
-    
-    body.sidebar-collapsed .sidebar-toggle {
+
+        body.sidebar-collapsed .sidebar-toggle {
         top: 10px;
         bottom: auto;
         left: auto;
@@ -16594,53 +16503,50 @@ html[data-theme="light"] .app-entrance__status {
         transform: translate(100%, 0);
     }
 
-    
-    .sidebar-content {
+        .sidebar-content {
         padding: 12px;
     }
-    
-    .stats-grid {
+
+        .stats-grid {
         grid-template-columns: 1fr 1fr;
         gap: 5px;
     }
-    
-    .stat-item {
+
+        .stat-item {
         padding: 6px 7px;
     }
-    
-    .stat-icon {
+
+        .stat-icon {
         width: 26px;
         height: 26px;
     }
-    
-    .stat-icon svg {
+
+        .stat-icon svg {
         width: 13px;
         height: 13px;
     }
-    
-    .stat-value {
+
+        .stat-value {
         font-size: 0.9375rem;
     }
-    
-    .stat-label {
+
+        .stat-label {
         font-size: 0.625rem;
     }
 
     .stats-total-value {
         font-size: 1.125rem;
     }
-    
-    /* РќР° РјРѕР±РёР»СЊРЅС‹С… СѓР±РёСЂР°РµРј Р±Р»РѕРє СЃС‚Р°С‚РёСЃС‚РёРєРё РёР· РїР°РЅРµР»Рё,
-       С‡С‚РѕР±С‹ РёРЅСЃС‚СЂСѓРјРµРЅС‚С‹ Рё С„РёР»СЊС‚СЂС‹ Р±С‹Р»Рё Р±Р»РёР¶Рµ Рє РІРµСЂС…Сѓ */
+
     .stats-section {
         display: none;
     }
-    
-    .mode-switcher {
+
+        .mode-switcher {
         grid-template-columns: 1fr 1fr;
     }
-    
-    #addObject,
+
+        #addObject,
     #addCable,
     .mode-btn,
     .accordion-header,
@@ -16649,68 +16555,67 @@ html[data-theme="light"] .app-entrance__status {
     .btn-danger {
         touch-action: manipulation;
     }
-    
-    .mode-btn {
+
+        .mode-btn {
         padding: 8px 12px;
         font-size: 0.8rem;
     }
-    
-    .mode-btn svg {
+
+        .mode-btn svg {
         width: 14px;
         height: 14px;
     }
-    
-    .accordion-header {
+
+        .accordion-header {
         padding: 10px 12px;
         font-size: 0.85rem;
     }
-    
-    .accordion-section.active .accordion-content {
+
+        .accordion-section.active .accordion-content {
         padding: 12px;
     }
-    
-    .btn-primary, .btn-secondary, .btn-danger {
+
+        .btn-primary, .btn-secondary, .btn-danger {
         padding: 10px 14px;
         font-size: 0.85rem;
     }
-    
-    .modal-content {
+
+        .modal-content {
         width: 95%;
         margin: 5% auto;
         max-height: 90vh;
     }
-    
-    .modal-header {
+
+        .modal-header {
         padding: 14px 16px;
     }
-    
-    .modal-header h2 {
+
+        .modal-header h2 {
         font-size: 1rem;
     }
-    
-    .modal-body {
+
+        .modal-body {
         padding: 16px;
     }
-    
-    .cable-header {
+
+        .cable-header {
         flex-direction: column;
         align-items: flex-start;
     }
-    
-    .cable-actions {
+
+        .cable-actions {
         width: 100%;
         justify-content: space-between;
     }
-    
-    .cable-type-select {
+
+        .cable-type-select {
         flex: 1;
     }
-    
-    .fibers-list {
+
+        .fibers-list {
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     }
 
-    /* Р–СѓСЂРЅР°Р» */
     .history-filter-fields {
         grid-template-columns: 1fr;
     }
@@ -16728,35 +16633,33 @@ html[data-theme="light"] .app-entrance__status {
         height: 30px;
         font-size: 14px;
     }
-    
-    /* РџРѕР»СЊР·РѕРІР°С‚РµР»Рё */
+
     .user-item {
         flex-wrap: wrap;
         gap: 8px;
     }
-    
-    .user-item-avatar {
+
+        .user-item-avatar {
         width: 36px;
         height: 36px;
     }
-    
-    .user-item-actions {
+
+        .user-item-actions {
         width: 100%;
         justify-content: flex-end;
     }
-    
-    .pending-user-item {
+
+        .pending-user-item {
         flex-wrap: wrap;
     }
-    
-    .pending-user-actions {
+
+        .pending-user-actions {
         width: 100%;
         justify-content: flex-end;
         margin-top: 8px;
     }
 }
 
-/* РћС‡РµРЅСЊ РјР°Р»РµРЅСЊРєРёРµ СЌРєСЂР°РЅС‹ (С‚РµР»РµС„РѕРЅС‹) */
 @media (max-width: 480px) {
     .top-header {
         padding: 0 8px;
@@ -16765,44 +16668,44 @@ html[data-theme="light"] .app-entrance__status {
         padding-right: max(8px, env(safe-area-inset-right, 0px));
         height: 44px;
     }
-    
-    .header-title {
+
+        .header-title {
         font-size: 0.85rem;
     }
-    
-    .header-brand {
+
+        .header-brand {
         gap: 6px;
     }
-    
-    .header-title-icon {
+
+        .header-title-icon {
         width: 28px;
         height: 28px;
     }
-    
-    .header-title-icon svg {
+
+        .header-title-icon svg {
         width: 16px;
         height: 16px;
     }
-    
-    .header-logo {
+
+        .header-logo {
         padding: 4px 8px 4px 6px;
     }
-    
-    .header-logo-name {
+
+        .header-logo-name {
         font-size: 0.85rem;
     }
-    
-    .header-logo-icon {
+
+        .header-logo-icon {
         width: 22px;
         height: 22px;
     }
-    
-    .header-logo-icon svg {
+
+        .header-logo-icon svg {
         width: 14px;
         height: 14px;
     }
-    
-    .header-center {
+
+        .header-center {
         gap: 6px;
     }
 
@@ -16816,101 +16719,98 @@ html[data-theme="light"] .app-entrance__status {
         padding-left: 0;
         margin-left: 0;
     }
-    
-    .user-avatar {
+
+        .user-avatar {
         width: 26px;
         height: 26px;
         font-size: 10px;
     }
-    
-    .user-menu {
+
+        .user-menu {
         gap: 3px;
     }
-    
-    .user-menu-btn {
+
+        .user-menu-btn {
         width: 26px;
         height: 26px;
     }
-    
-    .user-menu-btn svg {
+
+        .user-menu-btn svg {
         width: 14px;
         height: 14px;
     }
-    
-    .stats-grid {
+
+        .stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
-    
-    .mode-switcher {
+
+        .mode-switcher {
         grid-template-columns: 1fr;
         gap: 6px;
     }
-    
-    .mode-btn span {
+
+        .mode-btn span {
         display: none;
     }
-    
-    .mode-btn {
+
+        .mode-btn {
         justify-content: center;
         padding: 10px;
     }
-    
-    .btn-primary, .btn-secondary, .btn-danger {
+
+        .btn-primary, .btn-secondary, .btn-danger {
         padding: 10px 12px;
         font-size: 0.8rem;
     }
-    
-    .btn-primary svg, .btn-secondary svg, .btn-danger svg {
+
+        .btn-primary svg, .btn-secondary svg, .btn-danger svg {
         width: 14px;
         height: 14px;
     }
-    
-    .form-group label {
+
+        .form-group label {
         font-size: 0.8rem;
     }
-    
-    .form-input, .form-select {
+
+        .form-input, .form-select {
         padding: 8px 10px;
         font-size: 0.8125rem;
     }
-    
-    .accordion-header span {
+
+        .accordion-header span {
         font-size: 0.8rem;
     }
-    
-    .legend-text {
+
+        .legend-text {
         font-size: 0.75rem;
     }
-    
-    /* РњРѕРґР°Р»СЊРЅС‹Рµ РѕРєРЅР° */
+
     .modal-content {
         margin: 2% auto;
         max-height: 96vh;
         border-radius: var(--radius-lg);
     }
-    
-    .modal-header {
+
+        .modal-header {
         padding: 12px 14px;
     }
-    
-    .modal-header h2 {
+
+        .modal-header h2 {
         font-size: 0.95rem;
     }
-    
-    .close, .close-users, .close-history, .close-user-edit, .close-help, .close-updates, .close-node-selection, .close-device-catalog {
+
+        .close, .close-users, .close-history, .close-user-edit, .close-help, .close-updates, .close-node-selection, .close-device-catalog {
         font-size: 22px;
         width: 32px;
         height: 32px;
     }
 }
 
-/* Копирайт и промо Яндекс.Карт */
 #map [class*="copyrights-pane"],
 #map [class*="map-copyrights-promo"] {
     display: none !important;
 }
 
-/* Переключатель слоёв карты (свой UI вместо TypeSelector) */
 .map-layer-selector {
     position: absolute;
     top: calc(var(--map-frame-padding) + 10px);
@@ -17070,7 +16970,6 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--accent-primary);
 }
 
-/* —— Модалка ортофото-подложки / слой по умолчанию —— */
 .basemap-admin-content.panel-glass {
     max-width: 560px;
     width: min(560px, 94vw);
@@ -17390,7 +17289,6 @@ html[data-theme="light"] .app-entrance__status {
     }
 }
 
-/* ==================== Р‘Р°Р»СѓРЅ РєР°СЂС‚С‹ (РЇРЅРґРµРєСЃ.РљР°СЂС‚С‹) вЂ” С‚РµРјР° РїСЂРёР»РѕР¶РµРЅРёСЏ ==================== */
 [class*="ymaps"][class*="balloon"] {
     font-family: var(--font-sans) !important;
 }
@@ -17409,11 +17307,9 @@ html[data-theme="light"] .app-entrance__status {
     border-color: var(--border-color) !important;
 }
 
-/* Р’СЃРїР»С‹РІР°СЋС‰Р°СЏ РїРѕРґСЃРєР°Р·РєР° (hint) РєР°СЂС‚С‹ вЂ” РѕРїСѓСЃРєР°РµРј С‡СѓС‚СЊ РЅРёР¶Рµ РјРµС‚РєРё */
 #map [class*="hint"] {
     transform: translateY(10px) !important;
 }
-/* РљРѕРіРґР° РІРЅСѓС‚СЂРё РЅР°С€ Р±Р°Р»СѓРЅ РІС‹Р±РѕСЂР° РіСЂСѓРїРїС‹ вЂ” СѓР±РёСЂР°РµРј РѕР±С‘СЂС‚РєСѓ API (РѕРґРёРЅ Р±Р°Р»СѓРЅ, РЅРµ РґРІР°) */
 [class*="balloon__content"]:has(.network-map-balloon),
 [class*="balloon-panel"]:has(.network-map-balloon) {
     padding: 0 !important;
@@ -17424,7 +17320,6 @@ html[data-theme="light"] .app-entrance__status {
 [class*="balloon__layout"]:has(.network-map-balloon) [class*="balloon__tail"] {
     display: none !important;
 }
-/* Балун выбора группы — glass-карточка в языке панелей */
 .network-map-balloon {
     background: var(--panel-glass-bg) !important;
     color: var(--text-primary) !important;
@@ -17455,13 +17350,11 @@ html[data-theme="light"] .app-entrance__status {
     background: var(--bg-hover) !important;
 }
 
-/* РЎРїРёСЃРѕРє СЌР»РµРјРµРЅС‚РѕРІ РіСЂСѓРїРїС‹ вЂ” РїСЂРѕРєСЂСѓС‚РєР° РїСЂРё Р±РѕР»СЊС€РѕРј РєРѕР»РёС‡РµСЃС‚РІРµ */
 .group-balloon-list {
     max-height: 220px;
     overflow-y: auto;
 }
 
-/* РЁР°РїРєР° Р±Р°Р»СѓРЅР° вЂ” РѕС‚РґРµР»СЊРЅС‹Р№ Р±Р»РѕРє, РєРѕРЅС‚СЂР°СЃС‚РЅР°СЏ РєРЅРѕРїРєР° Р·Р°РєСЂС‹С‚РёСЏ */
 .group-balloon-header {
     display: flex;
     align-items: center;
@@ -17516,7 +17409,6 @@ html[data-theme="light"] .app-entrance__status {
     color: #fecaca;
 }
 
-/* Р‘Р»РѕРє В«РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹В» вЂ” СЏРІРЅРѕРµ РїРѕР»Рµ Рё Р°РєС†РµРЅС‚РЅР°СЏ РєРЅРѕРїРєР° */
 .group-name-row {
     padding: 12px 14px;
     border-bottom: 1px solid var(--border-color);
@@ -17587,7 +17479,6 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--text-primary);
 }
 
-/* Р­Р»РµРјРµРЅС‚ РіСЂСѓРїРїС‹: РЅР°Р·РІР°РЅРёРµ + РєРЅРѕРїРєР° В«РџРµСЂРµРјРµСЃС‚РёС‚СЊВ» */
 .cross-group-item,
 .node-group-item {
     display: flex;
@@ -17617,7 +17508,6 @@ html[data-theme="light"] .app-entrance__status {
     color: var(--accent-primary);
 }
 
-/* РџРѕРґРїРёСЃРё РѕР±СЉРµРєС‚РѕРІ РЅР° РєР°СЂС‚Рµ (РІСЃРµ С‚РёРїС‹): РєРѕРјРїР°РєС‚РЅРѕ Рё РїРѕ С†РµРЅС‚СЂСѓ РїРѕРґ РѕР±СЉРµРєС‚РѕРј */
 .map-label,
 #map .map-label,
 [class*="ymaps"] .map-label {
@@ -17640,7 +17530,6 @@ html[data-theme="light"] .app-entrance__status {
     backdrop-filter: blur(6px);
 }
 
-/* РџРѕРґРїРёСЃСЊ РЅР° РєР°СЂС‚Рµ: Р»С‘РіРєР°СЏ РѕР±РІРѕРґРєР° РґР»СЏ С‡РёС‚Р°РµРјРѕСЃС‚Рё РЅР° Р»СЋР±РѕРј С„РѕРЅРµ */
 [data-theme="light"] .map-label,
 [data-theme="light"] #map .map-label,
 [data-theme="light"] [class*="ymaps"] .map-label {
@@ -17677,7 +17566,6 @@ html[data-theme="light"] .app-entrance__status {
     background: #94a3b8;
 }
 
-/* Чип статуса Zabbix в подписи объекта */
 .map-label--with-zabbix,
 .map-label.map-label--camera {
     gap: 5px;
@@ -17730,7 +17618,6 @@ html[data-theme="light"] .app-entrance__status {
     box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.55), 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 
-/* —— Карточка описания при наведении на объект карты —— */
 #cursorIndicator.map-hover-card {
     position: fixed;
     pointer-events: none;
@@ -17905,7 +17792,6 @@ html[data-theme="light"] .app-entrance__status {
     white-space: nowrap;
 }
 
-/* Блок Zabbix в карточке наведения */
 .map-hover-zabbix {
     margin-top: 2px;
     padding: 8px 9px;
@@ -18067,7 +17953,6 @@ html[data-theme="light"] .app-entrance__status {
     color: #86efac;
 }
 
-/* РљСѓСЂСЃРѕСЂ-РїСЂРёС†РµР» РЅР° РєР°СЂС‚Рµ: С…РѕСЂРѕС€Рѕ РІРёРґРµРЅ РІ СЃРІРµС‚Р»РѕР№ Рё С‚С‘РјРЅРѕР№ С‚РµРјРµ */
 #map.map-crosshair-active {
     cursor: crosshair;
 }
@@ -18075,7 +17960,6 @@ html[data-theme="light"] .app-entrance__status {
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cline x1='16' y1='2' x2='16' y2='12' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='16' y1='20' x2='16' y2='30' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='2' y1='16' x2='12' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='20' y1='16' x2='30' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='3' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair;
 }
 
-/* Р Р°Р·СЂРµР· РєР°Р±РµР»СЏ / СѓСЃС‚Р°РЅРѕРІРєР° РјСѓС„С‚С‹ РЅР° РјР°СЂС€СЂСѓС‚Рµ */
 .cable-split-section {
     margin-bottom: 20px;
     padding: 16px;
@@ -18263,13 +18147,11 @@ html.cable-split-mode-active #map {
     color: #2dd4bf;
 }
 
-/* РўС‘РјРЅР°СЏ С‚РµРјР° РґР»СЏ РїРѕРґР»РѕР¶РєРё РєР°СЂС‚С‹: РёРЅРІРµСЂСЃРёСЏ С‚РѕР»СЊРєРѕ СЃР»РѕСЏ СЃ С‚Р°Р№Р»Р°РјРё (РѕР±СЉРµРєС‚С‹ Рё РєР°Р±РµР»Рё РІ РґСЂСѓРіРёС… СЃР»РѕСЏС… РЅРµ Р·Р°С‚СЂР°РіРёРІР°СЋС‚СЃСЏ) */
 [data-theme="dark"] #map [class*="ground-pane"] {
     filter: invert(1) hue-rotate(180deg);
     -webkit-filter: invert(1) hue-rotate(180deg);
 }
 
-/* Трассировка: на весь экран */
 #infoModal[data-trace-view="1"] {
     padding: 0;
     align-items: stretch;
@@ -18651,7 +18533,6 @@ html.cable-split-mode-active #map {
     font-size: 0.72rem;
 }
 
-/* Трассировка: совместимость со светлой и тёмной темой (legacy) */
 .trace-path-title {
     margin: 0 0 12px 0;
     font-size: 1rem;
@@ -18702,7 +18583,6 @@ html.cable-split-mode-active #map {
 .trace-path-block .trace-path-muted { margin-left: 6px; }
 .trace-port-badge { background: var(--bg-accent); color: var(--text-primary); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
 
-/* РљРЅРѕРїРєРё "РџРѕРєР°Р·Р°С‚СЊ РЅР° РєР°СЂС‚Рµ" РІ С‚СЂР°СЃСЃРёСЂРѕРІРєРµ */
 .trace-show-on-map-btn {
     transition: background-color 0.2s, transform 0.1s;
 }
@@ -18843,7 +18723,6 @@ html.cable-split-mode-active #map {
     margin-top: 4px;
 }
 
-/* Схема волокон */
 .trace-schematic {
     margin: 0 0 14px;
     padding: 12px 14px 14px;
@@ -19102,7 +18981,6 @@ html.cable-split-mode-active #map {
     fill: rgba(5, 150, 105, 0.26);
 }
 
-/* Древовидная схема (одна объединённая) */
 .trace-schematic--tree {
     background:
         linear-gradient(165deg, color-mix(in srgb, var(--accent-primary) 6%, var(--bg-tertiary)), var(--bg-tertiary));
@@ -19385,7 +19263,6 @@ html.cable-split-mode-active #map {
     stroke: #22d3ee;
     stroke-width: 3.1;
     opacity: 1;
-    /* без CSS filter: в SVG drop-shadow поднимает слой и линия уходит ПОД панель */
 }
 .trace-sch-tree-port--traced {
     fill: #22d3ee;
@@ -19421,7 +19298,6 @@ html.cable-split-mode-active #map {
     pointer-events: none;
 }
 .trace-sch-tree-splice--traced {
-    /* glow рисуем второй path в JS — CSS filter уводит жилу под непрозрачную панель */
 }
 .trace-sch-tree-splice-dot {
     pointer-events: none;
@@ -19944,7 +19820,6 @@ html.cable-split-mode-active #map {
     font-weight: 600;
 }
 
-/* Р’С‹РґРµР»РµРЅРёРµ Р¶РёР», РїРѕРґРєР»СЋС‡РµРЅРЅС‹С… Рє СЃРїР»РёС‚С‚РµСЂСѓ */
 .fiber-splitter-connected {
     background-color: var(--bg-accent) !important;
     border-color: var(--accent-warning) !important;
@@ -19955,7 +19830,6 @@ html.cable-split-mode-active #map {
     font-weight: 600;
 }
 
-/* РЎРїСЂР°РІРѕС‡РЅРёРє СѓСЃС‚СЂРѕР№СЃС‚РІ вЂ” РїРѕР»РЅРѕСЌРєСЂР°РЅРЅРѕРµ РѕРєРЅРѕ */
 #deviceCatalogModal.device-catalog-modal-open {
     padding: 0;
     display: flex;
@@ -20308,7 +20182,6 @@ html.cable-split-mode-active #map {
     gap: 6px;
 }
 
-/* Одинаковая высота парных кнопок в справочнике (primary/secondary, border, без margin) */
 .device-catalog-entry-footer .btn-primary,
 .device-catalog-entry-footer .btn-secondary,
 .device-catalog-switch-ports-footer .btn-primary,
@@ -21149,7 +21022,6 @@ html.cable-split-mode-active #map {
     flex-shrink: 0;
 }
 
-/* РћРєРЅРѕ РґРѕР±Р°РІР»РµРЅРёСЏ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ / РјРѕРґРµР»Рё */
 .device-catalog-entry-modal {
     z-index: 2100;
 }
@@ -21267,7 +21139,6 @@ html.cable-split-mode-active #map {
     background: rgba(255, 255, 255, 0.5);
 }
 
-/* Ноутбуки / невысокая высота окна — уплотнение справочника */
 @media (max-width: 1366px), (max-height: 860px) {
     .device-catalog-modal-content .device-catalog-modal-header {
         padding-top: 10px;
@@ -21474,7 +21345,6 @@ html.cable-split-mode-active #map {
     }
 }
 
-/* РљР°СЂС‚РѕС‡РєР° СѓР·Р»Р° СЃРµС‚Рё */
 .node-card {
     display: flex;
     flex-direction: column;
@@ -21903,7 +21773,6 @@ html.cable-split-mode-active #map {
     transform: translateY(-1px);
 }
 
-/* РљР°СЂС‚РѕС‡РєР° РєР°РјРµСЂС‹ */
 .camera-card {
     display: flex;
     flex-direction: column;
@@ -22028,7 +21897,6 @@ html.cable-split-mode-active #map {
     margin-bottom: 0;
 }
 
-/* Р’РёРґРµРѕРїРѕС‚РѕРє РєР°РјРµСЂС‹ */
 .camera-card .object-card-section--stream {
     border-color: color-mix(in srgb, #475569 32%, var(--panel-glass-border));
 }
@@ -22709,7 +22577,6 @@ body.object-gallery-lightbox-open {
     filter: brightness(1.08);
 }
 
-/* РљР°СЂС‚РѕС‡РєР° РѕРїРѕСЂС‹ / РєСЂРµРїР»РµРЅРёСЏ */
 .support-card {
     display: flex;
     flex-direction: column;
@@ -23377,7 +23244,6 @@ body.object-gallery-lightbox-open {
     }
 }
 
-/* Карточка OLT */
 .olt-card {
     display: flex;
     flex-direction: column;
@@ -23528,7 +23394,6 @@ body.object-gallery-lightbox-open {
     line-height: 1.35;
 }
 
-/* Карточка Wi‑Fi радиомоста */
 .radio-bridge-card {
     display: flex;
     flex-direction: column;
@@ -23694,7 +23559,6 @@ body.object-gallery-lightbox-open {
     margin: 4px 0 0;
 }
 
-/* ===== Coverage joystick (камера / радиомост) ===== */
 .coverage-joystick {
     --cov-joy-accent: var(--accent-primary);
     display: flex;
@@ -23948,7 +23812,6 @@ body.object-gallery-lightbox-open {
     display: none;
 }
 
-/* Подложка: блокирует карту и UI на время настройки */
 .coverage-joystick-backdrop {
     position: fixed;
     inset: 0;
@@ -23958,7 +23821,6 @@ body.object-gallery-lightbox-open {
     touch-action: none;
 }
 
-/* Плавающая панель джойстика (вне карточки) */
 .coverage-joystick-panel {
     position: fixed;
     z-index: 10050;
@@ -24096,7 +23958,6 @@ body.coverage-joystick-map-locked .app-header {
     gap: 14px;
 }
 
-/* ==================== Host cards: кросс / муфта ==================== */
 .host-card {
     display: flex;
     flex-direction: column;
@@ -24140,7 +24001,6 @@ body.coverage-joystick-map-locked .app-header {
     border-color: #b45309;
 }
 
-/* Компактный host-card внутри сайдбара workspace */
 .fiber-ws-sidebar .host-card-hero {
     padding: 10px;
 }
@@ -25173,7 +25033,6 @@ body.coverage-joystick-map-locked .app-header {
     border-color: #38bdf8;
 }
 
-
 .node-card-add-switch,
 .node-card-switch-item {
     margin-bottom: 10px;
@@ -25639,7 +25498,6 @@ body.coverage-joystick-map-locked .app-header {
     }
 }
 
-/* ——— Чат организации ——— */
 .org-chat-panel {
     position: fixed;
     right: 20px;
@@ -26538,7 +26396,6 @@ body.coverage-joystick-map-locked .app-header {
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.28);
 }
 
-/* ——— Чат: мобильный полноэкранный вид ——— */
 @media (max-width: 768px) {
     body.org-chat-mobile-open {
         overflow: hidden;
@@ -26770,7 +26627,6 @@ body.coverage-joystick-map-locked .app-header {
     }
 }
 
-/* Карточка прокладки / перепрокладки подземного участка */
 .underground-draw-card {
     --ug-card-accent: #dc2626;
     --ug-card-bg: var(--bg-card, #fff);
@@ -27265,7 +27121,6 @@ body.underground-draw-active .map-area-wrapper::after {
     margin-bottom: 16px;
 }
 
-/* ——— Ящик (cabinet) ——— */
 .cabinet-card {
     display: flex;
     flex-direction: column;
@@ -27900,7 +27755,6 @@ body.underground-draw-active .map-area-wrapper::after {
 [data-theme="dark"] .cabinet-member-badge--cyan { background: #164e63; color: #67e8f9; }
 [data-theme="dark"] .cabinet-member-badge--amber { background: #451a03; color: #fcd34d; }
 
-/* —— Режим встраивания (Zabbix / iframe) —— */
 html.volsmap-embed,
 html.volsmap-embed body,
 body.volsmap-embed {
@@ -27965,7 +27819,6 @@ html.volsmap-embed .app-entrance {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* Уровень сигнала на трассе (optical-calculator) */
 .modal-content.signal-trace-modal-content {
     max-width: 860px;
     width: min(860px, calc(100vw - 28px));
@@ -28131,7 +27984,7 @@ html.volsmap-embed .app-entrance {
     overscroll-behavior: contain;
     min-height: 120px;
     flex: 1 1 auto;
-    height: 0; /* занять оставшуюся высоту колонки и скроллить содержимое */
+    height: 0; 
     max-height: calc(min(90vh, 900px) - 200px);
     padding-right: 4px;
     scrollbar-gutter: stable;
@@ -28703,8 +28556,6 @@ html.volsmap-embed .app-entrance {
     font-size: 0.9rem;
 }
 
-
-/* -- Fiber scheme UX: mode chip, untangle, minimap, onboarding, chain -- */
 .fiber-ws-toolbar-ux {
     display: flex;
     flex-wrap: wrap;
@@ -28879,7 +28730,6 @@ html.volsmap-embed .app-entrance {
     }
 }
 
-/* ==================== Editor shell v3 ==================== */
 .edit-toolbar {
     position: relative;
     z-index: 1100;
@@ -29100,7 +28950,6 @@ body.edit-mode-active .edit-toolbar {
     background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
 }
 
-/* Средние окна: icon-first, подписи только у Кабель/Зоны */
 @media (max-width: 1480px) {
     .edit-toolbar-label {
         display: none;
@@ -29126,7 +28975,6 @@ body.edit-mode-active .edit-toolbar {
     }
 }
 
-/* Уже: все чипы — иконки, горизонтальный скролл полосы */
 @media (max-width: 1180px) {
     .edit-tools-strip .object-type-chip__label {
         display: none;
@@ -29158,7 +29006,6 @@ body.edit-mode-active .edit-toolbar {
     }
 }
 
-/* Tool props (RIGHT) — hidden until tool selected */
 .tool-props-panel:not(.is-filled),
 .properties-panel:not(.is-filled) {
     width: 0 !important;
@@ -29276,7 +29123,6 @@ body.edit-mode-active .edit-toolbar {
     margin: 0 0 12px;
 }
 
-/* Info dock LEFT — redesigned IA */
 .info-dock,
 .info-dock--left {
     position: relative;
@@ -30003,7 +29849,6 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
     order: 0;
 }
 
-/* Map region partition picker / chip */
 .map-region-current-chip {
     display: inline-flex;
     align-items: center;
@@ -30088,7 +29933,6 @@ body.info-dock-collapsed .info-dock-toggle--left .arrow-right {
     box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.18);
 }
 
-/* Above #appEntranceOverlay (z-index: 2000000) */
 .map-region-picker-modal,
 .map-region-move-modal {
     align-items: center;

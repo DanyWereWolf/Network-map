@@ -1,6 +1,3 @@
-/**
- * Rich-text редактор новостей (Quill) для site-admin.
- */
 (function() {
     var quillInstance = null;
     var uploadInProgress = false;
@@ -132,7 +129,6 @@
             .replace(/&amp;/g, '&');
     }
 
-    /** Текст похож на HTML-разметку (а не на обычный абзац). */
     function looksLikeHtmlSource(text) {
         var t = String(text || '').trim();
         if (!t) return false;
@@ -144,10 +140,6 @@
         return !!(openTags && openTags.length >= 2);
     }
 
-    /**
-     * Если в Quill уже лежит экранированный HTML (&lt;h3&gt;…),
-     * достаём исходную разметку для повторной вставки.
-     */
     function extractEscapedHtmlFromQuillHtml(quillHtml) {
         var raw = String(quillHtml || '').trim();
         if (!raw) return '';
@@ -281,7 +273,6 @@
                 if (!cd) return;
                 var htmlClip = cd.getData('text/html');
                 var textClip = cd.getData('text/plain');
-                // Копирование из браузера/Word даёт text/html — оставляем стандартный paste Quill.
                 if (htmlClip && /<[a-z][\s\S]*>/i.test(htmlClip)) return;
                 var candidate = String(textClip || '').trim();
                 if (!candidate) return;
@@ -358,8 +349,6 @@
             }
             var html = String(quillInstance.root.innerHTML || '').trim();
             var recovered = extractEscapedHtmlFromQuillHtml(html);
-            // Если пользователь вставил HTML как текст — при сохранении
-            // автоматически превращаем в настоящую разметку.
             if (recovered) {
                 setEditorHtml(recovered, 'silent');
                 html = String(quillInstance.root.innerHTML || '').trim();

@@ -31,8 +31,8 @@ wss.on('connection', (ws, req) => {
             const msg = JSON.parse(raw.toString());
             if (msg.type === 'state' && Array.isArray(msg.data)) {
                 currentState = { clientId: ws.clientId, data: msg.data };
-                
-                wss.clients.forEach(client => {
+
+                                wss.clients.forEach(client => {
                     if (client !== ws && client.readyState === WebSocket.OPEN) {
                         client.send(JSON.stringify({
                             type: 'state',

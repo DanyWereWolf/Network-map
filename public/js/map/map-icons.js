@@ -1,7 +1,3 @@
-/**
- * SVG-иконки объектов на карте.
- * Стиль: soft glass-badge + белый глиф, единая сетка 32×32.
- */
 (function (global) {
     var COLORS = {
         support: '#4b8af0',
@@ -94,7 +90,6 @@
         return '';
     }
 
-    /** Градиенты стеклянного бейджа: блик сверху + лёгкое затемнение снизу. */
     function glassDefs(id) {
         var sheen = id + '-s';
         var shade = id + '-d';
@@ -113,7 +108,6 @@
     }
 
     function paintShape(shapeOpenTag, fill, sw, w, fo, id) {
-        // Заливка → блик → тень → обводка сверху (чтобы stroke не перекрывался).
         var filled = shapeOpenTag + ' fill="' + fill + '" stroke="none" opacity="' + fo + '"/>';
         var sheenLayer = shapeOpenTag + ' fill="url(#' + id + '-s)" stroke="none"/>';
         var shadeLayer = shapeOpenTag + ' fill="url(#' + id + '-d)" stroke="none"/>';
@@ -142,7 +136,6 @@
         return paintShape(open, fill, sw, w, fo, id);
     }
 
-    /** Внутренний стеклянный кант. */
     function insetRimRect(x, y, width, height, rx, go) {
         return '<rect x="' + (x + 1.15) + '" y="' + (y + 1.15) + '" width="' + (width - 2.3) + '" height="' + (height - 2.3) +
             '" rx="' + Math.max(0.5, rx - 1) + '" fill="none" stroke="' + GLYPH + '" stroke-width="0.9" opacity="' + (go * 0.22) + '"/>';
@@ -152,7 +145,6 @@
         return '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r - 1.2) + '" fill="none" stroke="' + GLYPH + '" stroke-width="0.9" opacity="' + (go * 0.22) + '"/>';
     }
 
-    /** Опора — тонкий столб, аккуратная траверса. */
     function drawSupport(fill, sw, w, fo, go) {
         var id = nextId('sup');
         return glassDefs(id) +
@@ -163,7 +155,6 @@
             '<ellipse cx="16" cy="28.35" rx="2.6" ry="0.85" fill="' + sw + '" opacity="' + (go * 0.28) + '"/>';
     }
 
-    /** Муфта. */
     function drawSleeve(fill, sw, w, fo, go) {
         var id = nextId('sl');
         var d = 'M16 3.2 L25.8 8.7 V19.5 L16 25 L6.2 19.5 V8.7 Z';
@@ -174,7 +165,6 @@
             '<circle cx="16" cy="14.2" r="1.2" fill="' + GLYPH + '" opacity="' + go + '"/>';
     }
 
-    /** Кассета. */
     function drawSpliceCassette(fill, sw, w, fo, go) {
         var id = nextId('cs');
         return glassDefs(id) +
@@ -186,7 +176,6 @@
             '<circle cx="10.5" cy="20" r="1.05" fill="' + GLYPH + '" opacity="' + go + '"/>';
     }
 
-    /** Кросс. */
     function drawCross(fill, sw, w, fo, go) {
         var id = nextId('cr');
         var ports = '';
@@ -204,7 +193,6 @@
             ports;
     }
 
-    /** Узел / агрегация. */
     function drawNode(fill, sw, w, fo, go, nodeKind) {
         var id = nextId('nd');
         if (nodeKind === 'aggregation') {
@@ -225,7 +213,6 @@
             '<circle cx="22.4" cy="22.4" r="1.3" fill="' + GLYPH + '" opacity="' + go + '"/>';
     }
 
-    /** Подвес. */
     function drawAttachment(fill, sw, w, fo, go) {
         var id = nextId('at');
         return glassDefs(id) +
@@ -235,7 +222,6 @@
             '<circle cx="16" cy="23.3" r="1.4" fill="' + GLYPH + '" opacity="' + go + '"/>';
     }
 
-    /** Колодец. */
     function drawManhole(fill, sw, w, fo, go) {
         var id = nextId('mh');
         return glassDefs(id) +
@@ -244,7 +230,6 @@
             '<path d="M11.4 17.3 H20.6 M16 11.8 V22.8" stroke="' + GLYPH + '" stroke-width="1.45" stroke-linecap="round" opacity="' + go + '"/>';
     }
 
-    /** Шкаф. */
     function drawCabinet(fill, sw, w, fo, go) {
         var id = nextId('cb');
         return glassDefs(id) +
@@ -255,7 +240,6 @@
             '<rect x="20.2" y="18.8" width="3" height="4.8" rx="0.85" fill="' + GLYPH + '" opacity="' + go + '"/>';
     }
 
-    /** Сигнальный столбик. */
     function drawSignalPost(fill, sw, w, fo, go) {
         var id = nextId('sg');
         return glassDefs(id) +
@@ -265,7 +249,6 @@
             '<path d="M10.6 8.4 H21.4 M10.6 11.8 H21.4" stroke="' + GLYPH + '" stroke-width="1.5" stroke-linecap="round" opacity="' + go + '"/>';
     }
 
-    /** OLT. */
     function drawOlt(fill, sw, w, fo, go) {
         var id = nextId('ol');
         return glassDefs(id) +
@@ -279,7 +262,6 @@
             '<text x="21.4" y="19.8" text-anchor="middle" fill="' + GLYPH + '" font-size="4.2" font-weight="700" opacity="' + go + '">PON</text>';
     }
 
-    /** Сплиттер. */
     function drawSplitter(fill, sw, w, fo, go) {
         var id = nextId('sp');
         return glassDefs(id) +
@@ -292,7 +274,6 @@
             '<circle cx="21" cy="22" r="1.55" fill="' + GLYPH + '" opacity="' + go + '"/>';
     }
 
-    /** ONU. */
     function drawOnu(fill, sw, w, fo, go) {
         var id = nextId('on');
         return glassDefs(id) +
@@ -303,7 +284,6 @@
             '<rect x="11.6" y="21" width="8.8" height="1.65" rx="0.8" fill="#d1fae5" opacity="' + go + '"/>';
     }
 
-    /** Камера. */
     function drawCamera(fill, sw, w, fo, go) {
         var id = nextId('cm');
         var d = 'M10 8.8 H20.2 L23.2 13.4 V23 H7.6 L10 8.8 Z';
@@ -325,7 +305,6 @@
             (online ? '<circle cx="26.4" cy="5.6" r="1.4" fill="#ffffff" opacity="0.5"/>' : '');
     }
 
-    /** Медиаконвертер. */
     function drawMediaConverter(fill, sw, w, fo, go) {
         var id = nextId('mc');
         return glassDefs(id) +
@@ -338,7 +317,6 @@
             '<path d="M11.8 16 H20.2" stroke="' + GLYPH + '" stroke-width="1.45" stroke-linecap="round" opacity="' + go + '"/>';
     }
 
-    /** Радиомост. */
     function drawRadioBridge(fill, sw, w, fo, go) {
         var id = nextId('rb');
         return glassDefs(id) +
@@ -353,7 +331,6 @@
             '<path d="M13.4 18.2 H18.6" stroke="' + GLYPH + '" stroke-width="1.4" stroke-linecap="round" opacity="' + go + '"/>';
     }
 
-    /** Коммутатор. */
     function drawSwitch(fill, sw, w, fo, go) {
         var id = nextId('sw');
         var ports = '';

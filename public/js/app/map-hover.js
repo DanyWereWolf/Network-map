@@ -1,6 +1,3 @@
-/**
- * Подсветка объектов на карте, фантом и курсор при размещении.
- */
 function clearShowOnMapHighlight() {
     if (!showOnMapHighlightState) return;
     var s = showOnMapHighlightState;
@@ -268,7 +265,6 @@ function positionMapHoverCard(objectCoord) {
     cursorIndicator.style.top = (clientY + 16) + 'px';
     cursorIndicator.style.transform = 'translate(-50%, 0)';
 
-    // Не выходить за край экрана
     requestAnimationFrame(function() {
         if (!cursorIndicator || cursorIndicator.style.display === 'none') return;
         var rect = cursorIndicator.getBoundingClientRect();
@@ -294,7 +290,6 @@ function updateCursorIndicator(e, objectType, objectCoord, obj, forceContent) {
         if (targetObj && targetObj.properties && targetObj.properties.get('type') !== objectType) {
             targetObj = null;
         }
-        // Режим размещения — только тип, без привязки к hoveredObject
         if (!obj && typeof objectPlacementMode !== 'undefined' && objectPlacementMode) {
             targetObj = null;
         }
@@ -328,7 +323,6 @@ function updateCursorIndicator(e, objectType, objectCoord, obj, forceContent) {
     }
 }
 
-/** Объект, за которым карточка следует во время drag. */
 var mapHoverCardFollowObj = null;
 
 function followMapHoverCardDuringDrag(obj) {
@@ -353,7 +347,6 @@ function stopMapHoverCardDragFollow(obj) {
     mapHoverCardFollowObj = null;
     if (!was) return;
 
-    // Оставить карточку на финальной позиции объекта
     try {
         if (was.properties && was.geometry) {
             var type = was.properties.get('type');
@@ -361,7 +354,6 @@ function stopMapHoverCardDragFollow(obj) {
         }
     } catch (e) {}
 
-    // Скрыть при следующем движении мыши, если объект больше не под курсором
     var dismiss = function() {
         document.removeEventListener('mousemove', dismiss, true);
         if (mapHoverCardFollowObj) return;
@@ -376,7 +368,6 @@ function isMapHoverCardDragFollowing(obj) {
     return !!(mapHoverCardFollowObj && (!obj || mapHoverCardFollowObj === obj));
 }
 
-/** Скрыть описание при pan/zoom карты (в просмотре mouseleave часто не приходит). */
 function clearMapHoverOnMapGesture() {
     if (mapHoverCardFollowObj || window.syncDragInProgress) return;
     if (typeof hoveredObject !== 'undefined' && hoveredObject) {
@@ -389,7 +380,6 @@ function clearMapHoverOnMapGesture() {
 }
 window.clearMapHoverOnMapGesture = clearMapHoverOnMapGesture;
 
-/** Обновить карточку, если сейчас наведен тот же объект (после опроса Zabbix). */
 function refreshMapHoverCardIfNeeded(obj) {
     if (!cursorIndicator || cursorIndicator.style.display === 'none') return;
     if (!obj || !obj.properties) return;
@@ -438,8 +428,8 @@ function updatePhantomPlacemark(type, coords) {
         hasBalloon: false,
         openBalloonOnClick: false
     });
-    
-    myMap.geoObjects.add(phantomPlacemark);
+
+        myMap.geoObjects.add(phantomPlacemark);
 }
 
 function removePhantomPlacemark() {
@@ -482,7 +472,6 @@ function handleCableMapClickEvent(cable, e) {
         } catch (eStop) {}
         if (placeCoords && Date.now() >= placementPanBlockClickUntil && typeof placeObjectAtCoords === 'function') {
             if (placeObjectAtCoords(placeCoords)) {
-                // не дать handleMapClick поставить второй объект на тот же клик
                 placementPanBlockClickUntil = Date.now() + 120;
             }
         }
@@ -566,7 +555,6 @@ function attachHoverEventsToObject(obj) {
             window.lastMouseX = domEvent.clientX || 0;
             window.lastMouseY = domEvent.clientY || 0;
         }
-        // При размещении объектов кабель не подсвечиваем и фантом не убираем
         if (objectPlacementMode && objType === 'cable') return;
         if (objectPlacementMode && phantomPlacemark) {
             myMap.geoObjects.remove(phantomPlacemark);
@@ -576,7 +564,6 @@ function attachHoverEventsToObject(obj) {
         highlightObjectOnHover(obj, e);
     }
     function onMouseLeave() {
-        // Во время перетаскивания карточка остаётся и следует за объектом
         if (isMapHoverCardDragFollowing(obj)) return;
         if (hoveredObject === obj) clearHoverHighlight();
     }
@@ -599,17 +586,17 @@ function highlightObjectOnHover(obj, e) {
     if (objectPlacementMode && (type === 'cable' || type === 'cableLabel')) {
         return;
     }
-    
-    hoveredObject = obj;
+
+        hoveredObject = obj;
 
     const objCoord = (type === 'cable' || type === 'cableLabel') ? (e && e.get('coords') ? e.get('coords') : null) : (obj.geometry ? obj.geometry.getCoordinates() : null);
     updateCursorIndicator(e, type, objCoord, obj);
 
     if (type === 'cable' || type === 'cableLabel') {
-        
-        showHoverCircle(obj, e);
-        
-        highlightCableOnHover(obj);
+
+                showHoverCircle(obj, e);
+
+                highlightCableOnHover(obj);
         return;
     }
 
@@ -635,8 +622,8 @@ function highlightObjectOnHover(obj, e) {
         iconImageSize: hoverIcon.iconImageSize,
         iconImageOffset: hoverIcon.iconImageOffset
     });
-    
-    showHoverCircle(obj, e);
+
+        showHoverCircle(obj, e);
 }
 
 function showHoverCircle(obj, e) {
@@ -646,13 +633,13 @@ function showHoverCircle(obj, e) {
         myMap.geoObjects.remove(hoverCircle);
         hoverCircle = null;
     }
-    
-    const type = obj.properties ? obj.properties.get('type') : null;
+
+        const type = obj.properties ? obj.properties.get('type') : null;
 
     if (type === 'cable') {
         if (!e) return;
-        
-        const coords = e.get('coords');
+
+                const coords = e.get('coords');
         var geoms = (window.CableUnderground && CableUnderground.getCableDisplayGeometries)
             ? CableUnderground.getCableDisplayGeometries(obj)
             : [obj.geometry.getCoordinates()];
@@ -671,8 +658,8 @@ function showHoverCircle(obj, e) {
 
             const zoom = myMap.getZoom();
             const radius = zoom < 12 ? 0.00025 : (zoom < 15 ? 0.00015 : 0.0001);
-            
-            var cableHoverColor = emphasizeMapLineColor(resolveCableDisplayColor(obj));
+
+                        var cableHoverColor = emphasizeMapLineColor(resolveCableDisplayColor(obj));
             hoverCircle = new ymaps.Circle([nearestPoint, radius], {}, {
                 fillColor: cableHoverColor,
                 fillOpacity: 0.18,
@@ -682,11 +669,11 @@ function showHoverCircle(obj, e) {
                 zIndex: 999,
                 interactive: false
             });
-            
-            myMap.geoObjects.add(hoverCircle);
+
+                        myMap.geoObjects.add(hoverCircle);
     } else {
-        
-        const coords = obj.geometry.getCoordinates();
+
+                const coords = obj.geometry.getCoordinates();
 
         const zoom = myMap.getZoom();
         const radius = zoom < 12 ? 0.00025 : (zoom < 15 ? 0.00018 : 0.00012);
@@ -707,8 +694,8 @@ function showHoverCircle(obj, e) {
         }
         if (isGroup) strokeWidth = 4;
         const fillColor = strokeColor;
-        
-        hoverCircle = new ymaps.Circle([coords, radius], {}, {
+
+                hoverCircle = new ymaps.Circle([coords, radius], {}, {
             fillColor: fillColor,
             fillOpacity: isGroup ? 0.22 : 0.15,
             strokeColor: strokeColor,
@@ -717,8 +704,8 @@ function showHoverCircle(obj, e) {
             zIndex: isGroup ? 9999 : 999,
             interactive: false
         });
-        
-        myMap.geoObjects.add(hoverCircle);
+
+                myMap.geoObjects.add(hoverCircle);
     }
 }
 
@@ -783,8 +770,8 @@ function highlightCableOnHover(cable) {
 
 function clearCableHoverHighlight(cable) {
     if (!cable || !cable.properties) return;
-    
-    const originalOptions = cable.properties.get('originalCableOptions');
+
+        const originalOptions = cable.properties.get('originalCableOptions');
     if (originalOptions) {
         cable.options.set({
             strokeWidth: originalOptions.strokeWidth,
@@ -805,21 +792,21 @@ function clearHoverHighlight() {
 
     if (hoveredObject) {
         const type = hoveredObject.properties ? hoveredObject.properties.get('type') : null;
-        
-        if (type === 'cable') {
-            
-            clearCableHoverHighlight(hoveredObject);
+
+                if (type === 'cable') {
+
+                        clearCableHoverHighlight(hoveredObject);
         } else if (hoveredObjectOriginalIcon) {
-            
-            hoveredObject.options.set({
+
+                        hoveredObject.options.set({
                 iconImageHref: hoveredObjectOriginalIcon.href,
                 iconImageSize: hoveredObjectOriginalIcon.size,
                 iconImageOffset: hoveredObjectOriginalIcon.offset
             });
         }
     }
-    
-    hoveredObject = null;
+
+        hoveredObject = null;
     hoveredObjectOriginalIcon = null;
     removeHoverCircle();
     if (!keepCard) {

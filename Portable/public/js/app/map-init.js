@@ -1,6 +1,3 @@
-/**
- * Инициализация Yandex Maps и обработчики UI карты.
- */
 function init() {
     var initialCenter = [54.663609, 86.162243];
     var initialZoom = 16;
@@ -38,17 +35,16 @@ function init() {
         try {
             myMap.setBounds(focusOnce.bounds, { checkZoomRange: true, zoomMargin: 40 });
             window._mapFocusOnceActive = true;
-        } catch (eBounds) { /* остаётся начальная точка */ }
+        } catch (eBounds) {  }
     }
-    
-    try { myMap.controls.remove('searchControl'); } catch (e) {}
+
+        try { myMap.controls.remove('searchControl'); } catch (e) {}
     try { myMap.controls.remove('trafficControl'); } catch (e) {}
     try { myMap.controls.remove('geolocationControl'); } catch (e) {}
     try { myMap.controls.remove('rulerControl'); } catch (e) {}
     try { myMap.controls.remove('fullscreenControl'); } catch (e) {}
     try { myMap.controls.remove('typeSelector'); } catch (e) {}
 
-    // Сразу нужный слой (boot-кэш), только если рантайм уже совпадает — без recreate
     (function applyBootBasemapType() {
         var bootType = null;
         try {
@@ -89,14 +85,14 @@ function init() {
     window.lastMouseY = 0;
 
     myMap.options.set('suppressMapOpenBlock', true);
-    
-    loadData();
+
+        loadData();
     setupEventListeners();
     setupObjectPlacementPanDrag();
     setupRectSelection();
     if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
-    
-    setTimeout(function() {
+
+        setTimeout(function() {
         if (lastSavedState === null && typeof getSerializedData === 'function') lastSavedState = JSON.parse(JSON.stringify(getSerializedData()));
         if (typeof updateUndoRedoButtons === 'function') updateUndoRedoButtons();
     }, 0);
@@ -116,10 +112,8 @@ function init() {
     })();
 
     setupMapTilesReady();
-    // Прогрев opposite — только после markMapDataReady (map-loading.js), чтобы не конкурировать с первой загрузкой.
 }
 
-/** On-prem (mapEngine=leaflet): доступны и Яндекс, и ортофото — независимо. */
 function isBasemapDualMode() {
     try {
         if (typeof MapEngine !== 'undefined' && MapEngine.isDualMode) return !!MapEngine.isDualMode();
@@ -152,7 +146,6 @@ function setupMapLayerSelector() {
     for (var g = 0; g < groups.length; g++) {
         var groupEng = groups[g].getAttribute('data-engine-group') || '';
         if (leafletMode) {
-            // On-prem: локально / OSM онлайн / Яндекс отдельно + действия админа.
             if (groupEng === 'leaflet' || groupEng === 'yandex' || groupEng === 'leaflet-actions') {
                 groups[g].removeAttribute('hidden');
             } else {
@@ -305,18 +298,18 @@ function setupMapLayerSelector() {
 }
 
 function setupEventListeners() {
-    
-    document.getElementById('viewMode').addEventListener('click', function() { switchToViewMode(false); });
+
+        document.getElementById('viewMode').addEventListener('click', function() { switchToViewMode(false); });
     document.getElementById('editMode').addEventListener('click', switchToEditMode);
 
     const addObjectBtn = document.getElementById('addObject');
     addObjectBtn.addEventListener('click', function(e) {
-        
-        if (this.onclick && typeof this.onclick === 'function' && this.onclick === cancelObjectPlacement) {
+
+                if (this.onclick && typeof this.onclick === 'function' && this.onclick === cancelObjectPlacement) {
             this.onclick(e);
         } else {
-            
-            handleAddObject();
+
+                        handleAddObject();
         }
     });
 
@@ -333,26 +326,26 @@ function setupEventListeners() {
         if (objectPlacementMode) {
             cancelObjectPlacement();
         }
-        
-        if (splitterFiberRoutingMode) {
+
+                if (splitterFiberRoutingMode) {
             cancelSplitterFiberRouting();
         }
         if (radioBridgeRoutingMode && typeof cancelRadioBridgeRouting === 'function') {
             cancelRadioBridgeRouting();
         }
-        
-        if (fiberRoutingMode) {
+
+                if (fiberRoutingMode) {
             cancelFiberRouting();
         }
 
         if (cableSplitMode) {
             cancelCableSplitMode();
         }
-        
-        currentCableTool = !currentCableTool;
+
+                currentCableTool = !currentCableTool;
         const cableBtn = this;
-        
-        if (currentCableTool) {
+
+                if (currentCableTool) {
             cableBtn.classList.add('btn-add-object--placement');
             cableBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span class="btn-lay-cable-text">Завершить прокладку</span>';
             cableBtn.style.background = '';
@@ -618,15 +611,15 @@ function setupEventListeners() {
         if (objectPlacementMode) {
             const newType = this.value;
             currentPlacementType = newType;
-            
-            if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'radioBridge'].indexOf(newType) !== -1) {
+
+                        if (['node', 'cross', 'sleeve', 'olt', 'splitter', 'onu', 'camera', 'mediaConverter', 'radioBridge'].indexOf(newType) !== -1) {
                 const nameInput = document.getElementById('objectName');
                 currentPlacementName = nameInput ? nameInput.value.trim() : '';
             } else {
                 currentPlacementName = '';
             }
-            
-            if (newType === 'node') {
+
+                        if (newType === 'node') {
                 const nodeKindSelect = document.getElementById('nodeKind');
                 currentPlacementNodeKind = nodeKindSelect ? nodeKindSelect.value : 'network';
             }
@@ -726,14 +719,14 @@ function setupEventListeners() {
 
     const modal = document.getElementById('infoModal');
     const closeBtn = modal ? modal.querySelector('.close') : null;
-    
-    if (closeBtn && modal) {
+
+        if (closeBtn && modal) {
         closeBtn.onclick = function() {
             closeInfoModal();
         };
     }
-    
-    window.onclick = function(event) {
+
+        window.onclick = function(event) {
         if (modal && event.target === modal) {
             closeInfoModal();
         }
@@ -744,10 +737,6 @@ function setupEventListeners() {
     initTheme();
 }
 
-/**
- * События жестов карты — переподключаются после смены рантайма (Яндекс ↔ Leaflet).
- * Идемпотентно: не дублирует handlers на том же myMap.
- */
 function bindMyMapInteractionEvents() {
     if (!myMap || !myMap.events) return;
 
@@ -764,8 +753,6 @@ function bindMyMapInteractionEvents() {
         } catch (eUnbind) {}
     }
 
-    // Обновляем видимость по зуму и (при большой карте) по viewport при панорамировании.
-    // Во время жеста (зум + перетаскивание) тяжёлый applyMapFilter не запускаем — иначе карта подвисает.
     var expertLastZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom() : null;
     var expertPrevZoom = expertLastZoom;
     var mapBoundsChangeTimer = null;

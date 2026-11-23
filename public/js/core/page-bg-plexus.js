@@ -1,7 +1,3 @@
-/**
- * Анимированный фон «plexus»: полноэкранный (#authPlexusCanvas) или внутри панелей (.panel-plexus-canvas).
- * Цвета узлов/линий берутся из --accent-primary (тема / свой акцент).
- */
 (function () {
     var PANEL_OPTS = { nodeCount: 42, maxDist: 130, lineOpacity: 0.14, nodeRadius: 1.4 };
     var MAIN_OPTS = { nodeCount: 80, maxDist: 170 };
@@ -158,7 +154,6 @@
 
         function isCanvasVisible() {
             if (document.hidden) return false;
-            // offsetParent === null — холст или панель скрыты (display:none); у fixed-элементов тоже null.
             if (canvas.offsetParent === null && getComputedStyle(canvas).position !== 'fixed') return false;
             return canvas.clientWidth > 0 && canvas.clientHeight > 0;
         }
@@ -171,7 +166,6 @@
         function tick(now) {
             if (!running) return;
             if (!isCanvasVisible()) {
-                // Скрытая панель: не крутим rAF каждый кадр, проверяем видимость редко.
                 if (!hiddenTimer) {
                     hiddenTimer = setTimeout(function () {
                         hiddenTimer = null;

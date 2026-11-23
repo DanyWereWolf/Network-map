@@ -1,9 +1,5 @@
 'use strict';
 
-/**
- * Assemble / disassemble org map JSON <-> relational MySQL tables.
- * Client continues to receive the same nested document shape.
- */
 
 const FIBER_HOST_TYPES = { sleeve: 1, spliceCassette: 1, cross: 1 };
 const ASSIGNMENT_KINDS = [
@@ -26,16 +22,12 @@ function extractLatLon(geometry) {
     if (typeof geometry[0] === 'number' && typeof geometry[1] === 'number') {
         return { lat: geometry[0], lon: geometry[1] };
     }
-    // polygon / polyline — store first point if available
     if (Array.isArray(geometry[0]) && typeof geometry[0][0] === 'number') {
         return { lat: geometry[0][0], lon: geometry[0][1] };
     }
     return { lat: null, lon: null };
 }
 
-/**
- * Clear relational map rows for an org (keeps org_map_blobs).
- */
 async function clearOrgMapRows(conn, orgId) {
     const tables = [
         'splitter_outputs', 'splitters', 'fiber_assignments', 'cross_port_patches',
@@ -59,7 +51,6 @@ async function disassembleMapData(conn, orgId, items) {
         var type = item.type || 'unknown';
         var generatedUid = false;
         if (!item.uniqueId) {
-            // cableLabel often has only geometry — synthesize a stable id for relational storage
             if (type !== 'cableLabel') continue;
             item = Object.assign({}, item, { uniqueId: 'cableLabel-' + orgId + '-' + i });
             generatedUid = true;
@@ -80,10 +71,6 @@ function chunkList(list, size) {
     return out;
 }
 
-/**
- * Точечное обновление карты: удаляет строки затронутых объектов/кабелей во всех таблицах
- * и вставляет их текущие версии. Объекты без uniqueId сюда не попадают (см. mysql-persist).
- */
 async function applyMapDiff(conn, orgId, diff) {
     var objUids = (diff.affectedObjectUids || []).slice();
     if (diff.rewriteGenerated) {
@@ -196,7 +183,6 @@ function pickCableAttrs(item) {
         type: 1, uniqueId: 1, revision: 1, cableType: 1, fiberCount: 1, fiberPalette: 1,
         cableName: 1, name: 1, distance: 1, cableManufacturer: 1, cableModel: 1,
         fromUniqueId: 1, toUniqueId: 1, geometry: 1, routeUniqueIds: 1, undergroundSpans: 1
-        // keep from/to (legacy endpoint indices) in attrs
     };
     var out = {};
     Object.keys(item).forEach(function (k) {
@@ -213,11 +199,9 @@ async function insertObject(conn, orgId, item, opts) {
     delete attrs.type;
     delete attrs.uniqueId;
     delete attrs.name;
-    // Keep geometry in attrs (polygons / non-point shapes); lat/lon are indexed convenience columns
     delete attrs.revision;
     delete attrs.cabinetId;
     delete attrs.cabinetOrder;
-    // fiber / splitter fields stored relationally — strip from attrs to avoid duplication bloat
     Object.keys(fiberFields.strip).forEach(function (k) { delete attrs[k]; });
     if (item.type === 'splitter') {
         [
@@ -292,8 +276,6 @@ function extractFiberFields(_item) {
             nodeConnections: 1, oltConnections: 1, onuConnections: 1,
             mediaConverterConnections: 1, radioBridgeConnections: 1, splitterConnections: 1,
             incomingFiber: 1, attachedSwitches: 1, photos: 1
-            // portAssignments: keep in attrs_json (crossId/crossPort/onuId extras);
-            // cableId+fiberNumber also mirrored in olt_port_assignments
         }
     };
 }
@@ -305,7 +287,6 @@ async function insertFiberHostRows(conn, orgId, item) {
         for (var i = 0; i < conns.length; i++) {
             var c = conns[i];
             if (!c || !c.from || !c.to) continue;
-            // Preserve original from→to order for JSON parity
             await conn.query(
                 `INSERT IGNORE INTO fiber_splices
                 (org_id, host_unique_id, cable_a_id, fiber_a, cable_b_id, fiber_b, label)
@@ -325,7 +306,6 @@ async function insertFiberHostRows(conn, orgId, item) {
             var arr = used[cableId];
             if (!Array.isArray(arr)) continue;
             if (!arr.length) {
-                // Sentinel: empty used-fiber list for this cable key
                 await conn.query(
                     'INSERT IGNORE INTO fiber_used (org_id, host_unique_id, cable_id, fiber_number) VALUES (?,?,?,?)',
                     [orgId, hostId, String(cableId), -1]
@@ -451,15 +431,11 @@ async function insertSplitter(conn, orgId, splitterId, hostUniqueId, rec) {
     }
 }
 
-/**
- * Rebuild map JSON array for org from relational tables.
- * Falls back to empty array if no rows.
- */
 async function assembleMapData(conn, orgId) {
     const [objects] = await conn.query('SELECT * FROM map_objects WHERE org_id = ?', [orgId]);
     const [cables] = await conn.query('SELECT * FROM map_cables WHERE org_id = ?', [orgId]);
     if ((!objects || !objects.length) && (!cables || !cables.length)) {
-        return null; // signal: use blob fallback
+        return null; 
     }
 
     const [routes] = await conn.query('SELECT * FROM cable_route_points WHERE org_id = ? ORDER BY cable_unique_id, seq', [orgId]);
@@ -640,7 +616,7 @@ function applyFiberHostFromRows(item, hostId, bags) {
         item.usedFibers = {};
         usedRows.forEach(function (u) {
             if (!item.usedFibers[u.cable_id]) item.usedFibers[u.cable_id] = [];
-            if (Number(u.fiber_number) < 0) return; // empty-list sentinel
+            if (Number(u.fiber_number) < 0) return; 
             item.usedFibers[u.cable_id].push(Number(u.fiber_number));
         });
     }

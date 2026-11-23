@@ -17,7 +17,6 @@ function isFiberHostType(type) {
     return isSleeveLikeHostType(type) || type === 'cross';
 }
 
-/** Конечные точки прокладки кабеля ВОЛС (муфта, сплайс-кассета, кросс, OLT). */
 function isFiberCableEndpointType(type) {
     return isFiberHostType(type) || type === 'olt';
 }
@@ -48,7 +47,6 @@ function getObjectTypeName(type) {
     }
 }
 
-/** Подпись типа для счётчиков («9 Кроссов», «12 Колодцев»). */
 function getObjectTypePluralLabel(type) {
     switch (type) {
         case 'support': return 'Опор';

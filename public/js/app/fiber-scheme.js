@@ -1,6 +1,3 @@
-/**
- * Схема волокон: canvas, встроенные сплиттеры, раскладка.
- */
 function isObjectOnMap(obj) {
     if (obj && obj._embedded) return true;
     return !!(obj && objects && objects.indexOf(obj) !== -1);
@@ -33,7 +30,6 @@ function hasMapGeometry(obj) {
     return !!(obj && obj.geometry && typeof obj.geometry.getCoordinates === 'function');
 }
 
-/** Сплиттер на карте (не embedded в муфте/кроссе) с координатами для линии связи. */
 function resolveMapSplitterForConnectionLine(splitterId) {
     if (!splitterId || isEmbeddedSplitterId(splitterId)) return null;
     var splitterObj = getMapObjectByUid(splitterId, 'splitter');
@@ -103,7 +99,6 @@ function findSplitterOutputOnCrossPort(hostObj, portNumber, excludeSplitterId, e
     return null;
 }
 
-/** Логическое волокно на порту от выхода сплиттера (корневое входное волокно сплиттера). */
 function resolveSplitterCrossPortLogicalFiber(crossObj, portNumber) {
     if (!crossObj || portNumber == null) return null;
     var hit = findSplitterOutputOnCrossPort(crossObj, portNumber);
@@ -233,7 +228,6 @@ function getFiberSchemeLayoutOpts(cablesData, maxFibers) {
     };
 }
 
-/** Минимальная ширина SVG, чтобы бейджи волокон верхнего кабеля не слипались. */
 function estimateFiberSchemeTopStripMinWidth(topCables, opts) {
     opts = opts || {};
     if (!topCables || !topCables.length) return 0;
@@ -284,7 +278,6 @@ function resolveFiberSchemeCanvasSize(hostObj, autoWidth, layoutHeight, layoutMi
     return { width: w, height: h, layoutHeight: layoutHeight, layoutWidth: autoWidth };
 }
 
-/** Сохранённая позиция панели кросса на схеме (левый верхний угол). */
 function getFiberSchemeCrossPanelPos(hostObj) {
     if (!hostObj || !hostObj.properties) return { x: null, y: null };
     var x = parseFloat(hostObj.properties.get('fiberSchemeCrossX'));
@@ -1259,7 +1252,6 @@ function appendFiberSchemeCanvasPropsToResult(props, result) {
     }
 }
 
-/** Позиция и сетка панели кросса на схеме. */
 function appendFiberSchemeCrossPanelPropsToResult(props, result) {
     if (!props || !result) return;
     if (props.fiberSchemeCrossX != null && props.fiberSchemeCrossX !== '') {
@@ -1447,7 +1439,6 @@ function isCableSchemeMirrored(hostObj, cableUniqueId) {
     return !!getFiberSchemeCableMirrored(hostObj)[cableUniqueId];
 }
 
-/** Нормализация зеркала волокон: массив id или map id→flag → map id→1. */
 function normalizeFiberSchemeCableMirrored(raw) {
     var out = {};
     if (!raw) return out;
@@ -1477,7 +1468,6 @@ function toggleFiberSchemeCableMirrored(hostObj, cableUniqueId) {
     else mirrored[cableUniqueId] = 1;
     var ids = fiberSchemeCableMirroredToStorage(mirrored);
     if (ids.length) {
-        // Массив id — надёжнее для properties Яндекс.Карт, чем map с boolean.
         hostObj.properties.set('fiberSchemeCableMirrored', ids.slice());
     } else {
         hostObj.properties.unset('fiberSchemeCableMirrored');
@@ -1503,7 +1493,6 @@ function appendFiberSchemeCableSidesToResult(props, result, placemark) {
     if (sides && typeof sides === 'object' && !Array.isArray(sides) && Object.keys(sides).length) {
         result.fiberSchemeCableSides = cloneFiberSchemeCableSideMap(sides);
     }
-    // Всегда пишем поле (даже []), иначе Object.assign на сервере не снимет зеркало.
     result.fiberSchemeCableMirrored = fiberSchemeCableMirroredToStorage(mirroredRaw);
 }
 
@@ -2115,7 +2104,6 @@ function buildSplitterOutputLabelBlock(splitterId, outputIndex, label, isEditMod
 window.getSplitterOutputLabelFromRec = getSplitterOutputLabelFromRec;
 window.ensureSplitterOutputLabels = ensureSplitterOutputLabels;
 
-/** Объединяет назначение выхода сплиттера: маршрут (порт/волокно) и конечные устройства (ONU/МК/узел) сохраняются вместе. */
 function mergeSplitterOutputConnection(existing, patch, opts) {
     opts = opts || {};
     if (patch && patch.splitterId != null) {

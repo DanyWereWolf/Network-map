@@ -1,8 +1,3 @@
-/**
- * Единый vendor-keypair для Portable:
- * лежит в server/config/ (ездит вместе с кодом приложения),
- * а не в data/ (у каждого хоста свой каталог → раньше получались разные ключи).
- */
 'use strict';
 
 const fs = require('fs');
@@ -19,10 +14,6 @@ function legacyDataKeypairPath(dataDir) {
     return path.join(dataDir || '', 'portable-license-keypair.json');
 }
 
-/**
- * Всегда предпочитаем bundled. Legacy data/ используется только если bundled ещё нет
- * (один раз мигрируем в config, чтобы дальше ключ жил с кодом).
- */
 function resolveKeypairPath(dataDir) {
     if (fs.existsSync(BUNDLED_KEYPAIR_PATH)) return BUNDLED_KEYPAIR_PATH;
     var legacy = dataDir ? legacyDataKeypairPath(dataDir) : '';

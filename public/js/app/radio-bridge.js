@@ -1,6 +1,3 @@
-/**
- * Wi‑Fi радиомосты: точка-точка (P2P) и точка-многоточка (P2MP).
- */
 var RADIO_BRIDGE_LINE_COLOR = '#06b6d4';
 var RADIO_BRIDGE_COVERAGE_DEFAULT_COLOR = '#06b6d4';
 var RADIO_BRIDGE_COVERAGE_COLOR = RADIO_BRIDGE_COVERAGE_DEFAULT_COLOR;
@@ -335,7 +332,6 @@ function canDeleteRadioBridgeFeederCableOnDisconnect(sleeveObj, cableId, fiberNu
     return !!(ctx && ctx.canOfferDeleteCable);
 }
 
-/** Прокладка оптики к радиомосту — с карточки радиомоста (SFP). С кросса и муфты не предлагаем. */
 function canOfferRadioBridgeFiberConnectFromHost(hostObj) {
     if (!hostObj || !hostObj.properties) return false;
     var ht = hostObj.properties.get('type');
@@ -796,7 +792,6 @@ function startRadioBridgePortConnect(rbObj) {
     else startRadioBridgePortCopperToSwitch(rbObj);
 }
 
-/** Точка на расстоянии distM (м) от center по азимуту bearingDeg (0° — север, по часовой). center: [широта, долгота]. */
 function rbDestinationPoint(center, distM, bearingDeg) {
     var R = 6378137;
     var lat1 = center[0] * Math.PI / 180;
@@ -822,7 +817,6 @@ function buildRadioBridgeSectorRing(center, lengthM, azimuthDeg, angleDeg) {
     return ring;
 }
 
-/** Облегчённая геометрия для анимации пульса (меньше точек). */
 function buildRadioBridgeSectorRingPulse(center, lengthM, azimuthDeg, angleDeg) {
     var start = azimuthDeg - angleDeg / 2;
     var end = azimuthDeg + angleDeg / 2;
@@ -868,7 +862,6 @@ function stopRadioBridgeCoveragePulseAnimation() {
     radioBridgeCoveragePulsePaused = false;
 }
 
-/** Пауза на время жеста карты (зум/перетаскивание) — иначе setRadius/setCoordinates бьётся с движком Яндекса. */
 function pauseRadioBridgeCoveragePulseAnimation() {
     if (!radioBridgeCoveragePulseAnim) return;
     if (radioBridgeCoveragePulseAnim.rafId) {
@@ -1147,7 +1140,6 @@ function isRadioBridgeUsedInNetwork(rbId) {
     return false;
 }
 
-/** После загрузки карты: синхронизировать incomingFiber радиомостов с назначениями на кроссе/муфте. */
 function repairRadioBridgeFiberLinksAfterLoad() {
     objects.forEach(function(slot) {
         if (!slot.properties || typeof isFiberHostType !== 'function' || !isFiberHostType(slot.properties.get('type'))) return;
@@ -1349,7 +1341,6 @@ function getAvailablePtpLinkTargets(excludeUid) {
     });
 }
 
-/** @deprecated use getAvailablePtpLinkTargets */
 function getAvailablePtpRadioBridges(excludeUid) {
     return getAvailablePtpLinkTargets(excludeUid);
 }

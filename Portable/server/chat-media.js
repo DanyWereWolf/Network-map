@@ -1,6 +1,3 @@
-/**
- * Медиа чата организации: data/chat-media/{orgId}/{mediaId}.{ext}
- */
 const fs = require('fs');
 const path = require('path');
 

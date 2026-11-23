@@ -1,16 +1,10 @@
-/**
- * Фасад движка карты: yandex (облако) | leaflet (on-prem / ортофото).
- * Конфиг приходит из /api/public-config → window.__volsmapPublicConfig.mapEngine
- */
 (function (global) {
     'use strict';
 
     var ENGINE_YANDEX = 'yandex';
     var ENGINE_LEAFLET = 'leaflet';
-    /** Переопределение на лету (Яндекс ↔ Leaflet), не меняет server-config. */
     var runtimeEngine = null;
 
-    // Dual-boot: index.html выставляет VolsmapMapEngine до загрузки этого файла
     try {
         var bootEng = global.VolsmapMapEngine;
         var cfgEng = global.VolsmapConfiguredEngine;
@@ -60,16 +54,11 @@
         return !isLeaflet();
     }
 
-    /** Конфиг сервера допускает оба рантайма (ортофото + нативный Яндекс). */
     function isDualMode() {
         var c = getConfiguredEngine();
         return c === ENGINE_LEAFLET;
     }
 
-    /**
-     * Ждёт готовности выбранного движка и вызывает cb.
-     * Для leaflet — shim выставляет window.ymaps и вызывает ready.
-     */
     function whenReady(cb) {
         function run() {
             try { cb(); } catch (e) { console.error('[MapEngine] ready callback failed', e); }

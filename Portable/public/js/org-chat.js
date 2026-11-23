@@ -113,7 +113,6 @@
         updateUnreadBadge();
     }
 
-    /** Первый визит: не помечаем всю историю непрочитанной, фиксируем «уже видел». */
     function ensureChatSeenBaseline(messages) {
         if (getLastChatSeenAt()) return;
         if (!Array.isArray(messages) || !messages.length) {
@@ -244,7 +243,6 @@
         }
     }
 
-    /** @param {{ force?: boolean }} opts — force: запрос по клику (открытие чата) */
     function ensureChatNotificationPermission(opts) {
         opts = opts || {};
         if (typeof Notification === 'undefined') {
@@ -320,7 +318,6 @@
         deliverMentionNotification(msg, title, body);
     }
 
-    /** Уведомление об упоминаниях, пока пользователь был офлайн. */
     function notifyPendingMentions(messages) {
         if (panelOpen || !Array.isArray(messages) || !messages.length) return;
         var uid = getCurrentUserId();

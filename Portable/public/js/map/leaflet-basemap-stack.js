@@ -1,10 +1,3 @@
-/**
- * Независимые провайдеры подложки для Leaflet-режима.
- *
- * - Ортофото / OSM / Яндекс-схема (XYZ web_mercator) — обычные тайлы
- * - Спутник / гибрид — настоящий JS API Яндекса в отдельном namespace (__ymapsNative),
- *   чтобы не затирать leaflet-шим window.ymaps (Placemark, Circle, …)
- */
 (function (global) {
     'use strict';
 
@@ -34,9 +27,6 @@
         }
     }
 
-    /**
-     * Загрузить официальный API в window.__ymapsNative, не ломая leaflet-шим ymaps.
-     */
     function loadNativeYmapsApi() {
         if (global.__ymapsNative && global.__ymapsNative.Map) {
             return new Promise(function (resolve) {
@@ -57,7 +47,6 @@
                 if (finished) return;
                 finished = true;
                 global.__ymapsNative = api;
-                // Вернуть шим для объектов карты
                 if (shimRef) global.ymaps = shimRef;
                 try {
                     delete global[cbName];
@@ -86,7 +75,6 @@
 
             var existing = document.querySelector('script[data-volsmap-ymaps-native="1"]');
             if (existing) {
-                // Скрипт уже грузится — ждём callback или готовый __ymapsNative
                 var wait = 0;
                 var timer = setInterval(function () {
                     wait += 1;
@@ -114,10 +102,6 @@
         return nativeYmapsPromise;
     }
 
-    /**
-     * Слой Leaflet: под ним крутится настоящая ymaps.Map (спутник/гибрид).
-     * Позиция и зум синхронизируются с Leaflet — без сдвига EPSG:3395.
-     */
     var YandexApiBasemapLayer = L.Layer.extend({
         options: {
             yandexType: 'yandex#satellite',
@@ -137,7 +121,6 @@
             this._map = map;
 
             if (!this._container) {
-                // Как leaflet-plugins: контейнер в mapPane, под tile/marker через z-index
                 this._container = L.DomUtil.create('div', 'leaflet-yandex-api-basemap leaflet-pane');
             }
             this._container.style.cssText =
@@ -210,8 +193,6 @@
         _bind: function () {
             if (!this._map || this._bound) return;
             this._bound = true;
-            // На каждый move НЕ вызывать setCenter — иначе лавина запросов sat*.maps.yandex.net
-            // (при 504 браузер зависает, объекты грузятся очень долго).
             this._onMoveFrame = this._syncContainerPosition.bind(this);
             this._onMoveEnd = this._updateFull.bind(this);
             this._onResize = function () {

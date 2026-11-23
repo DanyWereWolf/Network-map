@@ -1,6 +1,3 @@
-/**
- * Индикатор загрузки карты, экран входа и отложенная подгрузка скриптов.
- */
 var _mapInitialLoadPending = true;
 var _mapTilesReady = false;
 var _mapDataReady = false;
@@ -20,7 +17,6 @@ var _entranceStartedAt = 0;
 var _entranceExitStarted = false;
 var _entranceReelDone = false;
 var _entranceReelSafetyTimer = null;
-/** Логотипный splash: знак рисуется, слово проявляется, затем карта. */
 var APP_ENTRANCE_LOADING_MS = 3600;
 var APP_ENTRANCE_LOADING_WELCOME_MS = 4200;
 var APP_ENTRANCE_LOADING_REDUCED_MS = 400;
@@ -30,7 +26,6 @@ var APP_ENTRANCE_EXIT_MS = 520;
 var APP_ENTRANCE_EXIT_REDUCED_MS = 140;
 var _entranceWelcomeMode = false;
 
-/** Время на пачку импорта за один шаг. Под оверлеем первой загрузки — больше (UI скрыт). */
 var MAP_BULK_IMPORT_STEP_BUDGET_MS = 40;
 var MAP_BULK_IMPORT_STEP_BUDGET_INITIAL_MS = 100;
 var MAP_UNDO_REDO_STEP_BUDGET_MS = 14;
@@ -39,7 +34,6 @@ function isMapBulkImportActive() {
     return !!_mapBulkImportActive;
 }
 
-/** Следующий шаг пакетного импорта: rAF в видимой вкладке, setTimeout в фоне (rAF там стоит). */
 function scheduleMapImportStep(fn) {
     if (typeof document !== 'undefined' && document.hidden) {
         setTimeout(fn, 0);
@@ -62,7 +56,6 @@ function mapHasOltObjects() {
 
 function finishObjectDeleteVisualRefresh(plan) {
     plan = plan || {};
-    // Как при добавлении: без полного applyMapFilter / пересборки всех cableLabel.
     if (plan.cableVisualization) {
         if (typeof pruneCableLabelsAfterCableRemoval === 'function') {
             pruneCableLabelsAfterCableRemoval();
@@ -123,7 +116,6 @@ function finishAppEntranceReel() {
     var el = document.getElementById('appEntranceOverlay');
     if (!el) return;
 
-    // Таймер фазы загрузки стартует после ролика.
     _entranceStartedAt = Date.now();
     APP_ENTRANCE_MIN_MS = _entranceWelcomeMode ? APP_ENTRANCE_LOADING_WELCOME_MS : APP_ENTRANCE_LOADING_MS;
     if (el.classList.contains('app-entrance--reduced')) {
@@ -141,7 +133,6 @@ function finishAppEntranceReel() {
     var status = el.querySelector('.app-entrance__status');
     if (status) status.textContent = 'Загрузка карты…';
 
-    // Если карта уже готова — дождёмся минимума loading и откроем.
     tryCompleteMapInitialLoad();
 }
 
@@ -320,9 +311,6 @@ function setMapLoadingOverlayText(text) {
 }
 window.setMapLoadingOverlayText = setMapLoadingOverlayText;
 
-/**
- * После выбора региона логотип проигрывается заново, затем карта.
- */
 function resetAppEntranceTimer() {
     _entranceExitStarted = false;
     _entranceReelDone = true;
@@ -352,7 +340,6 @@ function resetAppEntranceTimer() {
 }
 window.resetAppEntranceTimer = resetAppEntranceTimer;
 
-/** Бюджет/размер пачки bulk-импорта: под оверлеем первой загрузки агрессивнее. */
 function getMapBulkImportStepBudgetMs() {
     if (_mapInitialLoadPending) return MAP_BULK_IMPORT_STEP_BUDGET_INITIAL_MS;
     return MAP_BULK_IMPORT_STEP_BUDGET_MS;
@@ -388,7 +375,6 @@ function markMapDataReady() {
     if (typeof applyAutoPerfForMapSize === 'function' && Array.isArray(window.objects)) {
         try { applyAutoPerfForMapSize(window.objects.length); } catch (eAuto) {}
     }
-    // На большой карте не планируем фоновый прогрев сразу после ready — клинит через N секунд.
     try {
         var objCount = (typeof window.objects !== 'undefined' && Array.isArray(window.objects)) ? window.objects.length : 0;
         if (objCount < 5000 && typeof warmMapEditCaches === 'function') {
@@ -401,9 +387,7 @@ function markMapDataReady() {
             }, 20000);
         }
     } catch (eWarmReady) {}
-    // Opposite-движок — только по клику смены подложки (warm внутри switch), не по таймеру.
 
-    // Не держим оверлей из‑за тайлов: если tilesload/actionend не пришли — снимаем через 400 мс.
     if (!_mapTilesReady) {
         setTimeout(function() {
             if (!_mapTilesReady) markMapTilesReady();
@@ -439,7 +423,6 @@ function finishMapInitialReveal() {
             if (overlay) overlay.classList.add('app-entrance--ready');
             var status = document.querySelector('#appEntranceOverlay .map-loading-text');
             if (status) status.textContent = 'Открываем карту…';
-            // Короткий beat после полного показа — затем cinematic вход на карту.
             setTimeout(function() {
                 hideAppEntranceOverlay();
                 hideMapLoadingOverlay();
@@ -479,9 +462,7 @@ function scheduleWelcomeAfterMapReady() {
 function tryCompleteMapInitialLoad() {
     if (!_mapInitialLoadPending) return;
     if (!_mapTilesReady || !_mapDataReady) return;
-    // Сначала ролик, потом загрузка, потом карта.
     if (!_entranceReelDone) return;
-    // Пока идёт выбор региона — не открываем карту под модалкой.
     if (typeof isMapRegionPickerAwaiting === 'function' && isMapRegionPickerAwaiting()) return;
     _mapInitialLoadPending = false;
     if (_mapLoadSafetyTimer) {
@@ -516,7 +497,6 @@ function setupMapTilesReady() {
         done = true;
         markMapTilesReady();
     }
-    // Сначала таймер — иначе исключение на events.add блокирует снятие оверлея навсегда.
     setTimeout(mark, 350);
     setTimeout(mark, 2000);
     if (myMap.events && typeof myMap.events.add === 'function') {

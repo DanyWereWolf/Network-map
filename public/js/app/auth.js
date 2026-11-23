@@ -1,4 +1,3 @@
-/** Устаревший хеш — только для офлайн-режима без API (localStorage). На сервере — Argon2id. */
 function hashPassword(password) {
     let hash = 0;
     for (let i = 0; i < password.length; i++) {
@@ -6,15 +5,12 @@ function hashPassword(password) {
         hash = ((hash << 5) - hash) + char;
         hash = hash & hash;
     }
-    
-    return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length;
+
+        return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length;
 }
 
 function initUserSystem() {
     if (typeof getApiBase !== 'function' || !getApiBase()) return;
-    // Панель главного администратора (`site-admin.html`) управляет организациями и витриной,
-    // а эндпоинт `/api/users` может давать 403 в случаях, когда пользователь не является глобальным админом.
-    // Чтобы не спамить запросами и ошибками, отключаем загрузку пользователей на этой странице.
     if (document.getElementById('adminContent')) return;
     refreshUsersFromApi();
 }
@@ -36,7 +32,6 @@ function findUserByUsername(username) {
 }
 
 var REMEMBER_EXPIRY_DAYS = 30;
-// Авто-выход при отсутствии активности (1 ч)
 var INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
 var ACTIVITY_EVENT_THROTTLE_MS = 1000;
 var inactivityLogoutTimerId = null;
@@ -680,8 +675,6 @@ function logout() {
     var api = typeof getApiBase === 'function' ? getApiBase() : '';
     var token = getAuthToken();
     if (api && token) {
-        // Раньше редирект сразу после fetch — запрос обрывался, сессия на сервере не удалялась.
-        // keepalive + ожидание (с таймаутом) гарантируют вызов DELETE на сервере до очистки клиента.
         var logoutUrl = api + '/api/auth/logout';
         var timeoutMs = 2500;
         var serverLogout = fetch(logoutUrl, {
@@ -754,11 +747,11 @@ function switchForm(formType) {
     const authCard = document.querySelector('.auth-card');
     const titleEl = document.getElementById('authPageTitle');
     const subtitleEl = document.getElementById('authPageSubtitle');
-    
-    message.className = 'auth-message';
+
+        message.className = 'auth-message';
     message.textContent = '';
-    
-    var totpForm = document.getElementById('totpForm');
+
+        var totpForm = document.getElementById('totpForm');
     hideAllAuthForms();
     if (formType !== 'totp') pendingLoginId = null;
 
@@ -866,7 +859,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
-    // Открыть форму регистрации (?register=1), сброс (?reset=...) или подтверждение e-mail (?verify=...)
     var activeVerifyToken = null;
     if (isAuthPage) {
         try {

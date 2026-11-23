@@ -1,6 +1,3 @@
-/**
- * Вкладка «Нагрузка» в site-admin.html: данные из GET /api/admin/perf.
- */
 (function() {
     'use strict';
 
@@ -107,8 +104,6 @@
         return '<span class="perf-lvl perf-lvl--' + (lvl || 'none') + '">' + text + '</span>';
     }
 
-    /* ---------- Загрузка ---------- */
-
     function load(force) {
         if (loading) return;
         loading = true;
@@ -155,8 +150,6 @@
         if (active && !was) load(false);
         schedule();
     };
-
-    /* ---------- Рендер ---------- */
 
     function render(data) {
         var alerts = collectAlerts(data);
@@ -521,8 +514,6 @@
                 '</tr>';
         }).join('');
     }
-
-    /* ---------- События ---------- */
 
     function toggleOrg(row) {
         var id = row.getAttribute('data-org');

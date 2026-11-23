@@ -18,7 +18,6 @@ const MAP_SHRINK_MIN_EXISTING = 20;
 const MAP_SHRINK_RATIO = 0.2;
 const MYSQL_PERSIST_DEBOUNCE_MS = 400;
 const JSON_SAVE_DEBOUNCE_MS = 120;
-/** При большем числе объектов карты stringify уходит в worker_threads. */
 const JSON_SAVE_OFFLOAD_MIN_OBJECTS = 80;
 const MIRROR_JSON = String(process.env.MYSQL_MIRROR_JSON || '').trim() === '1';
 
@@ -36,13 +35,11 @@ let jsonSaveDirty = false;
 let jsonSaveChain = Promise.resolve();
 let jsonSaveSyncFallback = false;
 
-/** РЎСЂР°РІРЅРµРЅРёРµ id РѕСЂРіР°РЅРёР·Р°С†РёРё Р±РµР· СѓС‡С‘С‚Р° С‚РёРїР° (СЃС‚СЂРѕРєР°/С‡РёСЃР»Рѕ), С‡С‚РѕР±С‹ Р»РёРјРёС‚С‹ Рё РґР°РЅРЅС‹Рµ РЅРµ В«С‚РµСЂСЏР»РёСЃСЊВ». */
 function organizationIdsMatch(a, b) {
     if (a == null || b == null) return false;
     return String(a) === String(b);
 }
 
-/** РђРєС‚РёРІРЅР° Р»Рё СЃРµСЃСЃРёСЏ РїРѕ expires_at (СЃС‚СЂРѕРєР° ISO, С‡РёСЃР»Рѕ ms/s, Р±РµР· РїРѕР»СЏ = РЅРµС‚). */
 function sessionIsActive(ses) {
     if (!ses || ses.expires_at == null || ses.expires_at === '') return false;
     var raw = ses.expires_at;
@@ -222,7 +219,6 @@ function loadStore() {
             saveStore();
             allowDangerousSaveOnce = false;
         } else {
-            // РќРµ Р·Р°С‚РёСЂР°РµРј Р±РёС‚С‹Р№ С„Р°Р№Р» РїСѓСЃС‚С‹Рј store вЂ” РїРѕРґРЅРёРјР°РµРј in-memory РїСѓСЃС‚РѕР№ С‚РѕР»СЊРєРѕ РґР»СЏ Р°РІР°СЂРёР№РЅРѕРіРѕ СЃС‚Р°СЂС‚Р°
             store = emptyStoreSkeleton();
             console.error('[DB] Р’РђР–РќРћ: store.json РїРѕРІСЂРµР¶РґС‘РЅ Рё last-known-good РЅРµ РЅР°Р№РґРµРЅ. РџСѓСЃС‚РѕР№ store РІ РїР°РјСЏС‚Рё, РґРёСЃРє РЅРµ РїРµСЂРµР·Р°РїРёСЃР°РЅ.');
         }
@@ -231,10 +227,6 @@ function loadStore() {
     return store;
 }
 
-/**
- * Async bootstrap: migrations + hydrate when storage=mysql; otherwise sync JSON load.
- * Must be awaited before accepting HTTP / calling getDb() in MySQL mode.
- */
 async function initStorage() {
     if (isMysqlEnabled()) {
         const { runMigrations } = require('./db/migrate');
@@ -365,7 +357,6 @@ function migrateToOrganizations() {
     const existingSettingsByOrg = (s.settingsByOrg && typeof s.settingsByOrg === 'object') ? s.settingsByOrg : {};
     const hasOrgMaps = countMapDataByOrgItems(existingMapByOrg) > 0 || Object.keys(existingMapByOrg).length > 0;
 
-    // Р•СЃР»Рё mapDataByOrg СѓР¶Рµ РµСЃС‚СЊ вЂ” РЅРµ Р·Р°С‚РёСЂР°РµРј РµРіРѕ, С‚РѕР»СЊРєРѕ СЃРѕР·РґР°С‘Рј org-Р·Р°РїРёСЃРё РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё
     if (hasOrgMaps) {
         s.organizations = s.organizations || [];
         Object.keys(existingMapByOrg).forEach(function (orgId) {
@@ -396,7 +387,6 @@ function migrateToOrganizations() {
         status: 'active',
         createdAt: new Date().toISOString()
     }];
-    // РќРµ РѕР±РЅСѓР»СЏРµРј СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ РєР»СЋС‡Рё Р±РµР· РЅСѓР¶РґС‹ вЂ” С‚РѕР»СЊРєРѕ РµСЃР»Рё РїСѓСЃС‚Рѕ
     if (!s.mapDataByOrg || typeof s.mapDataByOrg !== 'object') s.mapDataByOrg = {};
     if (!s.historyByOrg || typeof s.historyByOrg !== 'object') s.historyByOrg = {};
     s.settingsByOrg = s.settingsByOrg || {};
@@ -424,7 +414,6 @@ function isDangerousStoreShrink(existingRaw, newJson, newStoreObj) {
     if (allowDangerousSaveOnce) return false;
     if (!existingRaw || existingRaw.length < DANGEROUS_SAVE_MIN_EXISTING_BYTES) return false;
     if (newJson.length >= Math.floor(existingRaw.length * DANGEROUS_SAVE_RATIO)) {
-        // size ok вЂ” still check structural wipe
     } else {
         return true;
     }
@@ -439,7 +428,6 @@ function isDangerousStoreShrink(existingRaw, newJson, newStoreObj) {
         if ((oldOrgs > 0 && newOrgs === 0) || (oldUsers > 0 && newUsers === 0)) return true;
         if (oldMaps >= MAP_SHRINK_MIN_EXISTING && newMaps < Math.floor(oldMaps * MAP_SHRINK_RATIO)) return true;
     } catch (e) {
-        // if old unreadable, don't block
     }
     return false;
 }
@@ -556,7 +544,6 @@ async function flushJsonPersist() {
     }).catch(function (e) {
         jsonSaveDirty = true;
         console.error('[DB] JSON persist error:', e && e.message ? e.message : e);
-        // Если worker недоступен — дальше пишем синхронно, чтобы не терять данные.
         if (e && /CPU pool|worker/i.test(String(e.message || e))) {
             jsonSaveSyncFallback = true;
         }
@@ -587,10 +574,6 @@ function saveStore() {
     writeStoreJsonSync(store);
 }
 
-/**
- * РџСЂРѕРІРµСЂРєР° РѕРїР°СЃРЅРѕРіРѕ СЃР¶Р°С‚РёСЏ РєР°СЂС‚С‹ РѕСЂРіР°РЅРёР·Р°С†РёРё.
- * @returns {{ ok: boolean, error?: string, previous?: number, next?: number }}
- */
 function assertMapDataNotDangerousShrink(orgId, data, opts) {
     opts = opts || {};
     if (opts.allowShrink) return { ok: true };
@@ -727,13 +710,11 @@ function initSchema() {
     if (!isMysqlEnabled()) saveStore();
 }
 
-/** РЈР±РёСЂР°РµС‚ РѕР±СЉРµРєС‚С‹, С‡РµР№ uniqueId РµСЃС‚СЊ РІ РґР°РЅРЅС‹С… РґСЂСѓРіРѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё. */
 function stripMapItemsFromOtherOrganizations(orgId, data) {
     if (!orgId || !Array.isArray(data) || !data.length) return Array.isArray(data) ? data : [];
     const s = loadStore();
     const byOrg = s.mapDataByOrg || {};
 
-    // Один проход по чужим картам → Set uid (раньше на каждый объект был полный scan).
     var foreignUids = new Set();
     Object.keys(byOrg).forEach(function (k) {
         if (organizationIdsMatch(k, orgId)) return;
@@ -885,8 +866,6 @@ function ensureMapRegionsMigrated(orgId) {
         var item = items[i];
         if (!item || typeof item !== 'object') continue;
         if (mapRegionsCore.migrateZoneFieldsOnItem(item)) changed = true;
-        // Бэкап раньше не хранил список регионов: у объектов оставались старые mapRegionId,
-        // а регион «Основной» создавался пустым — карта грузила 0 объектов.
         var itemRegionId = mapRegionsCore.itemMapRegionId(item);
         if (!itemRegionId || !knownRegionIds[itemRegionId]) {
             item.mapRegionId = defaultId;
@@ -1321,16 +1300,11 @@ function getOrganization(orgId) {
     return orgs.find(function(o) { return organizationIdsMatch(o.id, orgId); }) || null;
 }
 
-/** РљР°Р±РµР»Рё Рё СЃР»СѓР¶РµР±РЅС‹Рµ РїРѕРґРїРёСЃРё РЅРµ СЃС‡РёС‚Р°СЋС‚СЃСЏ РѕР±СЉРµРєС‚Р°РјРё РЅР° РєР°СЂС‚Рµ. */
 function isMapInfrastructureObject(item) {
     if (!item || !item.type) return false;
     return item.type !== 'cable' && item.type !== 'cableLabel';
 }
 
-/**
- * Р РµР°Р»СЊРЅРѕРµ С‡РёСЃР»Рѕ РѕР±СЉРµРєС‚РѕРІ РЅР° РѕРґРЅРѕР№ РєР°СЂС‚Рµ: СѓР·Р»С‹, РєСЂРѕСЃСЃС‹, РјСѓС„С‚С‹, РѕРїРѕСЂС‹ Рё С‚.Рґ.
- * Р‘РµР· РєР°Р±РµР»РµР№, Р±РµР· РґСѓР±Р»РµР№ РїРѕ uniqueId; РєРѕРјРјСѓС‚Р°С‚РѕСЂС‹ РІРЅСѓС‚СЂРё СѓР·Р»Р° вЂ” РєР°Рє РІ СЃС‚Р°С‚РёСЃС‚РёРєРµ РїСЂРёР»РѕР¶РµРЅРёСЏ.
- */
 function countActualMapObjectsInArray(arr) {
     if (!Array.isArray(arr) || !arr.length) return 0;
     const byUid = Object.create(null);
@@ -1359,7 +1333,6 @@ function countActualMapObjectsInArray(arr) {
     return count;
 }
 
-/** Р§РёСЃР»Рѕ РѕР±СЉРµРєС‚РѕРІ РЅР° РєР°СЂС‚Рµ РѕРґРЅРѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё (СѓР·Р»С‹, РєСЂРѕСЃСЃС‹, РјСѓС„С‚С‹ Рё С‚.Рґ., Р±РµР· РєР°Р±РµР»РµР№). */
 function countMapObjectsForOrganization(orgId) {
     return countActualMapObjectsInArray(getMapData(orgId));
 }
@@ -1407,7 +1380,6 @@ function topCountsToList(counts, limit) {
         .slice(0, n);
 }
 
-/** Текущий состав карты по типам (без кабелей), с учётом коммутаторов в узле. */
 function getMapObjectTypeCounts(orgId) {
     var arr = getMapData(orgId);
     var counts = Object.create(null);
@@ -1438,10 +1410,6 @@ function getMapObjectTypeCounts(orgId) {
     return counts;
 }
 
-/**
- * Мониторинг организации: добавлено/удалено из истории,
- * топ типов (из create_object, иначе с карты), активность пользователей.
- */
 function getOrganizationMonitorStats(orgId, options) {
     var topLimit = options && options.topLimit > 0 ? options.topLimit : 3;
     var history = getHistory(orgId);
@@ -1506,11 +1474,6 @@ function getOrganizationMonitorStats(orgId, options) {
     };
 }
 
-/**
- * Топ типов объектов по всей платформе.
- * Сначала по текущему составу карт (что реально используется),
- * при пустых картах — по истории созданий.
- */
 function getPlatformTopObjectTypes(limit) {
     var n = limit > 0 ? limit : 10;
     var mapCounts = Object.create(null);
@@ -1541,7 +1504,6 @@ function getPlatformTopObjectTypes(limit) {
     };
 }
 
-/** РђРіСЂРµРіР°С‚С‹ РґР»СЏ РїСѓР±Р»РёС‡РЅРѕРіРѕ Р»РµРЅРґРёРЅРіР° (Р±РµР· Р°РІС‚РѕСЂРёР·Р°С†РёРё). */
 function getPublicStats() {
     const s = loadStore();
     const orgs = Array.isArray(s.organizations) ? s.organizations : [];
@@ -1685,15 +1647,12 @@ function deleteOrganization(orgId) {
             if (organizationIdsMatch(k, orgId)) delete s.chatMediaByOrg[k];
         });
     }
-    // РЈРґР°Р»СЏРµРј РІСЃРµС… РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ СЌС‚РѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё (РєСЂРѕРјРµ РіР»РѕР±Р°Р»СЊРЅРѕРіРѕ Р°РґРјРёРЅР° Р±РµР· organizationId)
     if (Array.isArray(s.users)) {
         s.users = s.users.filter(function(u) {
-            // РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє СѓРґР°Р»СЏРµРјРѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё?
             if (organizationIdsMatch(u.organizationId, orgId)) return false;
             return true;
         });
     }
-    // РЈРґР°Р»СЏРµРј РІСЃРµ СЃРµСЃСЃРёРё СЌС‚РѕР№ РѕСЂРіР°РЅРёР·Р°С†РёРё
     if (Array.isArray(s.sessions)) {
         s.sessions = s.sessions.filter(function(ses) { return !organizationIdsMatch(ses.organization_id, orgId); });
     }
@@ -1708,7 +1667,6 @@ function getSessions() {
 function getPricingPlans() {
     const s = loadStore();
     if (!Array.isArray(s.pricingPlans) || !s.pricingPlans.length) {
-        // РљР°СЂС‚РѕС‡РєР° В«СЃРЅСЏС‚СЊ Р»РёРјРёС‚В» РЅР° Р»РµРЅРґРёРЅРіРµ вЂ” РєРЅРѕРїРєР° РІРµРґС‘С‚ РІ РєРѕРЅС‚Р°РєС‚С‹
         s.pricingPlans = [
             {
                 id: 'unlock',
@@ -1755,7 +1713,6 @@ function countActiveSessionsForUser(userId) {
     }).length;
 }
 
-/** РЈРґР°Р»СЏРµС‚ С‚РѕР»СЊРєРѕ РїСЂРѕСЃСЂРѕС‡РµРЅРЅС‹Рµ СЃРµСЃСЃРёРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ (Р°РєС‚РёРІРЅС‹Рµ РЅРµ С‚СЂРѕРіР°РµС‚). */
 function deleteExpiredSessionsForUser(userId) {
     if (userId == null) return;
     const s = loadStore();
@@ -1778,7 +1735,6 @@ function deleteSessionsForOrganization(orgId) {
     saveStore();
 }
 
-/** РЈРґР°Р»СЏРµС‚ РІСЃРµ СЃРµСЃСЃРёРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ (РїРµСЂРµРґ РЅРѕРІС‹Рј РІС…РѕРґРѕРј РёР»Рё РїСЂРё РїСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕРј СЃР±СЂРѕСЃРµ). */
 function deleteSessionsForUser(userId) {
     if (userId == null) return;
     const s = loadStore();
@@ -2225,7 +2181,6 @@ async function createDailyBackupAsync() {
             history: getHistory(orgId),
             settings: snapshotOrgSettings(orgId)
         };
-        // Не затираем сегодняшний непустой бэкап пустым
         if (fs.existsSync(backupPath)) {
             try {
                 var prev = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
@@ -2246,7 +2201,6 @@ async function createDailyBackupAsync() {
         console.log('[Backup] Сохранён: ' + orgId + '/backup-' + dateStr + '.json');
     }
 
-    // Полный логический снимок (JSON export) — работает и для MySQL, и для store.json
     ensureFullBackupsDir();
     var fullDaily = path.join(FULL_BACKUPS_DIR, 'store-' + dateStr + '.json');
     var json = cpuPool.isEnabled()
@@ -2374,7 +2328,6 @@ function restoreFullStoreBackup(filename) {
     if (!fs.existsSync(backupPath)) throw new Error('Р¤Р°Р№Р» СЃРЅРёРјРєР° РЅРµ РЅР°Р№РґРµРЅ');
     const parsed = tryParseStoreFile(backupPath);
     if (!parsed) throw new Error('РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ СЃРЅРёРјРєР°');
-    // Safety: copy current store aside (JSON mode) or logical export (MySQL)
     if (!isMysqlEnabled() && fs.existsSync(STORE_PATH)) {
         try {
             fs.copyFileSync(STORE_PATH, STORE_PATH + '.before-full-restore-' + Date.now());
@@ -2391,7 +2344,6 @@ function restoreFullStoreBackup(filename) {
         allowDangerousSaveOnce = false;
     }
     if (isMysqlEnabled()) {
-        // Force immediate flush so restore is durable before clients reconnect
         mysqlPersistDirty = true;
         flushMysqlPersist().catch(function (e) {
             console.error('[DB] MySQL flush after full restore failed:', e && e.message ? e.message : e);
@@ -2401,7 +2353,6 @@ function restoreFullStoreBackup(filename) {
     return { ok: true, organizations: (parsed.organizations || []).length, users: (parsed.users || []).length };
 }
 
-/** РЎР±СЂРѕСЃ in-memory store (РїРѕСЃР»Рµ РїРѕР»РЅРѕРіРѕ restore РёР·РІРЅРµ). */
 function reloadStoreFromDisk() {
     store = null;
     if (isMysqlEnabled()) {
@@ -2651,7 +2602,6 @@ function addVisitLog(entry) {
         userAgent: entry && entry.userAgent ? String(entry.userAgent) : ''
     };
     s.visitLogs.push(item);
-    // РћРіСЂР°РЅРёС‡РёРІР°РµРј СЂР°Р·РјРµСЂ Р¶СѓСЂРЅР°Р»Р°, С‡С‚РѕР±С‹ store.json РЅРµ СЂР°Р·СЂР°СЃС‚Р°Р»СЃСЏ Р±РµСЃРєРѕРЅРµС‡РЅРѕ.
     var MAX_VISIT_LOGS = 5000;
     if (s.visitLogs.length > MAX_VISIT_LOGS) {
         s.visitLogs = s.visitLogs.slice(s.visitLogs.length - MAX_VISIT_LOGS);

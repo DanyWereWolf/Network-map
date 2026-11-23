@@ -1,8 +1,5 @@
 'use strict';
 
-/**
- * Persist / hydrate the in-memory store document to MySQL tables.
- */
 const crypto = require('crypto');
 const { query, withTransaction, getPool } = require('./mysql');
 const mapAssemble = require('./map-assemble');
@@ -109,7 +106,6 @@ async function hydrateStoreFromMysql() {
         store.settingsByOrg[row.org_id][row.setting_key] = val;
     });
 
-    // Map: prefer relational assemble, else blob
     store.mapDataByOrg = {};
     var relationalMapOrgs = Object.create(null);
     Object.defineProperty(store, '__relationalMapOrgs', { value: relationalMapOrgs, enumerable: false });
@@ -252,7 +248,6 @@ async function hydrateStoreFromMysql() {
         }, extra);
     });
 
-    // user map start / themes into settings
     const [ums] = await query('SELECT * FROM user_map_start');
     if (!store.settings.userMapStarts) store.settings.userMapStarts = '{}';
     try {
@@ -271,8 +266,6 @@ async function hydrateStoreFromMysql() {
 
     return store;
 }
-
-/* ---------- Запись: писатели по разделам ---------- */
 
 const ORG_SCOPED_TABLES = ['history_events', 'org_chat_messages', 'org_chat_media', 'org_settings', 'org_map_blobs'];
 const GLOBAL_TABLES_FULL_RESET = [
@@ -379,7 +372,6 @@ async function writeSessions(conn, sessions) {
     }
 }
 
-/** platform_settings + производные таблицы user_map_start / user_themes. */
 async function writePlatformSettings(conn, settings) {
     settings = settings || {};
     await conn.query('DELETE FROM platform_settings');
@@ -427,8 +419,6 @@ async function writeOrgSettings(conn, os, orgId) {
 
 async function writeOrgMap(conn, items, orgId, section) {
     items = Array.isArray(items) ? items : [];
-    // Blob читается только когда реляционные таблицы карты пусты, поэтому при точечном
-    // обновлении его можно писать реже; пустую карту пишем всегда, иначе вернётся старый blob.
     var skipBlob = !!(section && section.mapDiff && section.skipBlob && items.length);
     if (!skipBlob) {
         var json = section && section.json != null ? section.json : JSON.stringify(items);
@@ -613,8 +603,6 @@ const GLOBAL_SECTION_SOURCES = [
     'deviceTokens', 'supportThreads', 'passwordResetTokens', 'emailVerificationTokens'
 ];
 
-/* ---------- Инкрементальная запись ---------- */
-
 const MAP_FULL_CHECK_INTERVAL_MS = 60 * 1000;
 const MAP_BLOB_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -648,10 +636,6 @@ function hashJson(json) {
 
 const MAP_DIFF_MAX_SHARE = 0.3;
 
-/**
- * JSON карты по объектам. index = null, если точечное обновление невозможно
- * (повтор uniqueId) — тогда карта переписывается целиком.
- */
 function serializeMapItems(items, orgId) {
     var parts = new Array(items.length);
     var objects = new Map();
@@ -663,7 +647,6 @@ function serializeMapItems(items, orgId) {
         parts[i] = json === undefined ? 'null' : json;
         if (!stable || !item || typeof item !== 'object') continue;
         if (item.uniqueId == null || item.uniqueId === '') {
-            // Как в disassembleMapData: из объектов без uniqueId в таблицы попадают только подписи кабелей.
             if (item.type === 'cableLabel') unkeyed.push({ uid: 'cableLabel-' + orgId + '-' + i, json: parts[i], item: item });
             continue;
         }
@@ -718,7 +701,6 @@ function computeMapDiff(prev, next) {
     };
 }
 
-/** В состоянии храним только JSON объектов, без ссылок на сами объекты карты. */
 function toStoredIndex(index) {
     if (!index) return null;
     var objects = new Map();
@@ -738,10 +720,6 @@ function createPersistState() {
     };
 }
 
-/**
- * Запоминает текущее содержимое store как уже записанное в MySQL (сразу после hydrate),
- * чтобы первое изменение не вызывало полную перезапись базы.
- */
 function primePersistState(store) {
     var state = createPersistState();
     var relational = (store && store.__relationalMapOrgs) || {};
@@ -750,7 +728,6 @@ function primePersistState(store) {
         if (s.kind === 'map' && Array.isArray(s.payload)) {
             var ser = serializeMapItems(s.payload, s.orgId);
             state.hashes[s.key] = hashJson(ser.json);
-            // Карта из blob-фолбэка: таблицы не совпадают с ней, первое сохранение — только полная перезапись.
             state.mapIndex[s.orgId] = relational[s.orgId] ? toStoredIndex(ser.index) : null;
             state.mapRefs[s.orgId] = { ref: s.payload, len: s.payload.length };
             return;
@@ -761,11 +738,6 @@ function primePersistState(store) {
     return state;
 }
 
-/**
- * Пишет в MySQL только изменившиеся разделы store (одной транзакцией).
- * opts.full — переписать всё с очисткой таблиц (миграция / восстановление).
- * @returns {Promise<{sections: string[], ms: number, statements: number, rows: number}>}
- */
 async function persistStoreIncremental(store, state, opts) {
     opts = opts || {};
     if (!store) return { sections: [], ms: 0, statements: 0, rows: 0 };
@@ -889,7 +861,6 @@ async function persistStoreIncremental(store, state, opts) {
     };
 }
 
-/** Полная перезапись всего store (миграция JSON → MySQL, восстановление снимка). */
 async function persistStoreToMysql(store, opts) {
     opts = opts || {};
     return persistStoreIncremental(store, createPersistState(), {

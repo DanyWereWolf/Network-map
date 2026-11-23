@@ -1,7 +1,3 @@
-/**
- * Мобильный слой UI для основного приложения (index).
- * Подключается после styles.css — дополняет и переопределяет брейкпоинты.
- */
 
 html {
     -webkit-text-size-adjust: 100%;
@@ -14,7 +10,6 @@ html {
 }
 
 @media (max-width: 768px) {
-    /* Карта на всю высоту под шапкой — боковые панели на телефоне не показываем */
     .container {
         flex-direction: column;
     }
@@ -75,7 +70,6 @@ html {
         display: none !important;
     }
 
-    /* ---------- Шапка: сетка «логотип + кнопки / поиск на всю ширину» ---------- */
     .top-header {
         height: auto;
         min-height: 96px;
@@ -168,7 +162,6 @@ html {
         padding: 3px 8px 3px 3px;
     }
 
-    /* На телефоне только просмотр: без отмены/повтора, справочника, обновлений и истории */
     #undoBtn,
     #redoBtn,
     #deviceCatalogBtn,
@@ -244,7 +237,6 @@ html {
         touch-action: manipulation;
     }
 
-    /* ---------- Модальные окна ---------- */
     .modal {
         padding: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
         box-sizing: border-box;
@@ -261,7 +253,6 @@ html {
         overflow: hidden;
     }
 
-    /* Трассировка / лоадер — на весь экран, не сжимать как обычную модалку */
     #infoModal[data-trace-view="1"] .modal-content,
     #infoModal[data-trace-loading="1"] .modal-content {
         width: 100%;
@@ -783,7 +774,6 @@ html {
         border-color: var(--accent-danger, #dc2626);
     }
 
-    /* ---------- Toast ---------- */
     .toast-container {
         left: 50%;
         right: auto;
@@ -817,7 +807,6 @@ html {
         height: 16px;
     }
 
-    /* ---------- Журнал изменений ---------- */
     .history-modal-content {
         width: calc(100% - 16px);
         max-width: 100%;
@@ -857,7 +846,6 @@ html {
         gap: 2px;
     }
 
-    /* ---------- Трассировка в модалке ---------- */
     .trace-step-row {
         flex-wrap: wrap;
     }

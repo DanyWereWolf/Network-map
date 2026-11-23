@@ -1,6 +1,3 @@
-/**
- * Панель выбора волокна для сращивания.
- */
 function updateFiberSelectionUI() {
     const bar = document.getElementById('fiber-selection-bar');
     if (bar) {

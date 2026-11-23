@@ -1,16 +1,5 @@
 'use strict';
 
-/**
- * Migrate data/store.json → MySQL (platform tables + org_map_blobs + relational map).
- *
- * Usage:
- *   node scripts/migrate-store-to-mysql.js
- *   node scripts/migrate-store-to-mysql.js --store path/to/store.json
- *   node scripts/migrate-store-to-mysql.js --skip-relational
- *
- * Prerequisites: MySQL reachable per server-config.json mysql.* (storage flag ignored here).
- * After success: set "storage": "mysql" in server-config.json and restart API.
- */
 const fs = require('fs');
 const path = require('path');
 

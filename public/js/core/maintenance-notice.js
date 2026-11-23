@@ -1,6 +1,3 @@
-/**
- * Уведомление о технических работах: загрузка с сервера и баннер вверху страницы.
- */
 (function() {
     var STORAGE_KEY = 'networkMap_maintenanceDismissed_v1';
     var bannerEl = null;

@@ -25,7 +25,6 @@ function getOrCreateRateEntry(key, windowMs, now) {
     return entry;
 }
 
-/** Проверка без увеличения счётчика. */
 function peekRateLimit(key, options) {
     const windowMs = (options && options.windowMs) || DEFAULT_RATE_WINDOW_MS;
     const maxAttempts = (options && options.maxAttempts) || DEFAULT_RATE_MAX;

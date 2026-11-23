@@ -1,6 +1,3 @@
-/**
- * Согласие на cookie: баннер при первом визите, хранение выбора в localStorage и cookie nm_consent.
- */
 (function() {
     var STORAGE_KEY = 'networkMap_cookieConsent_v1';
     var COOKIE_NAME = 'nm_consent';

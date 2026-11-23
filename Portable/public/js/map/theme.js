@@ -1,6 +1,3 @@
-/**
- * Тема (светлая/тёмная + акцент), анимации карты и LOD-пороги масштаба.
- */
 var THEME_STORAGE_PREFIX = 'networkMap_theme';
 var THEME_ACCENT_STORAGE_PREFIX = 'networkMap_themeAccent';
 var THEME_TRANSITION_MS = 450;
@@ -80,7 +77,6 @@ function readMapAnimationsPreference() {
     return null;
 }
 
-/** Анимации на карте: пульсации, плавный pan/zoom. Без явной настройки — как prefers-reduced-motion. */
 function areMapAnimationsEnabled() {
     var pref = readMapAnimationsPreference();
     if (pref !== null) return pref;
@@ -129,7 +125,6 @@ function initMapAnimationsToggle() {
     var el = document.getElementById('mapAnimationsToggle');
     if (!el) return;
     el.checked = enabled;
-    // В настройках производительности переключатель биндится отдельно.
     if (document.getElementById('perfModeAuto')) return;
     if (el.dataset.bound === '1') return;
     el.dataset.bound = '1';
@@ -505,7 +500,6 @@ function applyOrgCoverageColors(settings, opts) {
     syncThemeCoverageColorControls();
 }
 
-/** Применить цвета зон из ответа /api/settings + запасной localStorage. */
 function applyOrgCoverageColorsFromSettings(settings, opts) {
     opts = opts || {};
     var local = readLocalCoverageColors();
@@ -514,7 +508,6 @@ function applyOrgCoverageColorsFromSettings(settings, opts) {
         cameraCoverageColor: server.cameraCoverageColor,
         radioBridgeCoverageColor: server.radioBridgeCoverageColor
     };
-    // Если на сервере ещё дефолты, а локально уже выбран свой цвет — не теряем его и дожимаем на сервер.
     if (local && isDefaultCoverageColorPair(server) && !isDefaultCoverageColorPair(local)) {
         merged.cameraCoverageColor = local.cameraCoverageColor || merged.cameraCoverageColor;
         merged.radioBridgeCoverageColor = local.radioBridgeCoverageColor || merged.radioBridgeCoverageColor;

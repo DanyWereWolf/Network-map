@@ -580,8 +580,6 @@
                     if (msg.groupNames && typeof window.applyGroupNames === 'function') {
                         try { window.applyGroupNames(msg.groupNames); } catch (e) {}
                     }
-                    // hello на каждый reconnect раньше всегда делал GET+merge → «карта мигает» и
-                    // сносит только что поставленное. Карта уже с /api/map; catch-up только после долгого обрыва.
                     if (msg.reason === 'hello' && !msg.forceFull) {
                         var mapReady = false;
                         try {
@@ -663,7 +661,6 @@
 
     function sendState(data) {
         if (!data) return;
-        // Не заливать неполный снимок во время первичной загрузки / смены подложки / смены региона.
         try {
             if (window.__mapRegionSwitching) return;
             if (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) return;
@@ -690,7 +687,6 @@
                 initial = typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending;
                 runtimeSwitch = !!window.__volsmapRuntimeSwitching;
             } catch (eSkip2) {}
-            // Снимок прошлого региона досылаем с тем id, который был в момент сохранения.
             var goodbye = !!(switching && regionAtQueue && regionAtQueue !== currentSyncRegionId());
             if (!goodbye && (switching || initial || applyBusy || runtimeSwitch)) return;
             if (lastOpSendTime && (Date.now() - lastOpSendTime) < SUPPRESS_STATE_AFTER_OP_MS) {
@@ -835,7 +831,6 @@
             delete pendingLockRequests[uniqueId];
             callback(false, null);
         }
-        // Раньше 8с — UI зависал на «Загрузка…». 1.5с достаточно; дальше открываем без edit-lock.
         setTimeout(function() {
             if (!pendingLockRequests[uniqueId]) return;
             delete pendingLockRequests[uniqueId];

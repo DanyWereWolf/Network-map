@@ -1,6 +1,3 @@
-/**
- * Геометрия карты: hit-test, snap, прямоугольное выделение.
- */
 function geoToClient(geoCoord) {
     if (!myMap || !geoCoord || geoCoord.length < 2) return null;
     try {
@@ -52,7 +49,6 @@ function setupRectSelection() {
     if (!myMap || !myMap.container) return;
     var container = myMap.container.getElement();
     if (!container) return;
-    // После смены рантайма (Яндекс ↔ Leaflet) контейнер новый — пересоздаём overlay.
     if (container.dataset.rectSelectBound === '1' && document.getElementById('rectSelectOverlay')) {
         return;
     }
@@ -229,8 +225,6 @@ function setupRectSelection() {
                         }
                         if (typeof scheduleConnectionLinesUpdate === 'function') scheduleConnectionLinesUpdate('full');
                         if (typeof updateStats === 'function') updateStats();
-                        // Не syncFull: каждый deleteObject уже отправил delete_object —
-                        // полный state у других = тяжёлый map_refresh.
                         if (typeof showInfo === 'function') showInfo('Удалено объектов: ' + toDelete.length, 'Удаление');
                     }
                     panel.style.display = 'none';
@@ -358,7 +352,6 @@ function findObjectsAtGeometry(refs, geometry, tolerance) {
 
 var _refsUidIndexCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
-/** uid → первый объект с этим uid в refs; кэш на массив, сбрасывается при смене длины. */
 function getRefsUidIndex(refs) {
     var cached = _refsUidIndexCache && _refsUidIndexCache.get(refs);
     if (cached && cached.len === refs.length) return cached.map;
@@ -373,7 +366,6 @@ function getRefsUidIndex(refs) {
     return map;
 }
 
-/** Восстанавливает цепочку объектов маршрута кабеля: приоритет у routeUniqueIds (опоры/крепления), иначе по вершинам геометрии. */
 function buildCableRoutePointsFromData(refs, item, fromObj, toObj, coords) {
     if (!Array.isArray(refs) || !item) return null;
     if (Array.isArray(item.routeUniqueIds) && item.routeUniqueIds.length >= 2) {
@@ -424,7 +416,6 @@ function getCableAutoSelectTolerance(zoom) {
     return zoom < 12 ? 0.00028 : (zoom < 15 ? 0.00018 : 0.0001);
 }
 
-/** Радиус привязки кабеля в пикселях экрана (стабильнее, чем градусы широты/долготы). */
 function getCableSnapPixelRadius(zoom, mode) {
     if (zoom == null && myMap) zoom = myMap.getZoom();
     if (mode === 'auto' || mode === 'click') {

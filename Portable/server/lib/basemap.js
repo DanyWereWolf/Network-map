@@ -1,9 +1,3 @@
-/**
- * On-prem ортофото-подложка: хранение пакетов XYZ-тайлов, GeoTIFF→тайлы (GDAL), merge участков.
- * data/basemaps/{orgId}/index.json
- * data/basemaps/{orgId}/{packId}/{z}/{x}/{y}.png
- * data/basemaps/{orgId}/_inbox/{jobId}.tif
- */
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -14,7 +8,6 @@ const ROOT_DIR = path.join(__dirname, '..', '..');
 const BASEMAP_ROOT = path.join(ROOT_DIR, 'data', 'basemaps');
 
 const DEFAULT_MIN_ZOOM = 12;
-/** Выше 16 на больших сценах — миллионы тайлов и риск блокировки API. */
 const DEFAULT_MAX_ZOOM = 16;
 const ABSOLUTE_MAX_ZOOM = 18;
 const DEFAULT_QUOTA_GB = 50;
@@ -121,7 +114,6 @@ function dirSizeBytes(dir, options) {
 }
 
 function getOrgUsedBytes(orgId) {
-    // Не обходим _inbox/_tmp: незавершённая нарезка может содержать миллионы PNG и блокирует event loop.
     return dirSizeBytes(orgDir(orgId), {
         skipNames: { _inbox: 1, _tmp: 1, _trash: 1 }
     });
@@ -148,7 +140,6 @@ function findExecutable(names) {
             }
         }
     }
-    // Common Windows OSGeo4W / GISInternals paths
     if (process.platform === 'win32') {
         var guesses = [
             'C:\\OSGeo4W\\bin\\gdalinfo.exe',
@@ -202,14 +193,12 @@ function runCmd(command, args, options) {
 }
 
 function parseGdalInfoBounds(stdout) {
-    // Corner Coordinates / wgs84Extent / Upper Left etc.
     var wgs = /wgs84Extent\s*=\s*Polygon\s*\(\(([^)]+)\)\)/i.exec(stdout);
     if (wgs) {
         var pts = wgs[1].split(',').map(function (p) {
             var parts = p.trim().split(/\s+/);
             return [parseFloat(parts[0]), parseFloat(parts[1])];
         }).filter(function (p) { return isFinite(p[0]) && isFinite(p[1]); });
-        // lon lat pairs
         if (pts.length >= 2) {
             var lons = pts.map(function (p) { return p[0]; });
             var lats = pts.map(function (p) { return p[1]; });
@@ -226,7 +215,6 @@ function parseGdalInfoBounds(stdout) {
         var y1 = parseFloat(ul[2]);
         var x2 = parseFloat(lr[1]);
         var y2 = parseFloat(lr[2]);
-        // If values look like lon/lat
         if (Math.abs(x1) <= 180 && Math.abs(y1) <= 90 && Math.abs(x2) <= 180 && Math.abs(y2) <= 90) {
             return [
                 [Math.min(y1, y2), Math.min(x1, x2)],
@@ -238,7 +226,6 @@ function parseGdalInfoBounds(stdout) {
 }
 
 function parseCornerLonLat(stdout) {
-    // "(  lon,  lat) (lon, lat)" after Corner Coordinates in geographic
     var re = /\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)\s*\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/g;
     var match;
     var lats = [];
@@ -248,7 +235,6 @@ function parseCornerLonLat(stdout) {
         var b = parseFloat(match[2]);
         var c = parseFloat(match[3]);
         var d = parseFloat(match[4]);
-        // prefer geographic pair if present as second tuple
         if (Math.abs(c) <= 180 && Math.abs(d) <= 90) {
             lons.push(c);
             lats.push(d);
@@ -287,7 +273,6 @@ async function gdalInfoJsonOrText(tools, filePath) {
         if (j && j.cornerCoordinates) {
             var cc = j.cornerCoordinates;
             var pts = [cc.upperLeft, cc.lowerLeft, cc.lowerRight, cc.upperRight].filter(Boolean);
-            // May be projected — fallback to text
         }
     } catch (e) {}
     var text = await runCmd(tools.gdalinfo, [filePath]);
@@ -301,7 +286,6 @@ function tileFilePath(orgId, packId, z, x, y) {
 function findTile(orgId, packId, z, x, y) {
     var p = tileFilePath(orgId, packId, z, x, y);
     if (fs.existsSync(p)) return p;
-    // gdal2tiles sometimes uses TMS y
     return null;
 }
 
@@ -431,7 +415,6 @@ function finalizePackFromTiles(job, tilesOut, bounds, minZ, maxZ, usedXyz) {
         writeIndex(orgId, index);
         packId = activeId;
     } else {
-        // Полный пакет: перенос дерева тайлов вместо copy+rmrf (иначе часы блокировки event loop).
         try {
             if (fs.existsSync(outDir)) rmrf(outDir);
             fs.renameSync(tilesOut, outDir);

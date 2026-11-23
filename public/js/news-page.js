@@ -1,6 +1,3 @@
-/**
- * Публичная страница новостей — загрузка и отрисовка постов.
- */
 (function() {
     function escapeHtml(text) {
         if (text == null) return '';

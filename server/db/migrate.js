@@ -1,8 +1,5 @@
 'use strict';
 
-/**
- * Apply server/db/schema.sql and incremental migrations; record in schema_migrations.
- */
 const fs = require('fs');
 const path = require('path');
 const { getPool, query, getMysqlConfig } = require('./mysql');

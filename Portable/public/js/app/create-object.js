@@ -1,6 +1,3 @@
-/**
- * Создание объектов на карте (placemark).
- */
 function findNodeByName(name, excludePlacemark) {
     if (!name || typeof name !== 'string') return null;
     var n = (name || '').trim().toLowerCase();
@@ -31,8 +28,8 @@ function createObject(type, name, coords, options = {}) {
         hasBalloon: false,
         openBalloonOnClick: false
     };
-    
-    const placemarkProperties = {
+
+        const placemarkProperties = {
         type: type,
         name: name
     };
@@ -257,27 +254,27 @@ function createObject(type, name, coords, options = {}) {
             if (Date.now() < placementPanBlockClickUntil) return;
             var objId = getObjectUniqueId(placemark);
             var objType = type;
-            
-            if (objId === splitterFiberRoutingData.targetId ||
+
+                        if (objId === splitterFiberRoutingData.targetId ||
                 (typeof isGponFiberRoutingTargetReachableClick === 'function' &&
                     isGponFiberRoutingTargetReachableClick(splitterFiberRoutingData, placemark))) {
                 completeSplitterFiberRouting();
                 return;
             }
-            
-            if (objType === 'support' || objType === 'attachment') {
+
+                        if (objType === 'support' || objType === 'attachment') {
                 addSplitterFiberWaypoint(placemark);
                 updateSplitterFiberPreview();
                 return;
             }
-            
-            if (isGponFiberRoutingSourceUid(splitterFiberRoutingData, objId)) {
+
+                        if (isGponFiberRoutingSourceUid(splitterFiberRoutingData, objId)) {
                 splitterFiberWaypoints = [];
                 updateSplitterFiberPreview();
                 return;
             }
-            
-            var targetName = getFiberRoutingTargetLabel(splitterFiberRoutingData.targetType, splitterFiberRoutingData.targetObj);
+
+                        var targetName = getFiberRoutingTargetLabel(splitterFiberRoutingData.targetType, splitterFiberRoutingData.targetObj);
             showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
             return;
         }
@@ -290,25 +287,25 @@ function createObject(type, name, coords, options = {}) {
             }
             var objId = getObjectUniqueId(placemark);
             var objType = type;
-            
-            if (objId === fiberRoutingData.targetId) {
+
+                        if (objId === fiberRoutingData.targetId) {
                 completeFiberRouting();
                 return;
             }
-            
-            if (objType === 'support' || objType === 'attachment') {
+
+                        if (objType === 'support' || objType === 'attachment') {
                 addFiberRoutingWaypoint(placemark);
                 updateFiberRoutingPreview();
                 return;
             }
-            
-            if (objId === getObjectUniqueId(fiberRoutingData.sleeveObj)) {
+
+                        if (objId === getObjectUniqueId(fiberRoutingData.sleeveObj)) {
                 fiberRoutingWaypoints = [];
                 updateFiberRoutingPreview();
                 return;
             }
-            
-            var targetName = getFiberRoutingTargetLabel(fiberRoutingData.targetType, fiberRoutingData.targetObj);
+
+                        var targetName = getFiberRoutingTargetLabel(fiberRoutingData.targetType, fiberRoutingData.targetObj);
             showWarning('Кликните по опоре или креплению для добавления точки маршрута, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
             return;
         }
@@ -446,8 +443,8 @@ function createObject(type, name, coords, options = {}) {
         if (!isEditMode) {
             return;
         }
-        
-        if (selectedObjects.includes(placemark)) {
+
+                if (selectedObjects.includes(placemark)) {
             deselectObject(placemark);
         } else {
             selectObject(placemark);
@@ -494,8 +491,8 @@ function createObject(type, name, coords, options = {}) {
         }
         if (typeof endSleevePathDrag === 'function') endSleevePathDrag(placemark);
     });
-    
-    placemark.events.add('drag', function() {
+
+        placemark.events.add('drag', function() {
         if (objectPlacementMode && typeof suspendMapPanForPlacementObjectDrag === 'function') {
             suspendMapPanForPlacementObjectDrag();
         }
@@ -523,7 +520,6 @@ function createObject(type, name, coords, options = {}) {
         updateMapLimitBanner();
     }
 
-    // Placement на ящик: cabinetId до syncSendOp, иначе remote получает add без membership.
     if (objectPlacementMode && typeof canBeCabinetMember === 'function' && canBeCabinetMember(type) &&
         !placemark.properties.get('cabinetId') && typeof findCabinetAtCoords === 'function') {
         var cabAtPlace = findCabinetAtCoords(coords, placemark);
@@ -555,8 +551,6 @@ function createObject(type, name, coords, options = {}) {
 
     if (typeof applyMapFilterForObject === 'function') applyMapFilterForObject(placemark);
 
-    // Члены ящика (в т.ч. кросс/узел): сначала скрыть + обновить подпись со счётчиком.
-    // Иначе ветки cross/node ниже пропускали updateCabinetAfterMemberChange.
     if ((placemarkProperties.cabinetId || placemark.properties.get('cabinetId')) &&
         typeof updateCabinetAfterMemberChange === 'function') {
         updateCabinetAfterMemberChange(placemark);
@@ -585,7 +579,6 @@ function createObject(type, name, coords, options = {}) {
             if (!data.mapRegionId && placemarkProperties.mapRegionId) {
                 data.mapRegionId = String(placemarkProperties.mapRegionId);
             }
-            // Гарантируем membership в add_object (сериализация не должна терять cabinetId).
             var cabIdSync = placemark.properties.get('cabinetId') || placemarkProperties.cabinetId;
             if (cabIdSync) {
                 data.cabinetId = String(cabIdSync);
@@ -603,7 +596,6 @@ function createObject(type, name, coords, options = {}) {
         if (type === 'cabinet' && typeof updateCabinetLabel === 'function') {
             try { updateCabinetLabel(placemark); } catch (eCab) {}
         }
-        // Не remount все регионы (remove+add) — это дергает всю карту при каждом клике.
         if (type !== 'cross' && type !== 'node' && type !== 'cabinet' && !placemarkProperties.cabinetId) {
             if (window.MapRegions && MapRegions.removeErrantRegionObjectLabels) {
                 try { MapRegions.removeErrantRegionObjectLabels(myMap, objects); } catch (eReg2) {}

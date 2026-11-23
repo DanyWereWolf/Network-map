@@ -1,6 +1,3 @@
-/**
- * Сплиттеры внутри схемы муфты/кросса (не на карте).
- */
 (function (global) {
     'use strict';
 
@@ -36,7 +33,6 @@
         return (h >>> 0) / 4294967296;
     }
 
-    /** Порты остаются равномерными; разведение волокон — на маршруте, не на кружках. */
     function outputPortAxisJitter(pi, ratio) {
         return 0;
     }
@@ -93,7 +89,6 @@
     function computeVerticalSchemeSplitterBox(ratio) {
         ratio = parseInt(ratio, 10) || DEFAULT_RATIO;
         var portR = ratio > 16 ? 3 : (ratio > 8 ? 3.5 : 4.5);
-        // Чуть шире шаг портов — при толстых волокнах (4.5px) они не слипаются у края.
         var portGap = ratio > 8 ? 17 : PORT_GAP;
         var portAreaW = ratio <= 1 ? 48 : Math.max(88, (ratio - 1) * portGap + 28);
         if (ratio > 12) portAreaW = Math.max(portAreaW, ratio * 12);
@@ -174,7 +169,6 @@
         return null;
     }
 
-    /** Bounding box карточки сплиттера для обхода (визуальные границы + небольшой запас). */
     function splitterAvoidBox(cx, cy, box, pad) {
         pad = pad != null ? pad : 8;
         return {
@@ -267,12 +261,10 @@
         return 'M ' + x1 + ' ' + y1 + ' L ' + x2 + ' ' + y2;
     }
 
-    /** Вход сплиттера — плавная изогнутая линия (не жёсткая Г). */
     function buildSplitterInputCurvedPath(x1, y1, x2, y2, pathOpts, fiberMeta, orientation, mirrored) {
         fiberMeta = fiberMeta || {};
         var aroundD = tryAroundObstacles(x1, y1, x2, y2, pathOpts);
         if (aroundD) return aroundD;
-        // Верхний кабель: отступ волокон у бейджа (дорожка cableApproachY), не изгиб на y волокна.
         if (fiberMeta.isTop && pathOpts && pathOpts.cableApproachY != null) {
             var elbowTop = getElbowPath();
             if (elbowTop) {
@@ -288,7 +280,6 @@
         if (bend) {
             var bendOpts = { bendStart: true, bendEnd: true };
             if (orientation === 'vertical') {
-                // От бокового/верхнего волокна к порту сверху/снизу — изгиб у обоих концов.
                 bendOpts.bendStart = !!fiberMeta.isTop || fiberMeta.isLeft != null;
                 bendOpts.bendEnd = true;
             } else {
@@ -314,10 +305,6 @@
         return buildSplitterSchematicPath(x1, y1, x2, y2, pathOpts, 'vh');
     }
 
-    /**
-     * Режим отрисовки волокна↔сплиттер: отдельно горизонтальная и вертикальная карточка.
-     * top-horizontal | top-vertical | side-horizontal | side-vertical
-     */
     function resolveSplitterLinkMode(fiberMeta, orientation) {
         fiberMeta = fiberMeta || {};
         orientation = orientation || 'horizontal';
@@ -327,11 +314,6 @@
         return orientation === 'vertical' ? 'side-vertical' : 'side-horizontal';
     }
 
-    /**
-     * Вертикальный сплиттер ↔ боковой кабель.
-     * Порты на одной горизонтали (верх/низ) — нельзя идти vh сквозь корпус:
-     * сначала вынос от карточки, затем своя X-дорожка к волокну.
-     */
     function buildVerticalSplitterSidePath(portX, portY, fiberX, fiberY, pathOpts, kind, mirrored, fiberIsLeft) {
         pathOpts = pathOpts || {};
         var box = pathOpts.avoidBox;
@@ -366,7 +348,6 @@
         return buildOrthogonalPts(pts);
     }
 
-    /** X-дорожка перед боковым кабелем: изгиб до бейджа, снаружи корпуса сплиттера. */
     function resolveSideCableApproachX(fiberX, fiberIsLeft, pathOpts, box) {
         pathOpts = pathOpts || {};
         var lane = pathOpts.laneIndex != null ? pathOpts.laneIndex : 0;
@@ -382,7 +363,6 @@
         }
         if (box) {
             if (fiberIsLeft) {
-                // Коридор слева от карточки и справа от волокна — без затаскивания внутрь корпуса.
                 var leftMax = box.x - 12;
                 var leftMin = fiberX + 18;
                 if (leftMin <= leftMax) {
@@ -408,7 +388,6 @@
                         ax = Math.max(rightMin, Math.min(rightMax, rightMax - lane * rightGap));
                     }
                 } else {
-                    // Места нет — хотя бы чуть развести по lane около правого края корпуса.
                     ax = rightMin + lane * 6;
                 }
             }
@@ -416,11 +395,6 @@
         return ax;
     }
 
-    /**
-     * Горизонтальный сплиттер ↔ боковой кабель.
-     * Сначала вынос НАРУЖУ от корпуса, затем к X-дорожке.
-     * Если волокно на противоположной стороне — обход сверху/снизу, не сквозь карточку.
-     */
     function buildHorizontalSplitterSidePath(portX, portY, fiberX, fiberY, pathOpts, kind, fiberIsLeft) {
         pathOpts = pathOpts || {};
         var box = pathOpts.avoidBox;
@@ -429,7 +403,6 @@
         var boxCx = box ? (box.cx != null ? box.cx : (box.x + box.w / 2)) : portX;
         var portOnRight = portX >= boxCx;
 
-        // Короткий вынос от порта наружу (не внутрь карточки).
         var exitX = portX + (portOnRight ? 1 : -1) * (12 + lane * 4);
         if (box) {
             if (portOnRight) exitX = Math.max(exitX, box.x + box.w + 10 + lane * 4);
@@ -449,7 +422,6 @@
 
         var pts;
         if (!sameSide && box) {
-            // Волокно с другой стороны — обход под/над корпусом.
             var preferBelow = fiberY >= portY;
             var clearY = preferBelow
                 ? Math.max(box.y + box.h + 12 + lane * 8, Math.max(portY, fiberY, midY) + 14)
@@ -495,11 +467,6 @@
         return buildOrthogonalPts(pts);
     }
 
-    /**
-     * Горизонтальный сплиттер ↔ верхний кабель.
-     * Все порты на одном X — прямой подъём сливает волокна у края карточки.
-     * Вынос наружу по Y порта, затем дорожка approachY НАД корпусом.
-     */
     function buildHorizontalSplitterTopPath(portX, portY, fiberX, fiberY, pathOpts, kind, mirrored) {
         pathOpts = pathOpts || {};
         var box = pathOpts.avoidBox;
@@ -508,7 +475,6 @@
         if (ay == null || isNaN(ay)) ay = fiberY + 22 + lane * 10;
         ay = Math.max(fiberY + 16, ay);
 
-        // Выходы справа (!mirrored) — колонка правее порта; вход слева — левее.
         var leaveRight = kind === 'output' ? !mirrored : !!mirrored;
         var riserX = pathOpts.portRiserX;
         if (riserX == null || isNaN(riserX)) {
@@ -517,7 +483,6 @@
         if (box) {
             if (leaveRight) riserX = Math.max(riserX, box.x + box.w + 10 + lane * 6);
             else riserX = Math.min(riserX, box.x - 10 - lane * 6);
-            // Дорожка строго над корпусом — иначе горизонталь режет карточку.
             if (ay > box.y - 8) {
                 ay = Math.min(ay, box.y - 12);
                 ay = Math.max(fiberY + 16, ay);
@@ -568,7 +533,6 @@
                 cableApproachY: fiberMeta.cableApproachY != null ? fiberMeta.cableApproachY : pathOpts.cableApproachY,
                 cableApproachX: fiberMeta.cableApproachX != null ? fiberMeta.cableApproachX : pathOpts.cableApproachX,
                 portRiserX: fiberMeta.portRiserX != null ? fiberMeta.portRiserX : pathOpts.portRiserX,
-                // input: волокно в начале пути; output: волокно в конце
                 fiberAtStart: kind === 'input' ? !!fiberMeta.isTop : false
             });
         } else if (fiberMeta.isTop && kind === 'output') {
@@ -602,11 +566,9 @@
             return buildSplitterInputCurvedPath(fromX, fromY, toX, toY, localOpts, fiberMeta, orientation, mirrored);
         }
 
-        // top-vertical: порты на разных X — vh + cableApproachY
         return buildSplitterSchematicPath(fromX, fromY, toX, toY, localOpts, 'vh');
     }
 
-    /** Наружная нормаль порта: куда уходит линия от корпуса. */
     function chainPortOutward(kind, orient, mirrored) {
         orient = orient || 'horizontal';
         if (orient === 'vertical') {
@@ -693,7 +655,6 @@
         var cx = hit.cx != null ? hit.cx : (hit.x + hit.w / 2);
         if (preferLeft == null) {
             preferLeft = ((leave.x + approach.x) * 0.5) <= cx;
-            // Каскад к боковому входу — предпочитаем сторону входа.
             if (Math.abs(approach.x - leave.x) > 8) preferLeft = approach.x <= cx;
         }
         var clearX = preferLeft ? (hit.x - pad - stagger - lane * 4) : (hit.x + hit.w + pad + stagger + lane * 4);
@@ -701,10 +662,6 @@
         return Math.max(10, Math.min(svgW - 10, clearX));
     }
 
-    /**
-     * Каскад сплиттер→сплиттер: короткий вынос с портов + обход кросса/карточек сбоку,
-     * без прямой «прострельной» линии через панель кросса.
-     */
     function buildSplitterChainPath(srcPt, tgtPt, srcOrient, tgtOrient, srcMirrored, tgtMirrored, pathOpts) {
         if (!srcPt || !tgtPt) return '';
         pathOpts = pathOpts || {};
@@ -775,7 +732,6 @@
             }
         }
 
-        // Вынос/подход не должны стартовать внутри препятствия.
         if (hit) {
             var gap = 12;
             if (leave.y > hit.y - 2 && leave.y < hit.y + hit.h + 2) {
@@ -857,7 +813,6 @@
         var seed = String(splitterId || 'sp') + ':' + (kind || 'out') + ':' + (outputIndex != null ? outputIndex : 'in');
         var hash = stableHash01(seed);
         var lane = outputIndex != null ? outputIndex : 0;
-        // Сторона обхода — от кабеля, а не от половины карточки (иначе правые порты → левый кабель идут «не туда»).
         var preferLeft = fiberIsLeft != null
             ? !!fiberIsLeft
             : (portX != null && boxCx != null ? portX <= boxCx : hash < 0.5);
@@ -903,7 +858,6 @@
         };
     }
 
-    /** Дорожки под верхним кабелем, чтобы волокна не сливались у бейджей. */
     function buildTopCableSplitterApproachMap(entries) {
         var assignFn = getAssignTopApproachYs();
         if (!assignFn || !entries || !entries.length) return new Map();
@@ -914,12 +868,10 @@
             }
         });
         if (maxFy == null) return new Map();
-        // База чуть ниже кабеля; полосы уходят вверх к волокнам (как у кросса).
         var baseApproachY = maxFy + 22 + Math.max(0, entries.length - 1) * 10;
         return assignFn(entries, baseApproachY);
     }
 
-    /** Дорожки у бокового кабеля: пакуем в зазор кабель↔сплиттер, не уезжая в корпус. */
     function buildSideCableSplitterApproachMap(entries, isLeft) {
         var assignFn = getAssignSideApproachXs();
         if (!assignFn || !entries || !entries.length) return new Map();
@@ -930,7 +882,6 @@
             }
         });
         if (baseFx == null) return new Map();
-        // База ближе к кабелю; паковщик разводит полосы В сторону сплиттера.
         var baseApproachX = isLeft
             ? (baseFx + 26)
             : (baseFx - 26);
@@ -1422,7 +1373,6 @@
                     rec.inputFiberNumber = root.fiberNumber;
                     rec.inputFiber = { cableId: root.cableId, fiberNumber: root.fiberNumber };
                 }
-                // Родитель найден: не затираем вход ребёнка, даже если у родителя input ещё не synced
                 return true;
             }
         }
@@ -1466,7 +1416,6 @@
             normalizeRecord(rec, idx);
         });
         if (!list.length) return;
-        // Один топологический проход вместо O(S²) (passes = list.length)
         var parentOf = Object.create(null);
         list.forEach(function (rec) {
             var outs = rec.outputConnections || [];
@@ -1776,7 +1725,6 @@
             if (!hostObj) return;
             migrateMapSplitterToHost(sp, hostObj);
             if (typeof global.removeSplitterHostConnection === 'function') {
-                /* keep splitterConnections */
             }
             try {
                 if (global.myMap && sp.geometry) global.myMap.geoObjects.remove(sp);
@@ -1839,7 +1787,6 @@
         var connLabelBorder = isDark ? '#334155' : '#dee2e6';
         var linksHtml = '<g class="fiber-scheme-splitter-links" fill="none">';
         var cardsHtml = '';
-        // Дорожки подхода: верхний кабель (Y) и боковые кабели (X) — для обеих ориентаций.
         var topApproachEntries = [];
         var leftApproachEntries = [];
         var rightApproachEntries = [];
@@ -2082,8 +2029,6 @@
                     var cascadeInputOnly = false;
                     if (typeof global.getEmbeddedSplitterInputSource === 'function') {
                         var inSrcCheck = global.getEmbeddedSplitterInputSource(hostObj, rec);
-                        // Каскад parent-out → child-in: линия к feeder-волокну не нужна,
-                        // соединение рисуется отдельно как chain-link.
                         if (inSrcCheck && inSrcCheck.type === 'splitter') cascadeInputOnly = true;
                     }
                     if (!cascadeInputOnly) {

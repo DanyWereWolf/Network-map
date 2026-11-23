@@ -1,6 +1,3 @@
-/**
- * Подсветка статусов Zabbix на placemark (кольцо severity / OK).
- */
 (function(global) {
     'use strict';
 
@@ -42,7 +39,6 @@
 
     function applyHint(obj) {
         if (!obj || !obj.options) return;
-        // Описание при наведении — кастомная карточка (#cursorIndicator), не нативный hint Яндекса
         try {
             obj.options.set({ hasHint: false });
         } catch (eOpt) {}
@@ -196,7 +192,6 @@
             }
             setStatusesFromPayload(res.body);
         }).catch(function() {
-            /* сеть — оставляем прошлый статус */
         }).then(function() {
             inFlight = false;
         });

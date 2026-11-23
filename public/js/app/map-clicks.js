@@ -1,6 +1,3 @@
-/**
- * Клики и движение мыши по карте в режиме редактирования.
- */
 function validateFiberCableLayEndpoint(endpointObj) {
     if (typeof allowOltAsFiberCableEndpoint === 'function' && !allowOltAsFiberCableEndpoint(endpointObj)) return false;
     if (typeof validatePendingOltPortCableEndpoint === 'function' && !validatePendingOltPortCableEndpoint(endpointObj)) return false;
@@ -179,13 +176,11 @@ function handleMapClick(e) {
         return;
     }
 
-    // Размещение объекта важнее открытия карточки кабеля
     if (objectPlacementMode) {
         if (Date.now() < placementPanBlockClickUntil) {
             return;
         }
         if (placeObjectAtCoords(coords)) {
-            /* saveData и syncSendOp выполняются в createObject */
         }
         return;
     }
@@ -209,8 +204,8 @@ function handleMapClick(e) {
         handleSplitterFiberRoutingClick(coords);
         return;
     }
-    
-    if (fiberRoutingMode && fiberRoutingData) {
+
+        if (fiberRoutingMode && fiberRoutingData) {
         if (Date.now() < placementPanBlockClickUntil) return;
         handleFiberRoutingClick(coords);
         return;
@@ -465,8 +460,8 @@ function handleMapClick(e) {
         }
         return;
     }
-    
-    } finally {
+
+        } finally {
         try { syncMapPanLockForEditTools(); } catch (eLock) {}
     }
 }
@@ -488,8 +483,8 @@ function handleMapMouseMove(e) {
             }
         }
     } catch (err) {}
-    
-    const mapCoords = e.get('coords');
+
+        const mapCoords = e.get('coords');
     if (mapCoords && window.syncIsConnected && typeof window.syncSendCursor === 'function') {
         window.syncSendCursor(mapCoords);
     }
@@ -573,8 +568,8 @@ function handleMapMouseMove(e) {
             updateSplitterFiberPreviewWithCursor(previewCoords);
         });
     }
-    
-    if (radioBridgeRoutingMode && radioBridgeRoutingData && mapCoords) {
+
+        if (radioBridgeRoutingMode && radioBridgeRoutingData && mapCoords) {
         if (mapMouseMoveRafId != null) cancelAnimationFrame(mapMouseMoveRafId);
         var rbCoords = mapCoords;
         mapMouseMoveRafId = requestAnimationFrame(function() {

@@ -1,14 +1,9 @@
-/**
- * Зоны карты (ранее «регионы»): полигоны, подсчёт объектов внутри, скрытие зоны и содержимого.
- * type: 'zone' (legacy: 'region').
- */
 (function (global) {
     var DEFAULT_FILL = '#3b82f6';
     var DEFAULT_STROKE = '#2563eb';
     var DEFAULT_FILL_OPACITY = 0.22;
     var REGION_Z_INDEX = 1;
     var REGION_LABEL_Z_INDEX = 3;
-    // Cache: getHiddenRegions used to re-scan all objects on every object check → O(n²) in applyMapFilter.
     var _hiddenRegionsCache = null;
     var _hiddenRegionsCacheToken = null;
     var _hiddenRegionsCacheGen = 0;
@@ -63,7 +58,6 @@
     }
 
     function regionLabelCharFactor(text) {
-        // Кириллица в DM Sans шире латиницы — прежние 0.58 давали обрезку по краям.
         return /[а-яёА-ЯЁ]/.test(text) ? 0.68 : 0.56;
     }
 
@@ -78,7 +72,6 @@
         return raw.slice(0, budget).replace(/\s+$/, '') + ellipsis;
     }
 
-    /** SVG-иконка подписи — тот же подход, что у курсоров коллег (default#image, без HTML). */
     function buildRegionNameIcon(name, fillColor, strokeColor, layout) {
         layout = layout || {};
         var fullText = layout.text != null ? layout.text : ((name && String(name).trim()) ? String(name).trim() : 'Зона');
@@ -501,7 +494,6 @@
             fontSize = Math.max(9, Math.floor(innerMax / (text.length * charFactor)));
         }
 
-        // Ширина бейджа — по укороченному тексту, но не шире зоны.
         var fitted = fitRegionLabelText(text, fontSize, innerMax);
         var totalWidth = Math.min(boxCap, Math.ceil(fitted.length * fontSize * regionLabelCharFactor(fitted)) + padX);
 

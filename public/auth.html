@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <script>
         (function(){try{if((navigator.userAgent||'').indexOf('VolsmapAndroid')>=0)document.documentElement.classList.add('volsmap-android-app');}catch(e){}})();
-    </script>
+</script>
     <meta name="author" content="Карта оптической сети">
     <meta name="copyright" content="Copyright (c) 2024–2026 Карта оптической сети. Все права защищены.">
     <meta name="description" content="Вход в программу «Карта оптической сети» для работы с оптической сетью на volsmap.ru.">
@@ -24,7 +24,7 @@
                 document.documentElement.setAttribute('data-theme', theme);
             } catch (e) {}
         })();
-    </script>
+</script>
     <script>
         (function(){
             var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
@@ -36,14 +36,14 @@
                 document.head.appendChild(s);
             });
         })();
-    </script>
+</script>
     <link rel="stylesheet" href="css/auth.css">
     <link rel="stylesheet" href="css/scrollbars.css">
     <link rel="stylesheet" href="css/android-app.css">
     <link rel="stylesheet" href="css/cookie-consent.css">
     <link rel="stylesheet" href="css/maintenance-notice.css">
     <link rel="stylesheet" href="css/support-chat.css">
-    <!-- Защита от копирования -->
+    
     <script>
         document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
         document.addEventListener('keydown', function(e) {
@@ -52,14 +52,14 @@
             }
         });
         document.addEventListener('dragstart', function(e) { e.preventDefault(); return false; });
-    </script>
+</script>
     <style>
         body { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
         input, textarea { -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; }
-    </style>
+</style>
 </head>
 <body class="auth-page">
-    <!-- Plexus / AI-style фон: узлы и связи -->
+    
     <div class="auth-bg landing-bg" aria-hidden="true">
         <div class="auth-bg-gradient landing-bg-gradient"></div>
         <div class="landing-bg-grid"></div>
@@ -86,7 +86,7 @@
                 <p class="auth-subtitle" id="authPageSubtitle">Программа для работы с оптической сетью на&nbsp;volsmap.ru</p>
             </div>
 
-            <!-- Форма входа -->
+            
             <form id="loginForm" class="auth-form active">
                 <h2 class="visually-hidden">Вход</h2>
                 
@@ -150,7 +150,7 @@
                 </div>
             </form>
 
-            <!-- Форма регистрации -->
+            
             <form id="registerForm" class="auth-form">
                 <h2 class="visually-hidden">Создание организации</h2>
 
@@ -284,7 +284,7 @@
                 </div>
             </form>
 
-            <!-- Повторная отправка письма подтверждения -->
+            
             <form id="resendVerifyForm" class="auth-form">
                 <h2 class="visually-hidden">Подтверждение e-mail</h2>
                 <p class="hint">Укажите e-mail из регистрации или имя пользователя — мы отправим новую ссылку для подтверждения. Проверьте также папку «Спам».</p>
@@ -312,7 +312,7 @@
                 </div>
             </form>
 
-            <!-- Восстановление пароля: запрос ссылки -->
+            
             <form id="forgotPasswordForm" class="auth-form">
                 <h2 class="visually-hidden">Восстановление пароля</h2>
                 <p class="hint">Укажите <strong>e-mail из регистрации</strong> или имя пользователя. Если письмо не приходит, проверьте папку «Спам» или обратитесь к администратору организации — у учётной записи должен быть привязан e-mail.</p>
@@ -340,7 +340,7 @@
                 </div>
             </form>
 
-            <!-- Восстановление пароля: новый пароль по ссылке -->
+            
             <form id="resetPasswordForm" class="auth-form">
                 <h2 class="visually-hidden">Новый пароль</h2>
                 <p class="hint" id="resetPasswordHint">Задайте новый пароль для вашей учётной записи.</p>
@@ -387,7 +387,7 @@
                 </div>
             </form>
 
-            <!-- Второй шаг входа: код 2FA организации -->
+            
             <form id="totpForm" class="auth-form auth-totp-form">
                 <h2 class="visually-hidden">Двухфакторная аутентификация</h2>
                 <p class="hint" id="totpOrgHint">Введите 6-значный код из приложения-аутентификатора вашей организации.</p>
@@ -441,6 +441,6 @@
             })
             .catch(function() {});
     })();
-    </script>
+</script>
 </body>
 </html>

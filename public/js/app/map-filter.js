@@ -1,6 +1,3 @@
-/**
- * Фильтр объектов на карте, expert zoom.
- */
 var MAP_FILTER_INPUT_IDS = [
     'mapFilterNode', 'mapFilterNodeAggregationOnly', 'mapFilterCross', 'mapFilterSleeve',
     'mapFilterSupport', 'mapFilterAttachment', 'mapFilterManhole', 'mapFilterSignalPost', 'mapFilterCabinet', 'mapFilterOlt', 'mapFilterSplitter',
@@ -170,8 +167,6 @@ function getMapFilterState() {
     };
 }
 
-// «Vols expert» style: при сильном отдалении скрываются подписи и объекты.
-// Пороги настраиваются во вкладке «Настройки» → «Масштаб».
 var LOD_DEFAULT_LABELS = 16;
 var LOD_DEFAULT_OBJECTS = 16;
 var LOD_DEFAULT_REGIONS = 10;
@@ -210,7 +205,6 @@ function normalizeLodThresholds(raw) {
     var objects = clampLodValue(raw && raw.objects, 8, 20, LOD_DEFAULT_OBJECTS);
     var labels = clampLodValue(raw && raw.labels, 8, 20, LOD_DEFAULT_LABELS);
     var regions = clampLodValue(raw && raw.regions, 5, 16, LOD_DEFAULT_REGIONS);
-    // Подписи не раньше объектов: иначе подпись висела бы без объекта.
     if (labels < objects) labels = objects;
     return { labels: labels, objects: objects, regions: regions };
 }
@@ -271,7 +265,6 @@ function setLodThresholds(partial, options) {
     });
     _lodThresholds = next;
     if (options.persist !== false) persistLodThresholds(next, { syncServer: !!options.syncServer });
-    // Обратная совместимость для кода, читающего константы как переменные.
     EXPERT_ZOOM_HIDE_LABELS_BELOW = next.labels;
     EXPERT_ZOOM_HIDE_OBJECTS_BELOW = next.objects;
     EXPERT_ZOOM_HIDE_REGIONS_BELOW = next.regions;
@@ -301,7 +294,6 @@ function applyLodThresholdsFromServer(raw, options) {
     else setLodThresholds(_lodThresholds, { persist: false });
 })();
 
-/** @deprecated use getLodThresholds().labels — оставляем как var для совместимости */
 var EXPERT_ZOOM_HIDE_LABELS_BELOW = _lodThresholds.labels;
 var EXPERT_ZOOM_HIDE_OBJECTS_BELOW = _lodThresholds.objects;
 var EXPERT_ZOOM_HIDE_REGIONS_BELOW = _lodThresholds.regions;
@@ -473,7 +465,6 @@ function getExpertZoomFlags() {
     var hideObjects = typeof zoom === 'number' && zoom < thr.objects;
     var hideLabels = typeof zoom === 'number' && zoom < thr.labels;
     var labelsByDensity = false;
-    // Тысячи HTML-подписей в окне карты убивают FPS: при превышении лимита показываем только иконки.
     if (!hideLabels && !hideObjects && !window._mapPdfExportCaptureActive &&
         typeof MapPerf !== 'undefined' && MapPerf.isLabelDensityExceeded &&
         MapPerf.shouldUseVirtualization && MapPerf.shouldUseVirtualization()) {
@@ -588,15 +579,12 @@ function applyLowZoomMapUpdate() {
 function regionZoomLabelRebuildNeeded(oldZoom, newZoom) {
     if (typeof oldZoom !== 'number' || typeof newZoom !== 'number') return false;
     var regionsBelow = getLodThresholds().regions;
-    // LOD: зоны скрылись/появились
     if ((oldZoom >= regionsBelow && newZoom < regionsBelow) ||
         (oldZoom < regionsBelow && newZoom >= regionsBelow)) return true;
-    // Пока зоны видимы — пересчитать размер подписи на каждом целом шаге зума
     if (newZoom < regionsBelow && oldZoom < regionsBelow) return false;
     return Math.floor(oldZoom) !== Math.floor(newZoom);
 }
 
-/** Вернуть visible у кроссов/узлов после expert-zoom hide (опция переживает remove/add). */
 function restoreExternallyManagedObjectVisibility(filter, zoomFlags) {
     if (!myMap || !Array.isArray(objects)) return;
     zoomFlags = zoomFlags || getExpertZoomFlags();
@@ -640,8 +628,6 @@ function applyMapViewportUpdate() {
     if (typeof refreshCrossNodeViewportDisplay === 'function') {
         try { refreshCrossNodeViewportDisplay(); } catch (eCrossNode) {}
     }
-    // На больших картах zoom-in идёт через viewport-update без полного applyMapFilter —
-    // нужно явно снять visible:false, выставленный при expert-zoom hide.
     try { restoreExternallyManagedObjectVisibility(filter, zoomFlags); } catch (eRest) {}
     try { applyGroupPlacemarkFilterVisibility(filter, zoomFlags); } catch (eGrp) {}
     applyConnectionLinesVisibility();
@@ -692,7 +678,6 @@ function isMapFilterObjVisible(obj, filter, hiddenRegions) {
     return true;
 }
 
-/** Инкрементально выставить visibility одному объекту (create path, без полного O(n) applyMapFilter). */
 function applyMapFilterForObject(obj) {
     if (window._mapPdfExportCaptureActive) return;
     if (!obj || !obj.properties || !myMap) return;
@@ -745,8 +730,6 @@ function ensureObjectLabelOnMap(obj) {
     if (hideObjects) return;
     var type = obj.properties.get('type');
     if (type === 'cross' || type === 'node') {
-        // Подписи одиночных кроссов/узлов возвращает updateCross/NodeDisplay;
-        // для групп отдельные label не нужны.
         if (typeof crossGroupPlacemarkByKey !== 'undefined' || typeof nodeGroupPlacemarkByKey !== 'undefined') {
             try {
                 var gk = typeof groupKey === 'function' && obj.geometry ? groupKey(obj.geometry.getCoordinates()) : null;
@@ -781,7 +764,6 @@ function applyMapFilter() {
     mapFilter = filter;
     var useVirtual = typeof MapPerf !== 'undefined' && MapPerf.shouldUseVirtualization();
     if (typeof updateMapFilterBadge === 'function') updateMapFilterBadge();
-    // One scan for hidden regions — previously each object re-scanned all objects (O(n²)).
     if (window.MapRegions && MapRegions.invalidateHiddenRegionsCache) {
         try { MapRegions.invalidateHiddenRegionsCache(); } catch (eInv) {}
     }

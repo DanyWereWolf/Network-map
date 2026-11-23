@@ -1,7 +1,3 @@
-/**
- * Подпись / проверка бессрочных лицензий Portable (Ed25519).
- * Приватный ключ только на SaaS; в Portable — публичный.
- */
 'use strict';
 
 const crypto = require('crypto');

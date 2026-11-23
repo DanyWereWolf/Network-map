@@ -81,7 +81,8 @@ npm run api
 
 | Команда | Описание |
 |---------|----------|
-| `npm run api` | Сервер API + WebSocket + статика |
+| `npm run api` | Сервер API + WebSocket + статика (dev: читаемый `public/`) |
+| `npm start` / `npm run api:prod` | Прод-старт: обфускация при необходимости + раздача `dist/` |
 | `npm run sync` | Только WebSocket (`server/server.js`) |
 | `npm run check` | Проверка синтаксиса JS |
 | `npm run verify` | `check` + `lint` |

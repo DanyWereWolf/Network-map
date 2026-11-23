@@ -1,4 +1,3 @@
-/** Справочник для узла сети (шасси/маршрутизаторы и т.п., не OLT/ONU). */
 var NODE_CATALOG_DEFAULT = {
     'MikroTik': ['hEX', 'hAP', 'RB750', 'CCR'],
     'Ruijie': ['S6750-H36C', 'S6730-H48X6C'],
@@ -18,7 +17,6 @@ var NODE_CATALOG_DEFAULT = {
     'ZTE': ['ZXR10']
 };
 
-/** Справочник только для OLT. */
 var OLT_CATALOG_DEFAULT = {
     'Huawei': ['MA5608T', 'MA5683T', 'MA5800-X7'],
     'ZTE': ['C300', 'C320', 'C600'],
@@ -30,7 +28,6 @@ var OLT_CATALOG_DEFAULT = {
     'Nokia': ['7360 ISAM FX']
 };
 
-/** Справочник только для ONU. */
 var ONU_CATALOG_DEFAULT = {
     'Huawei': ['HG8145X6', 'HG8245Q2', 'HG8310M'],
     'ZTE': ['F601', 'F660', 'F670', 'F680'],
@@ -53,7 +50,6 @@ var ONU_CATALOG_DEFAULT = {
     'Cambium': ['WAP']
 };
 
-/** Полный старый справочник (только для миграции со старых сохранений). */
 var DEVICE_CATALOG_DEFAULT = {
     'Huawei': ['MA5608', 'MA5683T', 'HG8145', 'HG8245'],
     'ZTE': ['C300', 'C320', 'F660', 'F670'],
@@ -76,7 +72,6 @@ var DEVICE_CATALOG_DEFAULT = {
     'Cambium': ['WAP']
 };
 
-/** Справочник только для камер (отдельно от OLT/ONU/узла). */
 var CAMERA_CATALOG_DEFAULT = {
     'Hikvision': ['DS-2CD2143G2-I', 'DS-2CD2T47G2-L', 'DS-2DE2A404IW-DE3'],
     'Dahua': ['IPC-HFW2431S-S', 'IPC-HFW2231T-ZS', 'IPC-HDBW3441R-ZAS'],
@@ -86,7 +81,6 @@ var CAMERA_CATALOG_DEFAULT = {
     'Trassir': ['TR-D2141IR3']
 };
 
-/** Справочник Wi‑Fi радиомостов (P2P / P2MP). */
 var RADIO_BRIDGE_CATALOG_DEFAULT = {
     'Ubiquiti': ['NanoStation M5', 'NanoBeam M5', 'PowerBeam M5', 'LiteBeam M5', 'airFiber 5X HD'],
     'MikroTik': ['SXTsq 5 ac', 'Disc Lite5 ac', 'LHG 5', 'NetMetal ac²'],
@@ -98,7 +92,6 @@ var RADIO_BRIDGE_CATALOG_DEFAULT = {
     'SNR': ['SNR-WB-5M', 'SNR-WB-5D']
 };
 
-/** Справочник типов оптического кабеля (марка и модель/маркировка). */
 var CABLE_CATALOG_DEFAULT = {
     'SNR': ['ОКЛК-01', 'ОКЛК-02', 'ОКЛК-03', 'ОКГТ-А-4', 'ОКГТ-А-8', 'ОКГТ-А-12', 'ОКГТ-А-24', 'ОКГТ-А-48'],
     'Incab': ['ОКГТ-А-4', 'ОКГТ-А-8', 'ОКГТ-А-12', 'ОКГТ-А-24', 'ОКГТ-А-48', 'ОКГТ-А-96'],
@@ -109,7 +102,6 @@ var CABLE_CATALOG_DEFAULT = {
     'General Cable': ['Lo-Soft', 'Standard']
 };
 
-/** Справочник ящиков / шкафов / боксов на карте. */
 var CABINET_CATALOG_DEFAULT = {
     'SNR': ['ШУН-4', 'ШУН-8', 'ШУН-12', 'БУОС-5', 'БУОК-2', 'ШУО-145', 'ШТК-19-9U'],
     'Eltex': ['УББ-4', 'УББ-8', 'УО-1', 'ШТК-19'],
@@ -121,7 +113,6 @@ var CABINET_CATALOG_DEFAULT = {
     'Generic': ['Настенный бокс', 'Уличный шкаф', 'Бокс на опоре', 'Колодец связи']
 };
 
-/** Справочник только для коммутаторов в узле (отдельно от узла/OLT/ONU). */
 var SWITCH_CATALOG_DEFAULT = {
     'MikroTik': ['CRS326-24G-2S+', 'CSS326-24G-2S+', 'CRS312-4C+8XG', 'CRS354-48G-4S+2Q+'],
     'TP-Link': ['TL-SG1024DE', 'TL-SG3428', 'TL-SG3428X'],
@@ -132,7 +123,6 @@ var SWITCH_CATALOG_DEFAULT = {
     'Huawei': ['S5735-L24T4S-A1', 'S6730-H48X6C']
 };
 
-/** Встроенные типы муфт: id, подпись в списке, макс. волокон (0 — без лимита). */
 var SLEEVE_TYPES_BUILTIN = [
     { id: 'SNR-FOSC-04', label: 'SNR-FOSC-04 (4 волокна)', maxFibers: 4 },
     { id: 'SNR-FOSC-X', label: 'SNR-FOSC-X (компактная)', maxFibers: 12 },
@@ -166,7 +156,6 @@ var SLEEVE_TYPES_BUILTIN = [
     { id: 'custom', label: 'Пользовательская (вручную на карте)', maxFibers: 0 }
 ];
 
-/** Встроенные типы кроссов: id, подпись в списке, портов по умолчанию. */
 var CROSS_TYPES_BUILTIN = [
     { id: 'SNR-ODF-W4', label: 'SNR-ODF-W4 (4 порта)', defaultPorts: 4 },
     { id: 'SNR-ODF-W8', label: 'SNR-ODF-W8 (8 портов)', defaultPorts: 8 },
@@ -182,16 +171,11 @@ var CROSS_TYPES_BUILTIN = [
     { id: 'custom', label: 'Пользовательский (вручную на карте)', defaultPorts: 24 }
 ];
 
-/** Дополнительные типы муфт из справочника: { id, label, maxFibers }. */
 var customSleeveTypes = [];
-/** Скрытые встроенные типы муфт (удалены из списка, но остаются на уже созданных объектах). */
 var hiddenBuiltinSleeveTypes = [];
-/** Дополнительные типы кроссов из справочника: { id, label, defaultPorts }. */
 var customCrossTypes = [];
-/** Скрытые встроенные типы кроссов. */
 var hiddenBuiltinCrossTypes = [];
 
-/** Встроенные типы сплайс-кассет: id, подпись, макс. волокон (0 — без лимита). */
 var SPLICE_CASSETTE_TYPES_BUILTIN = [
     { id: 'SC-12', label: 'Сплайс-кассета 12F', maxFibers: 12 },
     { id: 'SC-24', label: 'Сплайс-кассета 24F', maxFibers: 24 },
@@ -211,9 +195,7 @@ var SPLICE_CASSETTE_TYPES_BUILTIN = [
     { id: 'custom', label: 'Пользовательская (вручную)', maxFibers: 0 }
 ];
 
-/** Дополнительные типы сплайс-кассет из справочника. */
 var customSpliceCassetteTypes = [];
-/** Скрытые встроенные типы сплайс-кассет. */
 var hiddenBuiltinSpliceCassetteTypes = [];
 
 function normalizeSleeveTypeId(id) {
@@ -715,9 +697,7 @@ var cabinetDeviceCatalog = {};
 var switchDeviceCatalog = {};
 var cableDeviceCatalog = {};
 var sfpDeviceCatalog = {};
-/** sfpModelParams['manufacturer||model'] = { type, speed, role, ... }. */
 var sfpModelParams = {};
-/** Разделы справочника, явно загруженные из сохранения (не подставлять заводские списки повторно). */
 var _deviceCatalogWasPersisted = {};
 
 function resetDeviceCatalogPersistedFlags() {
@@ -731,18 +711,12 @@ function markDeviceCatalogPersisted(kind) {
 function wasDeviceCatalogPersisted(kind) {
     return !!_deviceCatalogWasPersisted[kind];
 }
-/** switchModelDefaultPorts[manufacturer][model] = число портов по умолчанию при добавлении коммутатора. */
 var switchModelDefaultPorts = {};
-/** radioBridgeModelDefaultPorts[manufacturer][model] = число Ethernet-портов по умолчанию при добавлении радиомоста. */
 var radioBridgeModelDefaultPorts = {};
-/** switchModelPortTypes[manufacturer][model] = массив типов портов (по одному на порт). */
 var switchModelPortTypes = {};
-/** oltModelDefaultPorts[manufacturer][model] = число PON-портов по умолчанию. */
 var oltModelDefaultPorts = {};
-/** oltModelPortTypes[manufacturer][model] = массив типов PON-портов. */
 var oltModelPortTypes = {};
 
-/** Тип порта RJ45 по умолчанию при добавлении коммутатора. */
 var SWITCH_PORT_DEFAULT_KIND = 'RJ45 1000Base-T (Gigabit, порт G)';
 
 var SWITCH_PORT_KIND_OPTIONS = [
@@ -778,7 +752,6 @@ var SWITCH_PORT_KIND_OPTIONS = [
     'Uplink/stack'
 ];
 
-/** Старые короткие подписи → актуальные из справочника (для сохранённых моделей). */
 var SWITCH_PORT_LEGACY_LABELS = {
     'RJ45 10/100': 'RJ45 100Base-T (Fast Ethernet, порт F)',
     'RJ45 10/100/1000': SWITCH_PORT_DEFAULT_KIND,
@@ -807,7 +780,6 @@ var SWITCH_PORT_LEGACY_LABELS = {
     'FC': 'FC (Fibre Channel, 2–128G)',
     'FC (Fibre Channel)': 'FC (Fibre Channel, 2–128G)'
 };
-/** cableModelFiberSettings[manufacturer][model] = { fiberCount, fiberPalette }. */
 var cableModelFiberSettings = {};
 
 var LAY_CABLE_MFR_KEY = 'networkMap_layCableManufacturer';
@@ -903,7 +875,7 @@ function getStoredDeviceCatalogTab() {
     try {
         var t = sessionStorage.getItem(DEVICE_CATALOG_TAB_STORAGE_KEY);
         if (t && DEVICE_CATALOG_ALLOWED_TABS[t]) return t;
-    } catch (e) { /* ignore */ }
+    } catch (e) {  }
     return 'switch';
 }
 
@@ -912,7 +884,7 @@ function storeDeviceCatalogTab(tab) {
         if (tab && DEVICE_CATALOG_ALLOWED_TABS[tab]) {
             sessionStorage.setItem(DEVICE_CATALOG_TAB_STORAGE_KEY, tab);
         }
-    } catch (e) { /* ignore */ }
+    } catch (e) {  }
 }
 
 function expandDeviceCatalogTabGroupForTab(tab) {
@@ -1101,7 +1073,6 @@ function applyDeviceCatalogSearchFilter() {
     }
 }
 
-/** Слияние старого справочника «узла» в коммутаторы (узел сети = коммутатор). */
 function mergeNodeCatalogIntoSwitch() {
     var changed = false;
     Object.keys(nodeDeviceCatalog || {}).forEach(function(mfr) {
@@ -1450,7 +1421,6 @@ function isSwitchPortComboType(portTypeLabel) {
     return portTypeLabel.trim().indexOf('Комбо') === 0;
 }
 
-/** Медный кабель: RJ45 и комбо RJ45/SFP (в один момент — либо медь, либо оптика). */
 function isSwitchPortCopperCapable(portTypeLabel) {
     if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
     var L = portTypeLabel.trim();
@@ -2124,7 +2094,6 @@ function openCableCatalogPaletteEditor(manufacturer, model, fiberCountOverride) 
 }
 
 var CUSTOM_DEVICE_OPTIONS_STORAGE_KEY = 'networkmap_customDeviceOptions';
-/** Блокирует запись в localStorage и на сервер во время загрузки (иначе дефолты затирают данные организации). */
 var _deviceCatalogHydrationDepth = 0;
 
 function getDeviceCatalogStorageKey() {
@@ -4024,7 +3993,6 @@ function setupAccordions() {
         });
     });
 
-    // При запуске все секции свёрнуты (открываются только по клику / онбордингу).
     document.querySelectorAll('.accordion-section.active').forEach(function(section) {
         section.classList.remove('active');
     });
@@ -4058,7 +4026,7 @@ function openDeviceCatalogModal() {
                 window.initPanelPlexusCanvases(modal);
             }
             if (searchInp) {
-                try { searchInp.focus(); } catch (e) { /* ignore */ }
+                try { searchInp.focus(); } catch (e) {  }
             }
         });
     }
@@ -4077,7 +4045,6 @@ function closeDeviceCatalogModal() {
     }
 }
 
-/** Оптические параметры моделей OLT (не заменяет OLT_CATALOG_DEFAULT со строками). */
 var OLT_OPTICAL_DEFAULT_TEMPLATE = {
     ponPorts: 8,
     uplinkSfpPorts: 2,
@@ -4173,7 +4140,6 @@ var OLT_OPTICAL_PARAMS_DEFAULT = {
     ]
 };
 
-/** Пользовательские переопределения оптики моделей OLT: { "Mfr||Model": { ...params } }. */
 var oltModelOpticalParams = {};
 
 function oltOpticalKey(manufacturer, model) {
@@ -4531,7 +4497,6 @@ function sfpModelHasCustomParams(manufacturer, model) {
     }
 }
 
-/** Все модули SFP плоским списком { manufacturer, model, ...params }. */
 function listSfpCatalogEntries(filterFn) {
     var out = [];
     var catalog = sfpDeviceCatalog && Object.keys(sfpDeviceCatalog).length
@@ -4548,7 +4513,6 @@ function listSfpCatalogEntries(filterFn) {
     return out;
 }
 
-/** SFP, подходящие под вид PON-порта (GPON / XGS-PON / …). */
 function listSfpForPonKind(ponKind) {
     var kind = String(ponKind || 'GPON').trim();
     return listSfpCatalogEntries(function(row) {
@@ -4559,7 +4523,6 @@ function listSfpForPonKind(ponKind) {
     });
 }
 
-/** SFP для uplink OLT (SFP / SFP+). */
 function listSfpForOltUplink(portType) {
     return listSfpCatalogEntries(function(row) {
         if (row.role === 'pon') return false;

@@ -1,6 +1,3 @@
-/**
- * Хранение аватаров пользователей в data/avatars/{userId}.{ext}
- */
 const fs = require('fs');
 const path = require('path');
 

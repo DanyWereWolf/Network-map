@@ -1,6 +1,3 @@
-/**
- * Волокна кабеля: usedFibers, группы, связанные кабели.
- */
 function removeCableFromUsedFibers(obj, cableUniqueId) {
     let usedFibersData = obj.properties.get('usedFibers');
     if (usedFibersData && usedFibersData[cableUniqueId]) {
@@ -22,7 +19,6 @@ function getFiberCount(arg) {
     return 0;
 }
 
-/** Кабели через опору или крепление: концы маршрута (from/to) или промежуточная точка (points / геометрия). */
 function getCablesThroughSupport(supportObj) {
     if (!supportObj || !supportObj.geometry) return [];
     var supportCoords = supportObj.geometry.getCoordinates();
@@ -85,7 +81,6 @@ function getConnectedCables(obj) {
         if (Array.isArray(typed) && typed.length) scan = typed;
     }
     var direct = scan.filter(buildCableConnectionMatcher(obj));
-    // Стабильная сортировка по uniqueId кабеля, чтобы порядок не «прыгал» при обновлении (опоры, муфта, кросс)
     direct = direct.slice().sort(function(a, b) {
         var idA = a.properties && a.properties.get('uniqueId');
         var idB = b.properties && b.properties.get('uniqueId');
@@ -123,7 +118,6 @@ function getOtherEndOfCable(cable, oneEnd) {
 function crossHasFiberForConnection(crossObj, cableId, fiberNumber) {
     if (!crossObj || !cableId || fiberNumber == null) return false;
     var cable = null;
-    // Быстрый путь: кабель по uid из индекса + та же проверка подключения, что в getConnectedCables.
     if (typeof MapPerf !== 'undefined' && MapPerf.getByUid) {
         var byUid = MapPerf.getByUid(cableId, 'cable');
         if (byUid && byUid.properties.get('uniqueId') === cableId &&
@@ -205,7 +199,6 @@ function isFiberConnectedAtHost(hostObj, cableId, fiberNumber) {
     return isFiberSplicedAtHost(hostObj, cableId, fiberNumber);
 }
 
-/** Индекс fiberConnections хоста: O(1) проверка сращения и соседей. */
 function buildFiberConnIndex(fiberConnections) {
     var splicedKeys = new Set();
     var connByFiber = new Map();
@@ -301,10 +294,6 @@ function getTotalUsedPortsInCross(crossObj) {
     return usedPortNums.size;
 }
 
-/**
- * Сколько волокон реально занято в муфте/кассете: сращивания, явная отметка «исп.»,
- * выводы на узел/OLT/ONU/МК/РМ/сплиттер. Просто пришедший кабель без связей не считается занятым.
- */
 function getTotalUsedFibersInSleeve(sleeveObj) {
     if (!sleeveObj || !sleeveObj.properties || !isSleeveLikeHostType(sleeveObj.properties.get('type'))) {
         return 0;

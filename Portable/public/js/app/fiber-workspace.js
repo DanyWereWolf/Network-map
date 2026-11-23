@@ -1,6 +1,3 @@
-/**
- * Рабочее место волокон: SVG-схема, sidebar, раскладка.
- */
 function updateCableVisualization(opts) {
     const groups = getCableGroups();
 
@@ -49,11 +46,11 @@ function updateCableVisualization(opts) {
                 hasBalloon: false,
                 hasHint: false
             });
-            
-            label.properties.set('type', 'cableLabel');
+
+                        label.properties.set('type', 'cableLabel');
             label.properties.set('cables', group.cables);
-            
-            objects.push(label);
+
+                        objects.push(label);
             mapPerfRegister(label);
             mapGeoAdd(label);
         }
@@ -61,7 +58,6 @@ function updateCableVisualization(opts) {
     if (!(opts && opts.skipFilter) && typeof applyMapFilter === 'function') applyMapFilter();
 }
 
-/** Лёгкое обновление подписей «N каб.» после удаления — без полной пересборки и applyMapFilter. */
 function pruneCableLabelsAfterCableRemoval() {
     if (!objects || !objects.length) return;
     var toRemove = [];
@@ -103,17 +99,16 @@ function pruneCableLabelsAfterCableRemoval() {
 window.pruneCableLabelsAfterCableRemoval = pruneCableLabelsAfterCableRemoval;
 
 function getUsedFibers(obj, cableUniqueId) {
-    
-    let usedFibersData = obj.properties.get('usedFibers');
+
+        let usedFibersData = obj.properties.get('usedFibers');
     if (!usedFibersData) {
         usedFibersData = {};
         obj.properties.set('usedFibers', usedFibersData);
     }
-    
-    return usedFibersData[cableUniqueId] || [];
+
+        return usedFibersData[cableUniqueId] || [];
 }
 
-/** Занятое волокно: проходная, сращена или выведена на узел/OLT/ONU и т.д. — нельзя выбрать для нового сращивания. */
 function computeFiberOccupancy(cableUniqueId, fiberNumber, cableData, fiberConnections, nodeConnections, oltConnections, onuConnections, mediaConverterConnections, splitterConnections, hostObj) {
     const fiberKey = cableUniqueId + '-' + fiberNumber;
     if (hostObj && hostObj._fiberOccCache && hostObj._fiberOccCache.has(fiberKey)) {
@@ -185,8 +180,8 @@ function setUsedFibers(obj, cableUniqueId, fiberNumbers) {
         usedFibersData = {};
         obj.properties.set('usedFibers', usedFibersData);
     }
-    
-    usedFibersData[cableUniqueId] = fiberNumbers;
+
+        usedFibersData[cableUniqueId] = fiberNumbers;
     obj.properties.set('usedFibers', usedFibersData);
     saveData();
 }
@@ -636,7 +631,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     sleeveObj._fiberOltRealCache = new Map();
     sleeveObj._splicedGroupCache = new Map();
     sleeveObj._fiberOccCache = new Map();
-    // Один полный проход по сплиттерам на открытие вместо скана на каждое волокно
     if (typeof invalidateSplitterOutputAtHostIndex === 'function') invalidateSplitterOutputAtHostIndex();
 
     let fiberLabels = sleeveObj.properties.get('fiberLabels');
@@ -684,8 +678,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const isFromSleeve = fromObj === sleeveObj;
         const otherEnd = getOtherEndOfCable(cable, sleeveObj);
         const isFromOlt = otherEnd && otherEnd.properties && otherEnd.properties.get('type') === 'olt';
-        
-        return {
+
+                return {
             cable,
             cableUniqueId,
             cableType,
@@ -709,8 +703,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             isFromOlt
         };
     });
-    
-    const maxFibers = Math.max(...cablesData.map(function(c) { return c.fibers.length; }), 1);
+
+        const maxFibers = Math.max(...cablesData.map(function(c) { return c.fibers.length; }), 1);
     const cableSidePartition = partitionCablesBySchemeSide(sleeveObj, cablesData);
     const schemeLayoutBase = getFiberSchemeLayoutOpts(cablesData, maxFibers);
     const sidePad = schemeLayoutBase.sidePad;
@@ -822,7 +816,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         html += '<line class="fiber-scheme-content-boundary" x1="0" y1="' + layoutHeight + '" x2="' + svgWidth + '" y2="' + layoutHeight + '" stroke="' + boundStroke + '" stroke-width="1" stroke-dasharray="6 5" pointer-events="none"/>';
     }
 
-    // Кросс рисуем до волокон — волокна/бейджи остаются поверх панели.
     if (crossPanelLayout && fiberPorts) {
         html += buildCrossSchemePanelSvg(crossPanelLayout, fiberPorts, schemeLayout.fiberPositions, schemeLayout.blocks, isDark, badgeH, isEditMode, sleeveObj, nodeR, badgeW, fiberLabels, svgWidth, layoutHeight);
     }
@@ -861,7 +854,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     const badgeStroke = isDark ? '#60a5fa' : '#2563eb';
     const badgeFill = isDark ? '#1e3a5f' : '#eff6ff';
 
-    // Дорожки сращиваний верх↔бок: без них все уходят на одну горизонталь/вертикаль и сливаются со сплиттером.
     const spliceTopApproachEntries = [];
     const spliceLeftApproachEntries = [];
     const spliceRightApproachEntries = [];
@@ -1116,7 +1108,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                 ? (', порт ' + fiberPorts[fiberLabelKey])
                 : '';
             const occHint = isGponFeeder ? ' (GPON feeder)' : (oltBlocksSpliceScheme ? ' (приход OLT)' : (occ.isOltCableEnd ? ' (кабель от OLT)' : (occ.hasDirectOltConnection ? ' (от OLT)' : (isOccupied ? ' (занято)' : ''))));
-            // Источник сигнала — после первого paint (hydrateFiberSchemeSignalLabels)
             var signalSrcPlain = '';
             const spliceDescHint = spliceDescOnScheme ? (' · ' + spliceDescOnScheme) : '';
             const tooltipText = escapeHtml(fiber.name + labelText + statusText + portText + occHint + spliceDescHint + ' · ПКМ: трассировка');
@@ -1127,7 +1118,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
             const directLabelAttr = directLabel ? ' data-direct-label="' + escapeHtml(directLabel) + '"' : '';
             const signalSrcAttr = '';
             const hasCustomHoverLabel = !!(connLabelOnLine || directLabel);
-            // pointer: сварка в edit и ПКМ-трассировка в любом режиме
             const schemeCursor = (isEditMode && !isSpliceSelectable && isOccupied)
                 ? 'cursor: not-allowed;'
                 : 'cursor: pointer;';
@@ -1210,7 +1200,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
                         (conn.to.cableId === cableData.cableUniqueId && conn.to.fiberNumber === fiber.number);
                 });
             const directLabel = !isConnected ? (fiberLabels[cableData.cableUniqueId + '-' + fiber.number] || '').trim() : '';
-            // Подписи источника сигнала — после первого paint
             if (!directLabel) return;
             var freeLayout = fiberSchemeSignalLabelLayout(pos, directLabel, '', badgeW, badgeH, nodeR);
             html += buildFiberSchemeSignalLabelSvg(fiberKey, freeLayout, null, null, freeLabelColors, { showArrow: false });
@@ -1323,7 +1312,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
 
     html += '<div class="fiber-ws-panel fiber-ws-panel-table" data-panel="table" data-lazy-panel="table"><div class="fiber-ws-lazy-placeholder">Загрузка таблицы…</div></div>';
 
-    // Ниже — билдер таблицы (не выполняется при open; вызывается при открытии вкладки)
     function buildLazyTablePanelHtml() {
     var ph = '';
     ph += '<div class="fiber-table-toolbar"><label class="fiber-table-filter-label"><span class="fiber-table-filter-lbl">Фильтр</span><select id="fiber-table-filter" class="form-select fiber-table-filter-select"><option value="all">Все волокна</option><option value="connected">Сращённые</option><option value="free">Свободные</option><option value="used">Занятые</option></select></label><input type="search" id="fiber-table-search" class="form-input fiber-table-search" placeholder="Поиск по № волокна…" autocomplete="off"></div>';
@@ -1429,7 +1417,6 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         const hasRbConnection = !!rbConnection && !!rbConnection.radioBridgeId;
         const hasAnyOutConnection = occ.hasAnyOutConnection;
         var oltReachKey = (getObjectUniqueId(sleeveObj) || '') + ':' + fiberConnKey(cableData.cableUniqueId, fiber.number);
-        // Reachability до OLT дорогая (обход сети) — только для свободных волокон в режиме правки
         var needOltReach = isEditMode && !isConnected && !isUsed && !hasAnyOutConnection;
         if (needOltReach) {
             if (!Object.prototype.hasOwnProperty.call(oltReachCache, oltReachKey)) {
@@ -1775,7 +1762,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     ph += '</tbody></table>';
     ph += '</div></div>';
     return ph;
-    } // end buildLazyTablePanelHtml
+    } 
 
     window._fiberWsLazy = {
         filled: {},
@@ -1783,7 +1770,7 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
         buildTable: buildLazyTablePanelHtml
     };
 
-    html += '</div>'; // fiber-ws-panels
+    html += '</div>'; 
     html += '</main></div>';
     if (isEditMode) {
         html += buildFiberSchemeSplitterPanelsHtml();
@@ -1809,8 +1796,8 @@ function renderFiberConnectionsVisualization(sleeveObj, connectedCables) {
     html += '</div>';
 
     html += `<div id="fiber-connections-data" data-sleeve-obj-id="${sleeveObj.properties.get('uniqueId') || 'temp'}" style="display: none;"></div>`;
-    
-    return html;
+
+        return html;
 }
 
 function captureFiberWorkspaceUiState() {
@@ -1902,28 +1889,23 @@ function fitFiberWorkspaceScrollAreas(opts) {
     var activePanel = root.querySelector('.fiber-ws-panel.active');
     var activeName = activePanel ? activePanel.getAttribute('data-panel') : '';
 
-    // Схема
     var schemeViewport = root.querySelector('#fiber-scheme-viewport, .fiber-scheme-viewport');
     if (activeName === 'scheme' && schemeViewport) {
         fillToBottom(schemeViewport);
         if (opts.fitScheme !== false && typeof window._fiberSchemeFitToViewport === 'function') {
-            // после задания высоты — вписать SVG, если не влезает
             requestAnimationFrame(function() {
                 try { window._fiberSchemeFitToViewport({ onlyIfOverflow: true }); } catch (eFit) {}
             });
         }
     } else if (schemeViewport && activeName && activeName !== 'scheme') {
-        // на других вкладках не держим инлайн-высоту схемы
         clearFit(schemeViewport);
     }
 
-    // Таблица
     var tablePanel = root.querySelector('.fiber-ws-panel[data-panel="table"].active');
     var tableWrap = tablePanel && tablePanel.querySelector('.cross-fiber-table-wrap');
     if (tableWrap) fillToBottom(tableWrap);
     else clearFit(root.querySelector('.fiber-ws-panel[data-panel="table"] .cross-fiber-table-wrap'));
 
-    // Соединения
     var connPanel = root.querySelector('.fiber-ws-panel[data-panel="connections"].active');
     var listWrap = connPanel && connPanel.querySelector('.fiber-connections-list-wrap');
     if (listWrap) fillToBottom(listWrap);
@@ -2012,7 +1994,6 @@ function setupFiberWorkspaceUI() {
             fitFiberWorkspaceScrollAreas();
             requestAnimationFrame(function() {
                 fitFiberWorkspaceScrollAreas();
-                // после lazy-HTML layout может дорисоваться чуть позже
                 setTimeout(fitFiberWorkspaceScrollAreas, 50);
             });
         });
@@ -2034,19 +2015,19 @@ function setupFiberWorkspaceUI() {
 
 function toggleFiberUsage(cableUniqueId, fiberNumber) {
     if (!currentModalObject) return;
-    
-    const usedFibers = getUsedFibers(currentModalObject, cableUniqueId);
+
+        const usedFibers = getUsedFibers(currentModalObject, cableUniqueId);
     const index = usedFibers.indexOf(fiberNumber);
-    
-    if (index > -1) {
-        
-        usedFibers.splice(index, 1);
+
+        if (index > -1) {
+
+                usedFibers.splice(index, 1);
     } else {
-        
-        usedFibers.push(fiberNumber);
+
+                usedFibers.push(fiberNumber);
     }
-    
-    setUsedFibers(currentModalObject, cableUniqueId, usedFibers);
+
+        setUsedFibers(currentModalObject, cableUniqueId, usedFibers);
 
     refreshObjectModal(currentModalObject);
 }
@@ -2084,7 +2065,6 @@ function lookupSchemeFiberColor(schemeBlocks, cableId, fiberNumber) {
     return fiber ? fiber.color : null;
 }
 
-/** Бейджи и номера волокон — верхний слой поверх линий кросса/сращений. */
 function buildFiberSchemePortNumsSvg(schemeBlocks, fiberPositions, opts) {
     opts = opts || {};
     var badgeW = opts.badgeW || 22;
@@ -2130,7 +2110,6 @@ function buildFiberSchemePortNumsSvg(schemeBlocks, fiberPositions, opts) {
 
 function ensureFiberSchemePortNumsOnTop(svg) {
     if (!svg) return;
-    // Порты с hit-area — выше линий/hit линий, чтобы клик по волокну не перехватывался.
     var ports = svg.querySelector('.fiber-scheme-ports');
     if (ports) svg.appendChild(ports);
     var nums = svg.querySelector('.fiber-scheme-port-nums');
@@ -2161,7 +2140,6 @@ function getFiberSchemeCableLabelColors(isDark) {
 }
 
 function getFiberSchemeFiberLabelColors(isDark, kind) {
-    // kind: 'signal' | 'free' — единый callout-язык для схемы
     if (isDark) {
         return {
             bg: 'rgba(15, 23, 42, 0.94)',
@@ -2184,7 +2162,6 @@ function getFiberSchemeFiberLabelColors(isDark, kind) {
     };
 }
 
-/** Оценка ширины текста для подписей схемы (px). */
 function estimateFiberSchemeTextWidth(text, fontSize) {
     var s = text == null ? '' : String(text);
     var fs = fontSize || 10;
@@ -2216,7 +2193,6 @@ function fitFiberSchemeTextToWidth(text, maxPx, fontSize) {
     return s.slice(0, lo).trimEnd() + ell;
 }
 
-/** Перенос текста подписи схемы по ширине (массив строк). */
 function wrapFiberSchemeTextToWidth(text, maxPx, fontSize, maxLines) {
     var s = text == null ? '' : String(text).trim().replace(/\s+/g, ' ');
     if (!s) return [];
@@ -2290,10 +2266,6 @@ function buildFiberSchemeTextLinesSvg(className, lines, x, startY, lineHeight, t
     return html;
 }
 
-/**
- * Единый header кабеля: название + (в edit) кнопки стороны/зеркала в одной панели.
- */
-/** Размеры header-панели кабеля (с учётом переноса текста). */
 function measureFiberSchemeCableHeaderSize(opts) {
     opts = opts || {};
     var titleRaw = opts.title ? String(opts.title).trim() : '';
@@ -2443,7 +2415,6 @@ function buildFiberSchemeCableLabelSvg(opts) {
     return buildFiberSchemeCableHeaderSvg(opts);
 }
 
-/** Раскладка callout-подписи волокна. */
 function fiberSchemeSignalLabelLayout(pos, placeText, detailText, badgeW, badgeH, nodeR) {
     badgeW = badgeW || 22;
     badgeH = badgeH || 16;
@@ -2533,7 +2504,6 @@ function buildFiberSchemeFreeLabelSvg(fiberKey, layout, textEsc, colors) {
     return buildFiberSchemeSignalLabelSvg(fiberKey, freeLayout, labelText, '', colors, { showArrow: false });
 }
 
-/** После первого paint: подписи/tooltip источника сигнала (дорогие обходы сети). */
 function hydrateFiberSchemeSignalLabels(sleeveObj) {
     var payload = sleeveObj && sleeveObj._fiberSignalHydrate;
     if (!payload || !payload.schemeBlocks || !payload.fiberPositions) return;
@@ -2642,9 +2612,6 @@ function scheduleFiberSchemeSignalHydration(sleeveObj) {
 window.hydrateFiberSchemeSignalLabels = hydrateFiberSchemeSignalLabels;
 window.scheduleFiberSchemeSignalHydration = scheduleFiberSchemeSignalHydration;
 
-/**
- * Компактная callout-подпись на середине линии (сращивание / кросс-линк).
- */
 function buildFiberSchemeCalloutChipSvg(opts) {
     opts = opts || {};
     var raw = opts.text ? String(opts.text).trim() : '';
@@ -2675,7 +2642,6 @@ function getFiberSchemeSignalLabelColors(isDark) {
     return getFiberSchemeFiberLabelColors(!!isDark, 'signal');
 }
 
-/** Раскладка подписи свободного волокна относительно точки подключения. */
 function fiberSchemeFiberLabelLayout(pos, text, badgeW, badgeH, nodeR) {
     badgeW = badgeW || 22;
     badgeH = badgeH || 16;
@@ -2704,7 +2670,6 @@ function fiberSchemeFiberLabelLayout(pos, text, badgeW, badgeH, nodeR) {
     return { tx: tx, ty: ty, tw: tw, th: th, textX: textX, textY: ty + 13, anchor: anchor };
 }
 
-/** Центр цветной точки волокна — снаружи бейджа, после номера (со стороны схемы). */
 function fiberSchemeFiberNodePoint(pos, badgeW, badgeH, nodeR) {
     badgeW = badgeW || 22;
     badgeH = badgeH || 16;
@@ -2719,7 +2684,6 @@ function fiberSchemeFiberNodePoint(pos, badgeW, badgeH, nodeR) {
     return { x: pos.x - badgeW / 2 - nodeR - gap, y: pos.y };
 }
 
-/** Область наведения на порт волокна: бейдж + цветная точка + отступ. */
 function fiberSchemePortHitBounds(pos, badgeW, badgeH, nodeR) {
     badgeW = badgeW || 22;
     badgeH = badgeH || 16;
@@ -2748,7 +2712,6 @@ function fiberSchemePortHitBounds(pos, badgeW, badgeH, nodeR) {
     };
 }
 
-/** Позиция номера волокна — смещён к кабелю, точка идёт после номера. */
 function fiberSchemeFiberNumLabelPoint(pos, badgeW) {
     badgeW = badgeW || 22;
     if (pos && pos.isTop) {
@@ -2760,14 +2723,12 @@ function fiberSchemeFiberNumLabelPoint(pos, badgeW) {
     return { x: pos.x + 5, y: pos.y + 3, anchor: 'middle' };
 }
 
-/** Точка выхода линии соединения (к кроссу или к другому волокну) — с цветной точки волокна. */
 function fiberSchemeFiberLinkAnchor(pos, badgeW, badgeH, nodeR) {
     return fiberSchemeFiberNodePoint(pos, badgeW, badgeH, nodeR);
 }
 
 var FIBER_SPLICE_STRIPE_LEN = 9;
 
-/** Цвет линии соединения в схеме кросса/муфты (контраст на светлом/тёмном фоне). */
 function fiberSchemeLinkStrokeColor(fiberColor, isDark) {
     if (!fiberColor) return isDark ? '#fbbf24' : '#d97706';
     const c = String(fiberColor).toUpperCase();
@@ -2789,7 +2750,6 @@ function fiberSchemeFilletRadius(adx, ady, dist) {
     return r;
 }
 
-/** Стабильный 0..1 из строки (для «случайных» отступов волокон без прыжков при перерисовке). */
 function fiberSchemeStableHash01(seed) {
     var s = String(seed == null ? '' : seed);
     var h = 2166136261;
@@ -2800,7 +2760,6 @@ function fiberSchemeStableHash01(seed) {
     return (h >>> 0) / 4294967296;
 }
 
-/** Ортогональный путь по точкам. smooth — плавные скругления углов; sharp — жёсткие углы. */
 function buildFiberSchemeOrthogonalWaypointsPath(pts, pathStyle) {
     pathStyle = pathStyle || {};
     var sharp = !!pathStyle.sharp;
@@ -2858,7 +2817,6 @@ function buildFiberSchemeOrthogonalWaypointsPath(pts, pathStyle) {
     return parts.join(' ');
 }
 
-/** Простая Г-линия со скруглённым углом. cableApproachY/X — дорожки у верхнего/бокового кабеля. */
 function buildFiberSchemeElbowPath(x1, y1, x2, y2, opts) {
     opts = opts || {};
     var preferHV = opts.preferHV;
@@ -2869,7 +2827,6 @@ function buildFiberSchemeElbowPath(x1, y1, x2, y2, opts) {
     var ax = opts.cableApproachX;
     var pts;
     if (ay != null && !isNaN(ay)) {
-        // Верхний кабель: сначала вертикальный вынос до дорожки, потом горизонталь, потом к порту.
         var fiberAtStartY = opts.fiberAtStart != null ? !!opts.fiberAtStart : (y1 < y2);
         if (fiberAtStartY) {
             ay = Math.max(ay, y1 + 16);
@@ -2889,7 +2846,6 @@ function buildFiberSchemeElbowPath(x1, y1, x2, y2, opts) {
             ];
         }
     } else if (ax != null && !isNaN(ax)) {
-        // Боковой кабель: сначала горизонтальный вынос до дорожки, потом вертикаль, потом к порту.
         var fiberAtStartX = opts.fiberAtStart != null ? !!opts.fiberAtStart : true;
         if (fiberAtStartX) {
             pts = [
@@ -2948,8 +2904,6 @@ function routeNeedsAroundObstacle(x1, y1, x2, y2, obs, margin) {
     if (xInBand && ((y1 >= bottom && y2 <= top) || (y2 >= bottom && y1 <= top))) return true;
     if (yInBand && ((x1 >= right && x2 <= left) || (x2 >= right && x1 <= left))) return true;
 
-    // Вертикальный проход сквозь корпус: порт часто чуть внутри padded-box,
-    // а midpoint уезжает выше/ниже — классические проверки это пропускают.
     if (xInBand) {
         var yLo = Math.min(y1, y2);
         var yHi = Math.max(y1, y2);
@@ -2959,7 +2913,6 @@ function routeNeedsAroundObstacle(x1, y1, x2, y2, obs, margin) {
         }
     }
 
-    // Горизонтальный заход сбоку сквозь корпус (не короткое подключение к боковому порту).
     if (y1 >= top && y1 <= bottom) {
         if (x1 < left - 4 && x2 > left + 24) return true;
         if (x1 > right + 4 && x2 < right - 24) return true;
@@ -2969,7 +2922,6 @@ function routeNeedsAroundObstacle(x1, y1, x2, y2, obs, margin) {
         if (x2 > right + 4 && x1 < right - 24) return true;
     }
 
-    // Вертикальный заход сверху/снизу с уходом далеко вбок/внутрь.
     if (x1 >= left && x1 <= right) {
         if (y1 < top - 4 && y2 > top + 24) return true;
         if (y1 > bottom + 4 && y2 < bottom - 24) return true;
@@ -2982,10 +2934,6 @@ function routeNeedsAroundObstacle(x1, y1, x2, y2, obs, margin) {
     return false;
 }
 
-/**
- * Обход сплиттера схематичными Г/П-линиями (ортогонально, без лишних изгибов).
- * Возвращает SVG path или null, если обход не нужен.
- */
 function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
     opts = opts || {};
     if (!obstacles || !obstacles.length) return null;
@@ -3014,8 +2962,6 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
     var rim = 22;
 
     function sideOf(x, y) {
-        // Сначала явный бок: волокно справа/слева от корпуса (даже если его Y ниже bottom)
-        // иначе М2/боковой кабель ошибочно становится 'below' и уходит длинной петлёй.
         var sideSlack = 12;
         if (x < left - sideSlack) return 'left';
         if (x > right + sideSlack) return 'right';
@@ -3042,17 +2988,14 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
     var clearX = preferLeft ? (left - pad - staggerBase) : (right + pad + staggerBase);
     var clearY = preferAbove ? (top - pad - staggerBase * 0.6) : (bottom + pad + staggerBase * 0.6);
     var pts;
-    // Отступ под верхним кабелем, чтобы волокна не сливались на одной горизонтали у бейджей.
     var cableAy = opts.cableApproachY;
     var cableAx = opts.cableApproachX;
     if (cableAx != null && !isNaN(cableAx)) {
-        // Боковая дорожка: не делить один clearX — у каждого волокна свой коридор.
         clearX = cableAx;
     }
     function withCableApproachAbove(fiberX, fiberY, beforePts) {
         var ay = cableAy != null && !isNaN(cableAy) ? cableAy : (fiberY + 20 + lane * 8);
         ay = Math.max(fiberY + 16, ay);
-        // Не залезать обратно в корпус сплиттера.
         if (ay > top - 4 && ay < bottom + 4) ay = Math.min(ay, top - 12);
         if (ay <= fiberY + 8) ay = fiberY + 18 + lane * 6;
         var out = beforePts.slice();
@@ -3062,7 +3005,6 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
         return out;
     }
 
-    /** Коридор сбоку от корпуса — со стороны целевого волокна (не «предпочитаемой» стороны). */
     function clearXTowardSide(side) {
         if (side === 'right') {
             var cxR = (cableAx != null && !isNaN(cableAx)) ? cableAx : (right + pad + staggerBase);
@@ -3082,7 +3024,6 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
         return ay;
     }
 
-    // Схематичный обход: ортогональные Г/П + дорожка под верхним кабелем.
     if ((s1 === 'below' && s2 === 'above') || (s1 === 'above' && s2 === 'below')) {
         if (s1 === 'below') {
             var yLane = Math.max(y1, bottom) + stemStart;
@@ -3111,8 +3052,6 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
             { x: x2, y: y2 }
         ];
     } else if (s1 === 'above' && (s2 === 'left' || s2 === 'right')) {
-        // Верх → бок: вниз на дорожку, вбок МИМО корпуса, вертикаль к Y волокна, в бейдж.
-        // Раньше шла горизонталь x1→x2 на yOut и резала сплиттер / чужие волокна.
         var yTopSide = approachYFromTop(y1);
         var cxTopSide = clearXTowardSide(s2);
         pts = [
@@ -3134,7 +3073,6 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
         ];
     } else if (s1 === 'below' || s1 === 'above') {
         if (s1 === 'above') {
-            // above → inside/above: всё равно обходим clearX, не режем корпус горизонталью.
             var yOutFiber = approachYFromTop(y1);
             var cxAbove = clearX;
             if (x2 > right) cxAbove = clearXTowardSide('right');
@@ -3165,8 +3103,6 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
         }
     } else if (s1 === 'left' || s1 === 'right') {
         if (s2 === 'above') {
-            // Бок → верх: к коридору со своей стороны, вверх на дорожку под кабелем, к волокну.
-            // Не уходим под корпус (старый stem ниже bottom давал длинную петлю).
             var ySideTop = approachYFromTop(y2);
             var cxSideTop = clearXTowardSide(s1);
             pts = [
@@ -3192,7 +3128,6 @@ function buildFiberSchemeAroundObstaclesPath(x1, y1, x2, y2, obstacles, opts) {
                 { x: x2, y: y2 }
             ];
         } else {
-            // Бок → бок/inside: сначала свой clearX, чтобы не резать корпус.
             var cxSide = clearXTowardSide(s1);
             pts = [
                 { x: x1, y: y1 },
@@ -3218,7 +3153,6 @@ if (typeof window !== 'undefined') {
     window.routeNeedsAroundObstacle = routeNeedsAroundObstacle;
 }
 
-/** Плавный ортогональный путь с кубическими скруглениями углов. */
 function buildFiberSchemeBendAtPointPath(x1, y1, x2, y2, opts) {
     opts = opts || {};
     var bendStart = !!opts.bendStart;
@@ -3300,7 +3234,6 @@ function buildFiberSchemeBendAtPointPath(x1, y1, x2, y2, opts) {
     return 'M ' + x1 + ' ' + y1 + ' L ' + x2 + ' ' + y2;
 }
 
-/** Изогнутый отвод волокна: от магистрали кабеля S-образной кривой к порту волокна (виден веер при нескольких кабелях). */
 function buildFiberSchemeFanPath(block, pos, isLeft, nodeR, badgeW, isTop) {
     var badgeH = 16;
     var exitPt = fiberSchemeFiberNodePoint(pos, badgeW, badgeH, nodeR);
@@ -3480,7 +3413,6 @@ function avoidObstaclesForSplicePath(sx, y1, ex, y2, c1x, c1y, c2x, c2y, obstacl
     return { c1x: c1x, c1y: c1y, c2x: c2x, c2y: c2y };
 }
 
-/** Плавная кубическая кривая между портами волокон. При сращении в одном столбце — дуга к центру схемы. */
 function buildFiberSchemeConnectionPath(x1, y1, x2, y2, portHalf, opts) {
     opts = opts || {};
     const sameSide = opts.sameSide || Math.abs(x2 - x1) < 10;
@@ -3543,17 +3475,9 @@ function buildFiberSchemeConnectionPath(x1, y1, x2, y2, portHalf, opts) {
     return 'M ' + sx + ' ' + y1 + ' C ' + adjusted.c1x + ' ' + adjusted.c1y + ', ' + adjusted.c2x + ' ' + adjusted.c2y + ', ' + ex + ' ' + y2;
 }
 
-/** Вертикальный шаг «дорожек» подхода линий от верхнего кабеля к портам кросса. */
 var FIBER_SCHEME_TOP_CROSS_LANE_GAP = 10;
-/** Мин. горизонтальный сдвиг, при котором волокну нужна отдельная горизонтальная дорожка. */
 var FIBER_SCHEME_TOP_CROSS_MIN_DX = 12;
 
-/**
- * Назначает разным волокнам верхнего кабеля разный approachY,
- * чтобы горизонтальные сегменты перед изгибом вниз не наслаивались.
- * entries: [{ fiberKey, fx, px, fy? }]
- * @returns {Map<string, number>} fiberKey → approachY
- */
 function assignTopCrossLinkApproachYs(entries, baseApproachY, opts) {
     opts = opts || {};
     var laneGap = opts.laneGap != null ? opts.laneGap : FIBER_SCHEME_TOP_CROSS_LANE_GAP;
@@ -3582,7 +3506,6 @@ function assignTopCrossLinkApproachYs(entries, baseApproachY, opts) {
         });
     });
 
-    // По левому краю span — корректный greedy packing пересекающихся горизонталей.
     routed.sort(function(a, b) {
         if (a.x0 !== b.x0) return a.x0 - b.x0;
         if (a.px !== b.px) return a.px - b.px;
@@ -3626,12 +3549,6 @@ function assignTopCrossLinkApproachYs(entries, baseApproachY, opts) {
     return result;
 }
 
-/**
- * Дорожки подхода к боковому кабелю.
- * Каждому волокну — своя колонка (по порядку Y), даже если py≈fy:
- * иначе все схлопываются в одну X и идут прямой горизонталью в бейдж.
- * @returns {Map<string, number>} fiberKey → approachX
- */
 function assignSideSplitterApproachXs(entries, baseApproachX, opts) {
     opts = opts || {};
     var laneGap = opts.laneGap != null ? opts.laneGap : Math.max(12, FIBER_SCHEME_TOP_CROSS_LANE_GAP);
@@ -3671,7 +3588,6 @@ if (typeof window !== 'undefined') {
     window.assignSideSplitterApproachXs = assignSideSplitterApproachXs;
 }
 
-/** Сколько вертикального запаса нужно под дорожки подхода верхних волокон (для gap панели). */
 function estimateTopCrossLinkLanePad(fiberPorts, fiberPositions, crossPorts, hostObj) {
     if (!fiberPorts || !fiberPositions || !crossPorts) return 0;
     var assignments = buildCrossPortAssignments(fiberPorts, crossPorts, hostObj);
@@ -3686,7 +3602,6 @@ function estimateTopCrossLinkLanePad(fiberPorts, fiberPositions, crossPorts, hos
     return Math.min(160, (n - 1) * FIBER_SCHEME_TOP_CROSS_LANE_GAP + 8);
 }
 
-/** Собирает entries для assignTopCrossLinkApproachYs из assignments + позиций. */
 function collectTopCrossLinkApproachEntries(assignments, fiberPositions, getPortXY) {
     var entries = [];
     if (!assignments || !fiberPositions || typeof getPortXY !== 'function') return entries;
@@ -3709,7 +3624,6 @@ function collectTopCrossLinkApproachEntries(assignments, fiberPositions, getPort
     return entries;
 }
 
-/** Раскладка панели кросса с портами (по умолчанию под кабелями, позиция может быть сохранена). */
 function layoutCrossSchemePanel(svgWidth, crossPorts, cablesBottomY, opts) {
     opts = opts || {};
     const gap = opts.gap != null ? opts.gap : 18;
@@ -3739,7 +3653,6 @@ function layoutCrossSchemePanel(svgWidth, crossPorts, cablesBottomY, opts) {
     var panelX = opts.panelX != null ? opts.panelX : defaultX;
     var panelTop = opts.panelTop != null ? opts.panelTop : defaultTop;
     if (typeof clampFiberSchemeCrossPanelPos === 'function') {
-        // Allow placing above the default slot, but keep panel inside the SVG.
         var svgHHint = Math.max(cablesBottomY + gap + panelH + sidePad, opts.svgHeight || 0, panelTop + panelH + sidePad);
         var clamped = clampFiberSchemeCrossPanelPos(panelX, panelTop, panelW, panelH, svgWidth, svgHHint, sidePad);
         panelX = clamped.x;
@@ -3792,7 +3705,6 @@ function buildCrossPortAssignments(fiberPorts, crossPorts, hostObj) {
     return assignments;
 }
 
-/** Линия волокна к конкретному порту кросса: ортогонально к колонке порта, без размазывания по панели. */
 function buildCrossFiberPortLinkPath(fx, fy, px, py, opts) {
     opts = opts || {};
     var dx = px - fx;
@@ -3852,11 +3764,6 @@ function buildCrossFiberPortLinkPath(fx, fy, px, py, opts) {
     return parts.join(' ');
 }
 
-/**
- * Сплиттер → порт кросса: короткий ортогональный путь.
- * Обход корпуса только если прямой подъём/спуск шёл бы сквозь карточку.
- * opts: { approachY, orientation, mirrored, avoidBox, laneIndex, panelTop }
- */
 function buildSplitterToCrossPortPath(srcX, srcY, portX, portY, opts) {
     opts = opts || {};
     var orient = opts.orientation || 'horizontal';
@@ -3877,7 +3784,6 @@ function buildSplitterToCrossPortPath(srcX, srcY, portX, portY, opts) {
         return parts.join(' ');
     }
 
-    // Простая Г: вниз/вверх до дорожки → к колонке порта → в порт.
     function simpleElbow() {
         if (Math.abs(srcX - portX) < 2) {
             return finish([
@@ -3897,12 +3803,10 @@ function buildSplitterToCrossPortPath(srcX, srcY, portX, portY, opts) {
         var portsOnBottom = !mirrored;
         var goingDown = ay >= srcY - 2;
         var goingUp = ay <= srcY + 2;
-        // Порты смотрят на кросс — прямая Г без боковых петель.
         var facesCross = (portsOnBottom && goingDown) || (!portsOnBottom && goingUp);
         if (facesCross || !box) {
             return simpleElbow();
         }
-        // Кросс с другой стороны: вдоль края портов → короткий вынос сбоку → к дорожке (без петли вниз).
         var leftClear = box.x - 10 - laneStagger;
         var rightClear = box.x + box.w + 10 + laneStagger;
         var clearX = Math.abs(portX - rightClear) <= Math.abs(portX - leftClear) ? rightClear : leftClear;
@@ -3918,13 +3822,11 @@ function buildSplitterToCrossPortPath(srcX, srcY, portX, portY, opts) {
         ]);
     }
 
-    // Горизонтальный сплиттер: короткий вынос от бокового порта, затем к дорожке кросса.
     var leaveRight = !mirrored;
     var riserX = leaveRight
         ? (box ? box.x + box.w + 10 + laneStagger : srcX + 14)
         : (box ? box.x - 10 - laneStagger : srcX - 14);
     if (box && ay > box.y - 4 && ay < box.y + box.h + 4) {
-        // Дорожка пересекает корпус по Y — ведём сбоку мимо, без лишней петли вниз.
         ay = ay < box.cy ? Math.min(ay, box.y - 10) : Math.max(ay, box.y + box.h + 10);
         ay = Math.min(ay, panelTop - 6);
     }
@@ -4012,7 +3914,6 @@ function updateSchemeCrossPanelBoundary(svg) {
     line.setAttribute('y2', String(y));
 }
 
-/** Пересчёт линий волокно→порт и сплиттер→порт после сдвига панели кросса. */
 function updateSchemeCrossPanelLinkPaths(svg, hostObj) {
     if (!svg) return;
     var root = svg.querySelector('.fiber-scheme-cross');
@@ -4100,7 +4001,6 @@ function updateSchemeCrossPanelLinkPaths(svg, hostObj) {
             if (g) {
                 var spOff = /translate\(\s*([-\d.]+)(?:[,\s]+|\s+)([-\d.]+)\s*\)/.exec(g.getAttribute('transform') || '');
                 if (spOff) {
-                    // splitter transform is top-left; schemeX/Y is center — prefer stored center
                 }
             }
             updateSchemeSplitterCrossPortLinks(svg, rec.id, cx, cy, rec.splitRatio, hostObj);
@@ -4121,7 +4021,6 @@ function buildSplitterCrossPortLinksHtml(hostObj, crossLayout, isDark, isEditMod
     var crossApproachY = crossLayout.panelTop - 10;
     var buf = '';
 
-    // Дорожки подхода перед кроссом (как у кабелей сверху) — изгиб снаружи панели.
     var approachEntries = [];
     list.forEach(function(rec) {
         if (!rec) return;
@@ -4183,7 +4082,6 @@ function buildSplitterCrossPortLinksHtml(hostObj, crossLayout, isDark, isEditMod
         var approachY = approachMap.has(entry.fiberKey)
             ? approachMap.get(entry.fiberKey)
             : crossApproachY;
-        // Не опускать дорожку внутрь корпуса — иначе горизонталь режет сплиттер.
         if (srcPt.y > approachY - 8) {
             approachY = Math.min(crossLayout.panelTop - 8, Math.max(avoidBox.y - 12, crossApproachY));
         }
@@ -4340,7 +4238,6 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
         : new Map();
     const shortTitle = title.length > 28 ? title.substring(0, 27) + '…' : title;
     let html = '<g class="fiber-scheme-cross" data-panel-x="' + crossLayout.panelX + '" data-panel-top="' + crossLayout.panelTop + '" data-panel-w="' + crossLayout.panelW + '" data-panel-h="' + crossLayout.panelH + '">';
-    // Корпус → линии → порты: линии видны поверх панели и доходят до портов.
     html += '<g class="fiber-scheme-cross-panel" transform="translate(0,0)">';
     html += '<rect class="fiber-scheme-cross-body" x="' + crossLayout.panelX + '" y="' + crossLayout.panelTop + '" width="' + crossLayout.panelW + '" height="' + crossLayout.panelH + '" rx="10" fill="' + bodyFill + '" stroke="' + bodyStroke + '" stroke-width="1.5"/>';
     html += '<rect class="fiber-scheme-cross-header" x="' + crossLayout.panelX + '" y="' + crossLayout.panelTop + '" width="' + crossLayout.panelW + '" height="22" rx="10" fill="url(#crossHeaderGrad)"/>';
@@ -4578,7 +4475,6 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
             ));
             var srcTh = hasDetail ? 32 : 22;
             var srcTx = portPos.x - srcTw / 2;
-            /* Над портом — не перекрывает нижний ряд портов кросса. */
             var srcTy = portPos.y - (ph / 2) - 8 - srcTh;
             var caretY = srcTy + srcTh;
             var cpRail = cpColors.rail || cpColors.accent || '#f97316';
@@ -4598,7 +4494,6 @@ function buildCrossSchemePanelSvg(crossLayout, fiberPorts, fiberPositions, schem
     return html;
 }
 
-/** Раскладка по образцу: слева/справа столбцы кабелей, сверху — в ширину; волокна веером к центру. */
 function truncateFiberSchemeCableText(text, maxChars) {
     if (!text) return '';
     var t = String(text).trim();
@@ -4722,7 +4617,6 @@ function layoutFiberSchemeReference(hostObj, cablesData, svgWidth, opts, sidePar
         if (frames.length) block.moduleFrames = frames;
     }
 
-    // Высоты top-header по тем же ширинам слотов, что и в addTopSide.
     var topHeaderMaxH = isEditMode ? 56 : 28;
     if (topCables.length) {
         var zoneWPre = svgWidth - sidePad * 2;
@@ -5579,7 +5473,6 @@ async function exportFiberSchemeToPdf(hostObj) {
             };
         }
         function isPdfLightFiberColor(rgb) {
-            // YIQ: светлые волокна (белый/жёлтый) — тёмная обводка и текст бейджа
             return ((rgb.r * 299) + (rgb.g * 587) + (rgb.b * 114)) / 1000 >= 180;
         }
         function drawPdfFiberSwatch(cx, cy, colorHex, hasRing) {
@@ -5643,7 +5536,6 @@ async function exportFiberSchemeToPdf(hostObj) {
                         }
                     }
                     if (!fit) {
-                        // жёстко обрезаем по символам
                         fit = '';
                         for (var ci = 0; ci < remaining.length; ci++) {
                             var t2 = fit + remaining.charAt(ci);
@@ -5705,7 +5597,6 @@ async function exportFiberSchemeToPdf(hostObj) {
             doc.setTextColor(30, 41, 59);
         }
 
-        // Страница 1: схема на весь лист + краткая подпись снизу
         var schemeFooterH = 14;
         doc.setFontSize(8);
         doc.setTextColor(30, 41, 59);
@@ -5726,7 +5617,6 @@ async function exportFiberSchemeToPdf(hostObj) {
         doc.setTextColor(100, 116, 139);
         doc.text(pdfText(statsLine + ' · ' + exportDate), schemeMargin, pageH - schemeMargin);
 
-        // Страница 2+ только если есть что перечислить; всё на одном потоке
         if (exportSplices.length || exportConnections.length || exportFreeFibers.lines.length) {
             startTextPage();
             writeLine(hostName + ' · ' + typeLabel, 11, 12);

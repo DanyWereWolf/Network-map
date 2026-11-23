@@ -8,6 +8,7 @@
   "publicSiteUrl": "https://volsmap.ru",
   "embedFrameAncestors": ["*"],
   "serveObfuscatedClient": false,
+  "buildClientOnStart": false,
   "freeMapObjectLimit": 20000,
   "maxConcurrentUsers": 4,
   "authRateLimitWindowMs": 900000,

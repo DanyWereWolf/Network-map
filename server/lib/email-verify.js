@@ -6,7 +6,6 @@ const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 function isEmailVerified(user) {
     if (!user) return false;
-    // Старые и созданные админом учётки без поля считаем подтверждёнными
     if (user.emailVerified === undefined || user.emailVerified === null) return true;
     return !!user.emailVerified;
 }

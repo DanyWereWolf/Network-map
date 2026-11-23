@@ -1,6 +1,3 @@
-/**
- * Модальное окно подтверждения (замена confirm).
- */
 (function() {
     var modal = null;
     var resolveFn = null;
@@ -61,7 +58,6 @@
         return !!(m && m.style.display && m.style.display !== 'none');
     }
 
-    /** dismissed — закрыто крестиком / Esc / кликом по фону (а не кнопкой «Отмена»). */
     function hide(cancelled, dismissed) {
         detachEscapeBlock();
         if (escapeHandler) {

@@ -1,4 +1,3 @@
-/** ВОЛС: вид линии на карте (цвет/толщина организации) и настраиваемые волокна. */
 (function(global) {
     var MAP_FIBER_COLOR = '#16a34a';
     var MAP_FIBER_WIDTH = 3;
@@ -11,7 +10,6 @@
     var LAY_MODULE_COUNT_KEY = 'networkMap_layModuleCount';
     var MODULE_SIZE_PRESETS = [4, 6, 8, 12, 16];
     var DEFAULT_FIBERS_PER_MODULE = 12;
-    /** Типовые многомодульные ВОЛС (модули × волокон в модуле), ёмкостью до 96. */
     var MODULAR_CABLE_PRESETS = [
         { id: '2x6', modules: 2, perModule: 6, label: '2×6' },
         { id: '2x12', modules: 2, perModule: 12, label: '2×12' },
@@ -48,7 +46,6 @@
     function isOpticalCableType(type) {
         if (!type || type === 'copper') return false;
         if (type === 'fiber' || type === 'fiberModular' || !!LEGACY_TYPE_COUNTS[type]) return true;
-        // Импорт NeD и т.п.: fiber32, fiber96…
         return /^fiber\d+$/.test(String(type));
     }
 
@@ -311,9 +308,6 @@
         }
     }
 
-    /**
-     * Org-wide стиль линии ВОЛС. applyAll — сразу ко всем кабелям на карте.
-     */
     function setOrgFiberMapStyle(color, width, opts) {
         opts = opts || {};
         if (color !== undefined && color !== null && color !== '') {
@@ -322,7 +316,6 @@
         if (width !== undefined && width !== null && width !== '') {
             MAP_FIBER_WIDTH = normalizeMapStrokeWidth(width);
         }
-        // Keep exported mirrors in sync for code that reads FiberCableConfig.MAP_FIBER_*
         if (global.FiberCableConfig) {
             global.FiberCableConfig.MAP_FIBER_COLOR = MAP_FIBER_COLOR;
             global.FiberCableConfig.MAP_FIBER_WIDTH = MAP_FIBER_WIDTH;
@@ -492,10 +485,6 @@
         return MODULE_TUBE_COLORS[Math.abs(moduleIndex || 0) % MODULE_TUBE_COLORS.length];
     }
 
-    /**
-     * Группирует волокна по модулям.
-     * @returns {{ moduleIndex:number, moduleNumber:number, color:string, fibers:array }[]}
-     */
     function groupFibersByModules(fibers, fibersPerModule) {
         var list = Array.isArray(fibers) ? fibers : [];
         var m = normalizeFibersPerModule(fibersPerModule);

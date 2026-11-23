@@ -1,6 +1,3 @@
-/**
- * Единый стеклянный вид для модальных окон: panel-glass + plexus при открытии.
- */
 (function () {
     var LITE_MODAL_IDS = {
         confirmModal: 1,

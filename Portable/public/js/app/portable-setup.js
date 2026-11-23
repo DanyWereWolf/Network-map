@@ -1,4 +1,3 @@
-/** Первичная настройка Portable: название организации и расположение карты. */
 (function() {
     var SETUP_MAP_DEFAULT = { center: [54.663609, 86.162243], zoom: 15 };
     var setupMapInstance = null;

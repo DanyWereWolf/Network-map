@@ -1,6 +1,3 @@
-/**
- * Группы кроссов/узлов на карте, подписи.
- */
 function getCableGroups() {
     const groups = new Map();
     var cableSource = objects;
@@ -8,13 +5,13 @@ function getCableGroups() {
         var typed = MapPerf.getObjectsByType('cable');
         if (Array.isArray(typed)) cableSource = typed;
     }
-    
-    cableSource.forEach(obj => {
+
+        cableSource.forEach(obj => {
         if (obj.properties && obj.properties.get('type') === 'cable') {
             const fromObj = obj.properties.get('from');
             const toObj = obj.properties.get('to');
-            
-            if (fromObj && toObj) {
+
+                        if (fromObj && toObj) {
                 var fromCoords, toCoords;
                 try {
                     fromCoords = fromObj.geometry && fromObj.geometry.getCoordinates();
@@ -26,10 +23,10 @@ function getCableGroups() {
                     if (Math.abs(a[0] - b[0]) > 0.000001) return a[0] - b[0];
                     return a[1] - b[1];
                 });
-                
-                const key = `${sorted[0][0].toFixed(8)},${sorted[0][1].toFixed(8)}|${sorted[1][0].toFixed(8)},${sorted[1][1].toFixed(8)}`;
-                
-                if (!groups.has(key)) {
+
+                                const key = `${sorted[0][0].toFixed(8)},${sorted[0][1].toFixed(8)}|${sorted[1][0].toFixed(8)},${sorted[1][1].toFixed(8)}`;
+
+                                if (!groups.has(key)) {
                     groups.set(key, {
                         from: fromObj,
                         to: toObj,
@@ -42,8 +39,8 @@ function getCableGroups() {
             }
         }
     });
-    
-    return groups;
+
+        return groups;
 }
 
 function getCrossGroups() {
@@ -68,7 +65,6 @@ function shouldUseViewportLimitedGroupDisplay(scopeMeta) {
 
 var _objectsMembership = null;
 
-/** Set из objects на текущий синхронный проход: проверка «объект ещё на карте» без objects.indexOf. */
 function isInObjectsArray(obj) {
     if (!Array.isArray(objects)) return false;
     var m = _objectsMembership;
@@ -128,7 +124,6 @@ function collectTypedObjectsNearGroupKeys(type, keys) {
     for (var ki = 0; ki < keys.length; ki++) keySet[keys[ki]] = true;
     function consider(obj) {
         if (!obj || !obj.properties || obj.properties.get('type') !== type) return;
-        // Spatial может ещё держать ссылку на уже удалённый объект — не возвращать его.
         if (!isInObjectsArray(obj)) return;
         if (typeof getObjectCabinetId === 'function' && getObjectCabinetId(obj)) return;
         var uid = obj.properties.get('uniqueId');
@@ -160,7 +155,6 @@ function collectTypedObjectsNearGroupKeys(type, keys) {
     }
     var needFallback = !usedSpatial || !out.length;
     if (!needFallback) {
-        // Spatial мог вернуть соседние объекты, но пропустить только что созданный на ключе.
         var coveredKeys = Object.create(null);
         for (var oi = 0; oi < out.length; oi++) {
             try {
@@ -220,7 +214,6 @@ function parseGroupDisplayScope(scope) {
     return { full: true, keys: null };
 }
 
-/** Ключи групп/синглтонов, сейчас показанных на карте (для инкрементального viewport refresh). */
 var _crossViewportShownKeys = typeof Set !== 'undefined' ? new Set() : null;
 var _nodeViewportShownKeys = typeof Set !== 'undefined' ? new Set() : null;
 
@@ -333,7 +326,6 @@ function updateCrossDisplay(scope) {
                 }
                 return;
             }
-            // options.visible переживает remove/add — после expert-zoom hide нужно явно вернуть
             var crossFilterOk = cross.properties.get('_mapFilterVisible') !== false;
             try { if (cross.options) cross.options.set('visible', crossFilterOk); } catch (eVis) {}
             myMap.geoObjects.add(cross);
@@ -526,7 +518,6 @@ function updateCrossDisplay(scope) {
             const oldKey = groupKey(oldCoords);
             const savedName = crossGroupNames.get(oldKey);
             var movedGroupObjects = [];
-            // Light path: только setCoordinates кабелей; полный updateConnectedCables — в idle.
             crosses.forEach(c => {
                 c.geometry.setCoordinates(newCoords);
                 const lbl = c.properties.get('label');
@@ -574,8 +565,8 @@ function updateCrossDisplay(scope) {
         crossGroupPlacemarkByKey.set(gKey, groupPlacemark);
         markCrossViewportKeyShown(gKey);
     });
-    
-    var crossesForCables = keysOnly || shouldUseViewportLimitedGroupDisplay(parsed) ? groupsToRender.reduce(function(acc, g) {
+
+        var crossesForCables = keysOnly || shouldUseViewportLimitedGroupDisplay(parsed) ? groupsToRender.reduce(function(acc, g) {
         return acc.concat(g.crosses);
     }, []) : objects.filter(function(obj) {
         return obj.properties && obj.properties.get('type') === 'cross';
@@ -656,7 +647,6 @@ function updateNodeDisplay(scope) {
                 }
                 return;
             }
-            // options.visible переживает remove/add — после expert-zoom hide нужно явно вернуть
             var nodeFilterOk = node.properties.get('_mapFilterVisible') !== false;
             try { if (node.options) node.options.set('visible', nodeFilterOk); } catch (eVis) {}
             myMap.geoObjects.add(node);
@@ -853,8 +843,8 @@ function updateNodeDisplay(scope) {
         nodeGroupPlacemarkByKey.set(nKey, groupPlacemark);
         markNodeViewportKeyShown(nKey);
     });
-    
-    var nodesForCables = keysOnly || shouldUseViewportLimitedGroupDisplay(parsed) ? groupsToRender.reduce(function(acc, g) {
+
+        var nodesForCables = keysOnly || shouldUseViewportLimitedGroupDisplay(parsed) ? groupsToRender.reduce(function(acc, g) {
         return acc.concat(g.nodes);
     }, []) : objects.filter(function(obj) {
         return obj.properties && obj.properties.get('type') === 'node';
@@ -915,7 +905,6 @@ function applyIncrementalCrossViewportRefresh() {
         detachCrossesAtGroupKey(diff.toRemove[ri]);
     }
     if (diff.toAdd.length) {
-        // skipCableUpdate: getCablesTouchingObject is O(n) per object — catastrophic on pan with 10k+.
         updateCrossDisplay({
             full: false,
             keys: diff.toAdd,
@@ -953,7 +942,6 @@ function refreshCrossNodeViewportDisplay() {
             refreshCrossNodeViewportDisplay();
             return;
         }
-        // Инкрементально: только ключи, вошедшие/ушедшие из viewport — без teardown уже видимых.
         applyIncrementalCrossViewportRefresh();
         applyIncrementalNodeViewportRefresh();
     }, 140);

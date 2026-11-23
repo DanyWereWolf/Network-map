@@ -1,6 +1,3 @@
-/**
- * Подписи волокон и сращиваний на схеме.
- */
 function resolveFiberConnectionLabel(conn, fiberLabels) {
     if (!conn) return '';
     if (conn.label) return String(conn.label);
@@ -13,7 +10,6 @@ function resolveFiberConnectionLabel(conn, fiberLabels) {
     return fromL || toL || '';
 }
 
-/** Перенос подписей с волокон на объекты сращиваний (старые данные). */
 function syncFiberConnectionLabelsFromLegacy(sleeveObj) {
     const fiberConnections = sleeveObj.properties.get('fiberConnections') || [];
     const fiberLabels = sleeveObj.properties.get('fiberLabels') || {};
@@ -84,7 +80,6 @@ function setSvgTitle(parent, text) {
     titleEl.textContent = trimmed;
 }
 
-/** Обновить DOM callout-чипа на середине линии (без нативного title). */
 function applyFiberSchemeCalloutChipDom(labelG, mid, labelText, extraClass) {
     if (!labelG || !mid) return;
     const trimmed = labelText ? String(labelText).trim() : '';
@@ -311,7 +306,6 @@ function updateFiberConnectionLabel(sleeveObj, connIndex, label) {
     }
 }
 
-/** Цвет/название волокна по кабелю и номеру. */
 function getFiberMetaForDesc(cableId, fiberNumber) {
     var n = parseInt(fiberNumber, 10);
     if (isNaN(n) || n < 1) return null;
@@ -322,7 +316,6 @@ function getFiberMetaForDesc(cableId, fiberNumber) {
             var hit = pal.find(function(f) { return f.number === num; });
             if (hit) return hit;
         }
-        // ITU-T порядок на случай, если FiberCableConfig ещё не загружен
         var base = [
             { name: 'Синий', color: '#0000FF' }, { name: 'Оранжевый', color: '#FF8C00' },
             { name: 'Зеленый', color: '#00FF00' }, { name: 'Коричневый', color: '#8B4513' },
@@ -356,11 +349,8 @@ function getFiberMetaForDesc(cableId, fiberNumber) {
         var fibers = getFiberColors(cable) || [];
         var found = fibers.find(function(f) { return f.number === n; });
         if (found && found.color) return found;
-        // Кабель есть, но палитра короче номера волокна (импорт / fiberCount) —
-        // всё равно показываем стандартный цвет по номеру, не серый.
         return standardMeta(n);
     }
-    // Кабель не найден (битая ссылка в fiberConnections) — цвет по номеру волокна
     return standardMeta(n);
 }
 
@@ -376,7 +366,6 @@ function defaultCableNameForFiberDesc(cableId, hostObj) {
     return cableId ? String(cableId).substring(0, 12) + '…' : 'Кабель';
 }
 
-/** Стороны сращивания с учётом perspective (с какого волокна смотреть). */
 function resolveFiberConnectionEnds(conn, opts) {
     opts = opts || {};
     if (!conn || !conn.from || !conn.to) return null;
@@ -401,10 +390,6 @@ function resolveFiberConnCableName(cableId, cableNameById, hostObj) {
     return defaultCableNameForFiberDesc(cableId, hostObj);
 }
 
-/**
- * Структурированное описание сращивания (UI / PDF):
- * стороны с цветом волокна, без текстовых имён цвета.
- */
 function buildFiberConnectionDescParts(conn, cableNameById, opts) {
     opts = opts || {};
     var ends = resolveFiberConnectionEnds(conn, opts);
@@ -433,11 +418,6 @@ function buildFiberConnectionDescParts(conn, cableNameById, opts) {
     };
 }
 
-/**
- * Текстовое описание сращивания (подсказки, plain):
- * «Кабель А В1 соединено с Кабель Б В4»
- * opts.includeColorNames — добавить «, цвет волокон В1(синий) с В4(красный)» для plain-текста.
- */
 function formatFiberConnectionDesc(conn, cableNameById, opts) {
     opts = opts || {};
     var parts = buildFiberConnectionDescParts(conn, cableNameById, opts);
@@ -477,10 +457,6 @@ function fiberDescSideHtml(cableName, fiberNumber, meta, esc) {
         '</span>';
 }
 
-/**
- * HTML-описание сращивания с визуальными цветами волокон.
- * «[●] Кабель А [В1] соединено с [●] Кабель Б [В4]»
- */
 function buildFiberConnectionDescHtml(conn, cableNameById, opts) {
     opts = opts || {};
     var parts = buildFiberConnectionDescParts(conn, cableNameById, opts);
@@ -1118,7 +1094,6 @@ function fiberSchemePathMidpoint(pathD) {
     return { x: 0, y: 0 };
 }
 
-/** Точка подписи на линии волокна → порт кросса (горизонтальный участок). */
 function fiberSchemeCrossLinkLabelPoint(fx, fy, px, py, opts) {
     opts = opts || {};
     if (opts.isTop) {
@@ -1181,17 +1156,17 @@ function updateFiberLabel(sleeveObj, cableId, fiberNumber, label) {
     if (!fiberLabels) {
         fiberLabels = {};
     }
-    
-    const key = `${cableId}-${fiberNumber}`;
-    
-    if (label) {
+
+        const key = `${cableId}-${fiberNumber}`;
+
+        if (label) {
         fiberLabels[key] = label;
     } else {
-        
-        delete fiberLabels[key];
+
+                delete fiberLabels[key];
     }
-    
-    sleeveObj.properties.set('fiberLabels', fiberLabels);
+
+        sleeveObj.properties.set('fiberLabels', fiberLabels);
     saveData();
     const trimmed = label ? String(label).trim() : '';
     refreshFiberSchemeFiberLabelDom(key, trimmed);

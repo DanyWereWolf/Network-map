@@ -1,6 +1,3 @@
-/**
- * Карточки объектов и кабелей, модальное окно infoModal.
- */
 function buildOltPortTypeOptionsHtml(currentKind, kindOpts) {
     kindOpts = kindOpts || (typeof getPonPortKindOptions === 'function' ? getPonPortKindOptions() : ['GPON']);
     var cur = String(currentKind || '').trim();
@@ -13,7 +10,6 @@ function buildOltPortTypeOptionsHtml(currentKind, kindOpts) {
     return html;
 }
 
-/** Опции SFP для PON-порта (фильтр по виду GPON/XGS-…). */
 function buildOltPonSfpOptionsHtml(ponKind, installedSfp) {
     var listFn = typeof listSfpForPonKind === 'function' ? listSfpForPonKind : window.listSfpForPonKind;
     var encode = typeof encodeSfpSelectValue === 'function' ? encodeSfpSelectValue : window.encodeSfpSelectValue;
@@ -340,7 +336,6 @@ function buildNodeCardContent(obj, isEditMode, name) {
     }
     html += '</div></div>';
     html += '<dl class="node-card-stats">';
-    // Оптику считаем после первого кадра — полный скан карты не должен блокировать открытие.
     html += '<div class="node-card-stat"><dt>Волокон с кросса</dt><dd data-node-fiber-stat>…</dd></div>';
     html += '<div class="node-card-stat"><dt>Коммутаторов</dt><dd>' + attachedList.length + '</dd></div>';
     html += '<div class="node-card-stat"><dt>Порты занято</dt><dd>' + (swSummary.swCount > 0 ? (swSummary.busyPorts + ' / ' + swSummary.totalPorts) : '—') + '</dd></div>';
@@ -422,7 +417,6 @@ function buildNodeCardContent(obj, isEditMode, name) {
         var portStats = getAttachedSwitchPortStats(swRow);
         var swTitle = swRow.name || ('Коммутатор ' + (six + 1));
         var deviceLine = [swMfr, swMod].filter(Boolean).join(' · ');
-        // Большие таблицы портов не раскрываем сразу — HTML собирается при открытии <details>.
         var swOpen = portStats.total > 0 && portStats.total <= 8 ? ' open' : '';
         var utilPct = portStats.total > 0 ? Math.round((portStats.busy / portStats.total) * 100) : 0;
         html += '<details class="node-card-switch-item" data-node-switch-details="1"' + swOpen + '>';
@@ -574,7 +568,6 @@ function resolveSwitchIdForCopperNodeClick(node) {
     return arr[n - 1].uniqueId;
 }
 
-/** Переносит manufacturer/model с узла (устаревшее) в attachedSwitches и очищает поля узла. */
 function migrateNodeLevelSwitchMetaToAttached() {
     if (!Array.isArray(objects)) return;
     var changed = false;
@@ -775,7 +768,6 @@ function cameraHasCopperCable(camObj) {
     });
 }
 
-/** Для карточки камеры: медный аплинк (коммутатор или медиаконвертер). */
 function getCameraCopperUpstreamTraceContext(cameraObj) {
     if (!cameraObj || !cameraObj.properties || cameraObj.properties.get('type') !== 'camera') return { kind: 'none' };
     var cable = null;
@@ -818,7 +810,6 @@ function getCameraCopperUpstreamTraceContext(cameraObj) {
     return { kind: 'unknown', cable: cable };
 }
 
-/** Порт коммутатора на медном кабеле со стороны камеры (RJ45). */
 function getCopperSwitchPortForCameraOnCable(cable, cameraObj) {
     if (!cable || !cameraObj || !cable.properties) return null;
     var from = cable.properties.get('from');
@@ -830,7 +821,6 @@ function getCopperSwitchPortForCameraOnCable(cable, cameraObj) {
     return pf != null && pf !== '' ? parseInt(pf, 10) : null;
 }
 
-/** Медное подключение камеры: upstream-устройство, кабель, камера. */
 function buildCameraCopperConnectionContext(cameraObj) {
     var ctx = getCameraCopperUpstreamTraceContext(cameraObj);
     if (!cameraObj || !cameraObj.properties || ctx.kind === 'none' || ctx.kind === 'unknown' || ctx.kind === 'switch_no_parent') return null;
@@ -1674,10 +1664,6 @@ function rebuildAllCopperPortUsageFromCables() {
     });
 }
 
-/**
- * HTML <option> для выбора медного порта на коммутаторе (в т.ч. в узле).
- * @param {'optional'|'required'} placeholderMode optional — строка «не назначено»; required — обязательный выбор
- */
 function buildCopperPortOptionsHtml(obj, selected, switchIdForNode, excludeCableUniqueId, placeholderMode) {
     placeholderMode = placeholderMode || 'optional';
     if (!obj || !obj.properties) return '<option value="">—</option>';
@@ -2058,7 +2044,6 @@ function openCopperEndPortModal(points, cableTypeVal, copperMeta) {
     }
 }
 
-/** Обработка клика по объекту в режиме прокладки медного кабеля. Возвращает true, если клик обработан (в т.ч. ошибка). */
 function handleCopperCablePlacemarkStep(placemark, type, cableTypeVal) {
     if (!isCopperCableType(cableTypeVal)) return false;
     var rbSwitchLay = pendingCopperPortPreset && pendingCopperPortPreset.kind === 'radioBridge';
@@ -2333,13 +2318,13 @@ function calculateDistance(coords1, coords2) {
     const lat2 = coords2[0] * Math.PI / 180;
     const deltaLat = (coords2[0] - coords1[0]) * Math.PI / 180;
     const deltaLon = (coords2[1] - coords1[1]) * Math.PI / 180;
-    
-    const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+
+        const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
               Math.cos(lat1) * Math.cos(lat2) *
               Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    
-    const distance = R * c;
+
+        const distance = R * c;
     return Math.round(distance);
 }
 
@@ -2461,18 +2446,18 @@ function pointToLineDistance(point, lineStart, lineEnd) {
     const B = point[1] - lineStart[1];
     const C = lineEnd[0] - lineStart[0];
     const D = lineEnd[1] - lineStart[1];
-    
-    const dot = A * C + B * D;
+
+        const dot = A * C + B * D;
     const lenSq = C * C + D * D;
     let param = -1;
-    
-    if (lenSq != 0) {
+
+        if (lenSq != 0) {
         param = dot / lenSq;
     }
-    
-    let xx, yy;
-    
-    if (param < 0) {
+
+        let xx, yy;
+
+        if (param < 0) {
         xx = lineStart[0];
         yy = lineStart[1];
     } else if (param > 1) {
@@ -2482,8 +2467,8 @@ function pointToLineDistance(point, lineStart, lineEnd) {
         xx = lineStart[0] + param * C;
         yy = lineStart[1] + param * D;
     }
-    
-    const dx = point[0] - xx;
+
+        const dx = point[0] - xx;
     const dy = point[1] - yy;
     return {
         distance: Math.sqrt(dx * dx + dy * dy),
@@ -2617,7 +2602,6 @@ function updateInfoModalChrome(type, name, opts) {
         }
     }
 
-    // Анимация plexus на карточке узла заметно дороже пользы — не запускаем при открытии.
     if ((isWorkspace || (isDeviceCard && type !== 'node')) && typeof window.initPanelPlexusCanvases === 'function') {
         requestAnimationFrame(function () {
             window.initPanelPlexusCanvases(modal);
@@ -2640,7 +2624,6 @@ var propertiesInspectorOpen = false;
 function placeModalInfoNode(useWorkspaceModal) {
     var modalInfo = document.getElementById('modalInfo');
     if (!modalInfo) return null;
-    // Карточки объектов всегда в модалке; боковая панель — только параметры инструмента создания
     var host = document.getElementById('modalInfoHost');
     if (host && modalInfo.parentNode !== host) host.appendChild(modalInfo);
     return modalInfo;
@@ -2813,7 +2796,6 @@ function closeInfoModal(opts) {
         lockBanner.hidden = true;
         lockBanner.textContent = '';
     }
-    // Не трогаем правую панель параметров инструмента создания
     var modalInfo = document.getElementById('modalInfo');
     if (modalInfo) modalInfo.innerHTML = '';
     if (typeof clearFiberConnectionLabelSelection === 'function') clearFiberConnectionLabelSelection();
@@ -2924,8 +2906,8 @@ function showCableInfo(cable) {
     if (splitterFiberRoutingMode) {
         cancelSplitterFiberRouting();
     }
-    
-    if (fiberRoutingMode) {
+
+        if (fiberRoutingMode) {
         cancelFiberRouting();
     }
 
@@ -2953,21 +2935,21 @@ function showCableInfoBody(cable) {
     const cableProductLabel = getCableProductLabel(cableProduct.manufacturer, cableProduct.model);
     const fiberCount = getFiberCount(cable);
     const fibers = getFiberColors(cable);
-    
-    const cableDescription = getCableDescription(cableType, cable);
+
+        const cableDescription = getCableDescription(cableType, cable);
 
     const fromUniqueId = fromObj ? fromObj.properties.get('uniqueId') : null;
     const toUniqueId = toObj ? toObj.properties.get('uniqueId') : null;
-    
-    const parallelCables = objects.filter(obj => {
+
+        const parallelCables = objects.filter(obj => {
         if (!obj.properties || obj.properties.get('type') !== 'cable') return false;
         if (obj.properties.get('uniqueId') === uniqueId) return false; 
-        
-        const objFrom = obj.properties.get('from');
+
+                const objFrom = obj.properties.get('from');
         const objTo = obj.properties.get('to');
         if (!objFrom || !objTo) return false;
-        
-        const objFromId = objFrom.properties.get('uniqueId');
+
+                const objFromId = objFrom.properties.get('uniqueId');
         const objToId = objTo.properties.get('uniqueId');
 
         return (objFromId === fromUniqueId && objToId === toUniqueId) ||
@@ -2997,12 +2979,12 @@ function showCableInfoBody(cable) {
         else if (type === 'radioBridge') { typeName = 'Wi‑Fi радиомост'; icon = '◎'; }
         return { type: typeName, name, icon };
     };
-    
-    const modal = document.getElementById('infoModal');
+
+        const modal = document.getElementById('infoModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalContent = document.getElementById('modalInfo');
-    
-    if (!modal || !modalContent) {
+
+        if (!modal || !modalContent) {
         console.error('Модальное окно не найдено!');
         return;
     }
@@ -3078,8 +3060,8 @@ function showCableInfoBody(cable) {
         : '🔌 Информация о кабеле';
 
     var cableColor = getCableColor(cable);
-    
-    let html = '<div class="info-section">';
+
+        let html = '<div class="info-section">';
 
     html += `<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: linear-gradient(135deg, ${cableColor}15, ${cableColor}05); border-radius: 8px; border-left: 4px solid ${cableColor};">`;
     html += `<div style="width: 40px; height: 40px; background: ${cableColor}; border-radius: 8px; display: flex; align-items: center; justify-content: center;">`;
@@ -3231,16 +3213,16 @@ function showCableInfoBody(cable) {
         html += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-accent); border-radius: 8px; border: 1px solid var(--accent-warning);">';
         html += `<h4 style="margin: 0 0 10px 0; color: var(--accent-warning); font-size: 0.8rem; font-weight: 600;">📦 Другие кабели на этом участке (${parallelCables.length})</h4>`;
         html += '<div style="display: flex; flex-direction: column; gap: 6px;">';
-        
-        parallelCables.forEach((pCable, idx) => {
+
+                parallelCables.forEach((pCable, idx) => {
             const pType = pCable.properties.get('cableType');
             const pName = pCable.properties.get('cableName') || '';
             const pDesc = getCableDescription(pType, pCable);
             const pFibers = getFiberCount(pCable);
             const pId = pCable.properties.get('uniqueId');
             const pColor = getCableColor(pType);
-            
-            html += `<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg-card); border-radius: 6px; border-left: 3px solid ${pColor}; cursor: pointer;" onclick="showCableInfoById('${pId}')">`;
+
+                        html += `<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg-card); border-radius: 6px; border-left: 3px solid ${pColor}; cursor: pointer;" onclick="showCableInfoById('${pId}')">`;
             html += `<div style="width: 8px; height: 8px; border-radius: 50%; background: ${pColor};"></div>`;
             html += `<div style="flex: 1; min-width: 0;">`;
             html += `<div style="font-size: 0.8rem; font-weight: 500; color: var(--text-primary);">${pName ? escapeHtml(pName) : pDesc}</div>`;
@@ -3249,8 +3231,8 @@ function showCableInfoBody(cable) {
             html += `<div style="font-size: 0.7rem; color: var(--text-muted); white-space: nowrap;">${pFibers} волокон</div>`;
             html += `</div>`;
         });
-        
-        html += '</div></div>';
+
+                html += '</div></div>';
     }
 
     html += '<div style="margin-bottom: 16px;">';
@@ -3277,10 +3259,10 @@ function showCableInfoBody(cable) {
         html += '</svg>Удалить кабель</button>';
         html += '</div>';
     }
-    
-    html += '</div>';
-    
-    modalContent.innerHTML = html;
+
+        html += '</div>';
+
+        modalContent.innerHTML = html;
     initDeviceComboboxes(modalContent);
     bindCableSplitSleeveFields(modalContent);
     var saveCableProductBtn = modalContent.querySelector('#saveCableProductBtn');
@@ -3404,8 +3386,8 @@ function showCableInfoById(cableUniqueId) {
         obj.properties.get('type') === 'cable' &&
         obj.properties.get('uniqueId') === cableUniqueId
     );
-    
-    if (cable) {
+
+        if (cable) {
         showCableInfo(cable);
     }
 }
@@ -3416,8 +3398,8 @@ function updateCableName(cableUniqueId, newName) {
         obj.properties.get('type') === 'cable' &&
         obj.properties.get('uniqueId') === cableUniqueId
     );
-    
-    if (cable) {
+
+        if (cable) {
         cable.properties.set('cableName', newName);
         saveData();
     }
@@ -3577,8 +3559,8 @@ function removeCablePreview() {
             if (AppMotion.hideSnapHint) AppMotion.hideSnapHint();
         } catch (eHud2) {}
     }
-    
-    if (hoveredObject) {
+
+        if (hoveredObject) {
         clearHoverHighlight();
     }
 }
@@ -3759,14 +3741,11 @@ function showInfoModalLoadingShell(title) {
     if (modal) {
         modal.style.display = 'flex';
         modal.classList.add('modal--centered');
-        // Форсируем layout, чтобы браузер успел запланировать отрисовку спиннера.
         try { void modal.offsetHeight; } catch (eLay) {}
     }
 }
 
 function deferHeavyModalWork(fn) {
-    // Важно: один rAF выполняется ДО paint — спиннер не успевает появиться.
-    // Два rAF + setTimeout гарантируют кадр со спиннером до тяжёлой работы.
     if (typeof requestAnimationFrame === 'function') {
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
@@ -3792,7 +3771,6 @@ function showObjectInfo(obj) {
         }
     }
     var objType = obj && obj.properties ? obj.properties.get('type') : '';
-    // datalist для узла не нужен на первом кадре — combobox грузит опции при открытии.
     if (objType && objType !== 'node' && ['olt', 'onu', 'camera', 'mediaConverter', 'radioBridge'].indexOf(objType) !== -1) {
         if (typeof populateDeviceDatalists === 'function') populateDeviceDatalists();
         var mfr = obj.properties.get('manufacturer') || '';
@@ -3812,8 +3790,8 @@ function showObjectInfo(obj) {
             cancelSplitterFiberRouting();
         }
     }
-    
-    if (fiberRoutingMode && fiberRoutingData) {
+
+        if (fiberRoutingMode && fiberRoutingData) {
         var objId = getObjectUniqueId(obj);
         var isSourceOrTarget = (objId === getObjectUniqueId(fiberRoutingData.sleeveObj)) ||
                                (objId === fiberRoutingData.targetId);
@@ -3822,13 +3800,11 @@ function showObjectInfo(obj) {
         }
     }
 
-    // Узел: быстрый путь — не ждём lock и не делаем двойной defer (карточка узла лёгкая).
     if (objType === 'node') {
         showNodeInfoFast(obj);
         return;
     }
 
-    // Сначала показываем спиннер и ждём paint — иначе UI просто «висит» без индикатора.
     showInfoModalLoadingShell('Загрузка…');
     window._objectModalOpenGen = (window._objectModalOpenGen || 0) + 1;
     var openGen = window._objectModalOpenGen;
@@ -3844,7 +3820,6 @@ function showObjectInfo(obj) {
     });
 }
 
-/** Быстрое открытие узла: спиннер → сразу карточка; lock в фоне без блокировки UI. */
 function showNodeInfoFast(obj) {
     showInfoModalLoadingShell('Загрузка…');
     window._objectModalOpenGen = (window._objectModalOpenGen || 0) + 1;
@@ -3856,7 +3831,6 @@ function showNodeInfoFast(obj) {
             if (openGen !== window._objectModalOpenGen) return;
 
             infoModalEditModeSession = true;
-            // Оптимистично показываем edit, если карта в режиме редактирования.
             infoModalEditMode = !!isEditMode;
 
             if (isEditMode && uid && typeof myHeldObjectLockId !== 'undefined' &&
@@ -3888,7 +3862,6 @@ function showNodeInfoFast(obj) {
                     if (typeof window.syncTouchObjectLock === 'function') window.syncTouchObjectLock(uid);
                     if (typeof updateModalLockBanner === 'function') updateModalLockBanner(uid);
                     if (typeof syncPropertiesLockFromModal === 'function') syncPropertiesLockFromModal();
-                    // Уже нарисовали edit — полный rebuild не нужен.
                     return;
                 }
                 infoModalEditMode = false;
@@ -3899,7 +3872,6 @@ function showNodeInfoFast(obj) {
                 if (!ok && lockedBy && typeof showWarning === 'function') {
                     showWarning('Сейчас редактирует: ' + lockedBy, 'Объект занят');
                 }
-                // Только если не получили lock — перерисовать в просмотр.
                 showObjectInfoBody(obj);
             });
         }, 0);
@@ -3971,7 +3943,6 @@ function showObjectInfoBody(obj) {
     if (!isObjectOnMap(obj)) return;
     currentModalObject = obj;
     const type = obj.properties.get('type');
-    // Ящик имеет отдельную карточку со «Составом» — не подменять пустым «Объект».
     if (type === 'cabinet') {
         if (typeof paintCabinetModalBody === 'function') {
             paintCabinetModalBody(obj, { openShell: false });
@@ -3983,7 +3954,6 @@ function showObjectInfoBody(obj) {
     const name = obj.properties.get('name') || '';
     const cableSourceObj = (obj._embedded && obj._host) ? obj._host : obj;
 
-    // Для узла список кабелей не нужен — экономим полный filter по карте.
     const connectedCables = type === 'node' ? [] : getConnectedCables(cableSourceObj);
 
     let title = '';
@@ -4010,8 +3980,8 @@ function showObjectInfoBody(obj) {
     } else {
         title = 'Объект';
     }
-    
-    document.getElementById('modalTitle').textContent = title;
+
+        document.getElementById('modalTitle').textContent = title;
 
     const fiberUsesWorkspace = isFiberHostType(type) && connectedCables.length >= 1;
     updateInfoModalChrome(type, name, { fiberWorkspace: fiberUsesWorkspace });
@@ -4295,24 +4265,24 @@ function showObjectInfoBody(obj) {
         const noCablesText = 'К этому объекту не подключено кабелей';
         html += '<div class="no-cables" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.875rem;">' + noCablesText + '</div>';
     } else {
-        
-        if ((isFiberHostType(type)) && connectedCables.length >= 1) {
+
+                if ((isFiberHostType(type)) && connectedCables.length >= 1) {
             html += renderFiberConnectionsVisualization(obj, connectedCables);
         } else {
-            
-            connectedCables.forEach((cable, index) => {
+
+                        connectedCables.forEach((cable, index) => {
                 const cableType = cable.properties.get('cableType');
                 const cableDescription = getCableDescription(cableType, cable);
                 const fibers = getFiberColors(cable);
                 const cableFiberN = getFiberCount(cable);
-                
-                let cableUniqueId = cable.properties.get('uniqueId');
+
+                                let cableUniqueId = cable.properties.get('uniqueId');
                 if (!cableUniqueId) {
                     cableUniqueId = `cable-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     cable.properties.set('uniqueId', cableUniqueId);
                 }
-                
-                html += `
+
+                                html += `
                     <div class="cable-info" data-cable-id="${cableUniqueId}">
                         <div class="cable-header">
                             <h4>Кабель ${index + 1}: ${cableDescription}</h4>
@@ -4325,8 +4295,8 @@ function showObjectInfoBody(obj) {
                 `;
 
                 const usedFibers = getUsedFibers(obj, cableUniqueId);
-                
-                fibers.forEach((fiber, fiberIndex) => {
+
+                                fibers.forEach((fiber, fiberIndex) => {
                     const isUsed = usedFibers.includes(fiber.number);
                     html += `
                         <div class="fiber-item ${isUsed ? 'fiber-used' : 'fiber-free'}" 
@@ -4340,8 +4310,8 @@ function showObjectInfoBody(obj) {
                         </div>
                     `;
                 });
-                
-                html += `
+
+                                html += `
                         </div>
                     </div>
                 `;
@@ -4367,8 +4337,7 @@ function showObjectInfoBody(obj) {
             modal.classList.remove('fiber-management-modal-open', 'fiber-management-modal-open--edit', 'fiber-management-modal-open--view');
         }
     }
-    
-    // Для узла не гоняем обработчики кабелей/волокон (setupModalEventListeners) — это лишняя работа.
+
     if (type !== 'node') {
         setupModalEventListeners();
     }
@@ -4405,8 +4374,6 @@ function showObjectInfoBody(obj) {
             fillNodeCardFibersDeferred(modalInfo, fiberObj);
         }, 0);
     }
-    // Полный проход по карте для lock-badge дорогой; при открытии карточки достаточно баннера модалки.
-    // applyObjectLocksToMapDraggable вызывается из onSyncObjectLocks при реальной смене блокировок.
     if (fiberUsesWorkspace) {
         var modalEl = document.getElementById('infoModal');
         if (typeof window.initPanelPlexusCanvases === 'function' && modalEl) {
@@ -4997,7 +4964,6 @@ function showSupportInfoBody(supportObj) {
     applyObjectLocksToMapDraggable();
 }
 
-/** Обновить карточку объекта: опора и крепление — через showSupportInfo, остальные — showObjectInfo. */
 function refreshObjectModal(obj) {
     if (!obj || !obj.properties || !isObjectOnMap(obj)) return;
     var t = obj.properties.get('type');
@@ -5020,7 +4986,6 @@ function setupEditAndDeleteListeners() {
                 if (!t) return;
                 var co = currentModalObject;
                 if (!co || !co.properties) return;
-                // Zabbix/IP fields exist on many equipment types — handle before the node-only gate
                 if (t.classList && t.classList.contains('equipment-zabbix-host-input')) {
                     co.properties.set('zabbixHost', t.value.trim());
                     saveData();
@@ -5399,8 +5364,8 @@ function setupEditAndDeleteListeners() {
             refreshObjectModal(currentModalObject);
         });
     }
-    
-    var btnAddNodeSwitch = document.getElementById('btnAddNodeSwitch');
+
+        var btnAddNodeSwitch = document.getElementById('btnAddNodeSwitch');
     if (btnAddNodeSwitch) {
         btnAddNodeSwitch.addEventListener('click', function() {
             if (!currentModalObject || currentModalObject.properties.get('type') !== 'node') return;
@@ -5490,8 +5455,8 @@ function setupEditAndDeleteListeners() {
     if (duplicateBtn) {
         duplicateBtn.addEventListener('click', function() {
             if (!currentModalObject) return;
-            
-            duplicateObject(currentModalObject);
+
+                        duplicateObject(currentModalObject);
         });
     }
 
@@ -5526,8 +5491,8 @@ function setupEditAndDeleteListeners() {
 
 function duplicateObject(obj) {
     if (!obj || !obj.geometry) return;
-    
-    const type = obj.properties.get('type');
+
+        const type = obj.properties.get('type');
     const name = obj.properties.get('name') || '';
     const coords = obj.geometry.getCoordinates();
     const offset = 0.0002; 
@@ -5551,8 +5516,8 @@ function duplicateObject(obj) {
     if (type === 'cabinet') {
         if (name) newName = name + ' (копия)';
     }
-    
-    var opts = {};
+
+        var opts = {};
     if (type === 'node') {
         opts.nodeKind = obj.properties.get('nodeKind') || 'network';
         opts.comment = obj.properties.get('comment') || '';
@@ -6042,16 +6007,16 @@ function isPlacemarkLabelTargetType(type) {
 
 function updateObjectLabel(placemark, name) {
     if (!placemark || !placemark.properties) return;
-    
-    const type = placemark.properties.get('type');
+
+        const type = placemark.properties.get('type');
     if (!isPlacemarkLabelTargetType(type)) return;
-    
-    let label = placemark.properties.get('label');
+
+        let label = placemark.properties.get('label');
     const displayName = name ? escapeHtml(name) : getObjectDefaultName(type);
     const labelHtml = getObjectLabelHtml(type, displayName, placemark);
     const coords = placemark.geometry.getCoordinates();
-    
-    if (!label) {
+
+        if (!label) {
         label = new ymaps.Placemark(coords, { iconContent: labelHtml }, {
             iconLayout: 'default#imageWithContent',
             iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
@@ -6122,7 +6087,6 @@ function setupStatsToggle() {
     var section = document.getElementById('statsSection');
     if (!section) return;
 
-    // В info-dock статистика раскрывается через <details>, внутренний collapse не нужен
     if (section.closest('#infoDock')) {
         setStatsSectionCollapsed(false);
         return;
@@ -6145,12 +6109,12 @@ function setupStatsToggle() {
 function setupSidebarToggle() {
     const toggleBtn = document.getElementById('sidebarToggle');
     if (!toggleBtn) return;
-    
-    toggleBtn.addEventListener('click', function() {
+
+        toggleBtn.addEventListener('click', function() {
         const body = document.body;
         const collapsed = body.classList.toggle('sidebar-collapsed');
-        
-        toggleBtn.setAttribute('aria-label', collapsed ? 'Показать панель' : 'Скрыть панель');
+
+                toggleBtn.setAttribute('aria-label', collapsed ? 'Показать панель' : 'Скрыть панель');
         toggleBtn.setAttribute('title', collapsed ? 'Показать панель' : 'Скрыть панель');
         toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
 
@@ -6261,8 +6225,8 @@ function setupModalEventListeners() {
 
             });
         });
-        
-        document.querySelectorAll('.btn-copper-connect-from-media-converter').forEach(function(btn) {
+
+                document.querySelectorAll('.btn-copper-connect-from-media-converter').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 if (!currentModalObject || currentModalObject.properties.get('type') !== 'mediaConverter') return;
@@ -6310,13 +6274,11 @@ function setupModalEventListeners() {
                 if (!currentModalObject || currentModalObject.properties.get('type') !== 'olt') return;
                 var portNum = parseInt(this.getAttribute('data-port'), 10);
                 if (typeof setOltPonPortType === 'function') setOltPonPortType(currentModalObject, portNum, this.value);
-                // Обновить список SFP под новый тип PON
                 var sfpSelect = modalInfo.querySelector('.olt-port-sfp[data-port="' + portNum + '"]');
                 if (sfpSelect) {
                     var curSfp = typeof window.getOltInstalledSfp === 'function'
                         ? window.getOltInstalledSfp(currentModalObject, { portNumber: portNum })
                         : null;
-                    // если текущий SFP несовместим — сбросить
                     var listFn = typeof listSfpForPonKind === 'function' ? listSfpForPonKind : null;
                     var encode = typeof encodeSfpSelectValue === 'function' ? encodeSfpSelectValue : null;
                     if (curSfp && listFn && encode) {

@@ -1,6 +1,3 @@
-/**
- * Блокировки объектов при совместном редактировании и инкрементальная синхронизация.
- */
 var myHeldObjectLockId = null;
 var dragHeldLockId = null;
 var infoModalEditMode = true;
@@ -79,7 +76,6 @@ function applyModalEditModeForObject(obj, callback) {
         if (typeof callback === 'function') callback();
     }
 
-    // Не держим спиннер до 8с: если lock не ответил быстро — открываем просмотр.
     var earlyTimer = setTimeout(function() {
         if (settled) return;
         paintedEarly = true;
@@ -95,12 +91,10 @@ function applyModalEditModeForObject(obj, callback) {
                 finishFirstPaint(true);
                 return;
             }
-            // Уже показали просмотр — один раз обновим до edit, если модалка всё ещё на этом объекте.
             if (paintedEarly && (window._objectModalOpenGen || 0) === openGenAtStart &&
                 currentModalObject && getObjectUniqueId(currentModalObject) === uid) {
                 infoModalEditMode = true;
                 var upType = obj.properties && obj.properties.get('type');
-                // Ящик: showObjectInfoBody не умеет «Состав» — перерисовываем карточку ящика.
                 if (upType === 'cabinet' && typeof paintCabinetModalBody === 'function') {
                     try { paintCabinetModalBody(obj, { openShell: false }); } catch (eCabUp) {}
                 } else if (typeof showObjectInfoBody === 'function') {
@@ -311,16 +305,13 @@ function setMapRevision(obj, revision) {
     obj.properties.set('mapRevision', revision != null && !isNaN(Number(revision)) ? Number(revision) : 0);
 }
 
-/** После add_object сервер ставит revision=1; без этого первый update_object откатывает координаты. */
 function bumpMapRevisionAfterSyncAdd(obj) {
     if (!obj || !obj.properties) return;
     setMapRevision(obj, Math.max(getMapRevision(obj), 1));
 }
 
-/** revision из lastSavedState по uniqueId (если локальный mapRevision устарел/0 после load). */
 function getSnapshotRevisionForUid(uid) {
     if (uid == null || uid === '') return null;
-    // O(1) через индекс снимка — полный скан lastSavedState на каждом sync убивал move на больших картах.
     if (typeof getSnapshotRevisionFromIndex === 'function') {
         return getSnapshotRevisionFromIndex(uid);
     }
@@ -335,10 +326,6 @@ function getSnapshotRevisionForUid(uid) {
     return null;
 }
 
-/**
- * Актуальный baseRevision для op: max(локальный, снимок).
- * Иначе первый update после F5 уходит с 0 → op_conflict → тяжёлый rollback + тост «другой участник».
- */
 function resolveBaseRevisionForSync(obj) {
     if (!obj || !obj.properties) return 0;
     var local = getMapRevision(obj);
@@ -427,7 +414,6 @@ function syncPushCableUpdate(cable, immediate) {
             }
         }
     }
-    // Новый кабель: update_cable на сервере молча игнорируется — нужен add_cable.
     if (!existsInSnapshot && typeof buildAddCableSyncOp === 'function' && typeof window.syncSendOp === 'function') {
         var pts = cable.properties.get('points');
         if (!pts || pts.length < 2) {
@@ -518,7 +504,6 @@ function clearObjectDragStartState(obj) {
     } catch (e) {}
 }
 
-/** Лёгкий finalize после dragend: минимум синхронной работы на больших картах. */
 function finalizeMapObjectDragEnd(placemark) {
     if (!placemark || !placemark.properties) return;
     var type = placemark.properties.get('type');
@@ -544,11 +529,9 @@ function finalizeMapObjectDragEnd(placemark) {
         onMemberObjectDragEnd(placemark);
     }
 
-    // Attach опоры — O(все кабели); всегда после UI/save, не в том же тике что dragend.
     var needsAttach = (type === 'support' || type === 'attachment') &&
         typeof tryAttachWaypointToNearbyCables === 'function';
 
-    // Сразу только лёгкие setCoordinates кабелей — без recreate underground overlays.
     if (typeof updateConnectedCablesLight === 'function') updateConnectedCablesLight(placemark);
     else if (typeof updateConnectedCables === 'function') updateConnectedCables(placemark);
 
@@ -557,7 +540,6 @@ function finalizeMapObjectDragEnd(placemark) {
     if (label && placemark.geometry) {
         try { label.geometry.setCoordinates(placemark.geometry.getCoordinates()); } catch (eLbl) {}
     }
-    // На больших картах полный скан GPON-массивов на dragend = фриз; idle rebuild догонит.
     if (!largeMap && typeof nudgeConnectionLinesDuringDrag === 'function') {
         try { nudgeConnectionLinesDuringDrag(placemark); } catch (eNudgeEnd) {}
     }
@@ -566,7 +548,6 @@ function finalizeMapObjectDragEnd(placemark) {
     if (typeof saveObjectWithConnectedCables === 'function') saveObjectWithConnectedCables(placemark);
     else saveData({ object: placemark, syncImmediate: true, undoLabel: 'перемещение' });
 
-    // updateCross/NodeDisplay — remove/add geoObjects; на больших картах в следующий кадр.
     var runGroupDisplay = function() {
         try {
             if (type === 'cross' && typeof updateCrossDisplay === 'function') {
@@ -599,7 +580,6 @@ function finalizeMapObjectDragEnd(placemark) {
     if (typeof MapPerf !== 'undefined' && MapPerf.unpinObject) MapPerf.unpinObject(placemark);
     if (typeof resumeMapPanAfterPlacementObjectDrag === 'function') resumeMapPanAfterPlacementObjectDrag();
 
-    // Тяжёлое: overlays, attach, полный rebuild линий, filter — после отпускания, в idle.
     var heavyUid = uid;
     var heavyObj = placemark;
     var heavyType = type;
@@ -658,12 +638,10 @@ function saveLinkedMapObjects(objectsToSave) {
 
 function pushSaveDataToSync(opts) {
     opts = opts || {};
-    // Пока карта ещё грузится/apply/смена подложки — полный state будет урезанным.
     if (typeof _mapInitialLoadPending !== 'undefined' && _mapInitialLoadPending) return;
     if (typeof _mapApplyInProgress !== 'undefined' && _mapApplyInProgress) return;
     try { if (window.__volsmapRuntimeSwitching) return; } catch (eSw) {}
     try { if (window.__mapRegionSwitching) return; } catch (eRegSw) {}
-    // add/remove уже ушли как op — не слать полный state (у других map_refresh = пересборка карты).
     if (opts.addObject || (opts.removeUniqueIds && opts.removeUniqueIds.length) || opts.removeObject) {
         return;
     }
@@ -709,11 +687,7 @@ function pushSaveDataToSync(opts) {
         else syncPushObjectUpdate(currentModalObject, !!opts.syncImmediate);
         return;
     }
-    // Голый saveData() без цели раньше слал полный state → у других map_refresh по кругу.
-    // Инкрементальные op уже ушли выше; полный state — только через opts.syncFull (обработан раньше).
 }
-
-
 
 function revertObjectDragToPreStart(obj, lockedBy) {
     if (!obj || !obj.properties) return;
@@ -777,7 +751,6 @@ function acquireDragObjectLock(obj) {
             revertObjectDragToPreStart(obj, lockedBy);
         }
     });
-    // Drag не блокируется: при позднем ok:false координаты откатятся.
     obj.properties.set('_dragLockPending', true);
     var clearPending = function() {
         stillDragging = false;
@@ -807,8 +780,6 @@ window.onSyncOpConflict = function(payload) {
     var uid = String(payload.uniqueId);
     var isOtherEditor = !!(payload.editorClientId && window.syncMyClientId &&
         payload.editorClientId !== window.syncMyClientId);
-    // Мы держим lock / только что drag — это почти всегда устаревший baseRevision после F5,
-    // а не реальный чужой edit. Тяжёлый populate + откат координат = фриз 1–3с на 20k+.
     var iHoldLock = (typeof getActiveObjectLockId === 'function' && getActiveObjectLockId() === uid) ||
         myHeldObjectLockId === uid || dragHeldLockId === uid;
     var conflictObj = null;
@@ -827,7 +798,6 @@ window.onSyncOpConflict = function(payload) {
     if (conflictObj && payload.revision != null) {
         setMapRevision(conflictObj, payload.revision);
     }
-    // Тихий retry: подтянуть revision и переслать локальное состояние без rollback.
     if (conflictObj && (!isOtherEditor || iHoldLock)) {
         var already = conflictObj.properties.get('_syncConflictRetry');
         if (!already) {

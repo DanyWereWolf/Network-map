@@ -1,8 +1,5 @@
 'use strict';
 
-/**
- * Worker thread: тяжёлый JSON.stringify / запись файлов вне main event loop.
- */
 const { parentPort } = require('worker_threads');
 const fs = require('fs');
 
@@ -20,7 +17,6 @@ parentPort.on('message', function (msg) {
             fs.writeFileSync(String(payload.path), json, 'utf8');
             result = { bytes: Buffer.byteLength(json, 'utf8') };
         } else if (op === 'clone') {
-            // Значение уже скопировано при postMessage; возврат даёт ещё одну копию на main.
             result = payload.value;
         } else {
             throw new Error('Unknown cpu-worker op: ' + op);

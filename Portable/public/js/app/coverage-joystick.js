@@ -1,9 +1,3 @@
-/**
- * Виртуальный джойстик (мышь / touch) для настройки направления и охвата
- * зоны камеры / радиомоста: азимут, дальность, угол сектора.
- *
- * 0° — север (вверх), 90° — восток (вправо).
- */
 (function(global) {
     'use strict';
 
@@ -66,20 +60,6 @@
         return clamp(v, min, max);
     }
 
-    /**
-     * @param {object} opts
-     * @param {string} opts.idPrefix
-     * @param {'circle'|'sector'} opts.shape
-     * @param {number} opts.azimuth
-     * @param {number} opts.angle
-     * @param {number} opts.range
-     * @param {number} opts.rangeMin
-     * @param {number} opts.rangeMax
-     * @param {number} [opts.rangeStep]
-     * @param {string} opts.rangeUnit  'м' | 'км'
-     * @param {string} [opts.accent]
-     * @param {string} [opts.rangeLabel] подпись дальности
-     */
     function buildCoverageJoystickHtml(opts) {
         var p = opts.idPrefix || 'covJoy';
         var shape = opts.shape === 'sector' ? 'sector' : 'circle';
@@ -118,7 +98,6 @@
         html += '<circle class="coverage-joystick-ring" cx="' + cx + '" cy="' + cy + '" r="' + PAD_R + '" fill="none"/>';
         html += '<circle class="coverage-joystick-ring coverage-joystick-ring--mid" cx="' + cx + '" cy="' + cy + '" r="' + (PAD_R * 0.55) + '" fill="none"/>';
 
-        // Compass ticks / labels
         html += '<g class="coverage-joystick-compass">';
         [['N', 0], ['E', 90], ['S', 180], ['W', 270]].forEach(function(pair) {
             var label = pair[0];
@@ -388,12 +367,6 @@
         return { mode: 'stick', x: lx, y: ly };
     }
 
-    /**
-     * @param {object} opts
-     * @param {string} opts.idPrefix
-     * @param {function} [opts.getShape] () => 'circle'|'sector'
-     * @param {function} opts.onChange ({azimuth, angle, range, shape}) => void
-     */
     function setupCoverageJoystick(opts) {
         var prefix = opts.idPrefix;
         var root = document.getElementById(prefix + 'Root');
@@ -423,7 +396,6 @@
 
         function applyStick(lx, ly, emitNow) {
             var polar = xyToPolar(lx, ly, PAD_R);
-            // У центра азимут нестабилен — сохраняем прежний
             if (polar.t > 0.06) {
                 state.azimuth = polar.azimuth;
             }
@@ -585,7 +557,6 @@
                 var next = state.range + dir * step;
                 if (step >= 1) next = Math.round(next / step) * step;
                 else next = Math.round(next / step) * step;
-                // Avoid float noise for 0.1 km steps
                 next = Math.round(next * 1000) / 1000;
                 state.range = clamp(next, state.rangeMin, state.rangeMax);
                 updateVisual(state);
@@ -709,7 +680,6 @@
     ];
     var escHandler = null;
     var mapBehaviorsDisabled = false;
-    /** Поведения, которые реально были включены до блокировки — только их возвращаем. */
     var savedEnabledBehaviors = null;
 
     function escapeHtmlText(s) {
@@ -743,7 +713,6 @@
         if (mapBehaviorsDisabled && typeof myMap !== 'undefined' && myMap && myMap.behaviors) {
             var toRestore = savedEnabledBehaviors || [];
             toRestore.forEach(function(name) {
-                // Линейку и редактор маршрутов никогда не включаем — в приложении они отключены.
                 if (name === 'ruler' || name === 'routeEditor') return;
                 try { myMap.behaviors.enable(name); } catch (e) {}
             });
@@ -825,13 +794,6 @@
         return !!window._coverageJoystickMapLock;
     }
 
-    /**
-     * Отдельная плавающая панель с джойстиком (вне карточки объекта).
-     * @param {object} opts
-     * @param {boolean} [opts.hideCard=true] скрыть карточку объекта на время настройки
-     * @param {boolean} [opts.lockMap=true] заблокировать карту и UI
-     * @param {boolean} [opts.restoreCard=true] вернуть карточку при закрытии
-     */
     function openCoverageJoystickPanel(opts) {
         closeCoverageJoystickPanel({ skipRestore: true, silent: true });
         opts = opts || {};
@@ -904,7 +866,6 @@
             finish();
         });
 
-        // Клики по подложке не закрывают — только Esc / крестик
         backdrop.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();

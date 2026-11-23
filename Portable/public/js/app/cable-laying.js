@@ -1,6 +1,3 @@
-/**
- * Прокладка кабелей: createCableFromPoints, sync op.
- */
 function revertCableFiberCountInputs(cableUniqueId) {
     var cable = objects.find(function(obj) {
         return obj.properties && obj.properties.get('type') === 'cable' && obj.properties.get('uniqueId') === cableUniqueId;
@@ -52,7 +49,6 @@ async function updateCableFiberSettings(cableUniqueId, fiberCount, fiberPalette,
     return true;
 }
 
-/** Без uniqueId op add_cable на сервере не находит концы — кабель не попадает в сохранённое состояние. */
 function ensurePlacemarkUniqueIdForSync(pm) {
     if (!pm || !pm.properties) return;
     var uid = pm.properties.get('uniqueId');
@@ -61,7 +57,6 @@ function ensurePlacemarkUniqueIdForSync(pm) {
     pm.properties.set('uniqueId', generateUniqueId(t));
 }
 
-/** Сохраняет uniqueId точек маршрута на сервер до add_cable. */
 function syncCableRoutePlacemarkUids(points) {
     if (!points || points.length < 2) return [];
     var changed = [];
@@ -91,8 +86,8 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     if (!points || points.length < 2) return false;
     points = dedupeSupportAttachmentInCablePoints(points);
     if (!points || points.length < 2) return false;
-    
-    var firstType = points[0] && points[0].properties ? points[0].properties.get('type') : null;
+
+        var firstType = points[0] && points[0].properties ? points[0].properties.get('type') : null;
     var lastType = points[points.length - 1] && points[points.length - 1].properties ? points[points.length - 1].properties.get('type') : null;
 
     if (isCopperCableType(cableType)) {
@@ -109,8 +104,6 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             if (!skipSync) showError('Кабель можно прокладывать до муфты, сплайс-кассеты, кросса или радиомоста (оптический порт). К OLT — только «Подключить» в карточке. Опоры и крепления — промежуточные точки.', 'Недопустимое действие');
             return false;
         }
-        // Блок только для ручной прокладки. При skipSync (загрузка/sync/импорт)
-        // feeder OLT↔кросс должен создаваться, иначе кабель «пропадает» после F5.
         if (!skipSync && (firstType === 'olt' || lastType === 'olt') &&
             typeof isOltPortDirectedCableLayActive === 'function' && !isOltPortDirectedCableLayActive()) {
             if (typeof showOltCableLayMustStartFromCardError === 'function') {
@@ -189,8 +182,8 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
             totalDistance += calculateDistance(coords[i], coords[i + 1]);
         }
     }
-    
-    const cableColor = getCableColor(cableType);
+
+        const cableColor = getCableColor(cableType);
     const cableWidth = getCableWidth(cableType);
     const cableDescription = getCableDescription(cableType);
 
@@ -204,8 +197,8 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         hasBalloon: false,
         hasHint: false
     });
-    
-    polyline.properties.set({
+
+        polyline.properties.set({
         type: 'cable',
         cableType: cableType,
         from: points[0],
@@ -272,8 +265,8 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     polyline.events.add('click', function(e) {
         return handleCableMapClickEvent(polyline, e);
     });
-    
-    disableCableMapBalloon(polyline);
+
+        disableCableMapBalloon(polyline);
     attachHoverEventsToObject(polyline);
     objects.push(polyline);
     mapPerfRegister(polyline);
@@ -290,8 +283,8 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
     }
 
     if (!isMapBulkImportActive()) updateCableVisualization();
-    
-    if (!existingCableId && !isCopperCableType(cableType) && pendingRadioBridgePortPreset &&
+
+        if (!existingCableId && !isCopperCableType(cableType) && pendingRadioBridgePortPreset &&
         pendingRadioBridgePortPreset.mode === 'fiber' &&
         typeof resolveRadioBridgePortCableEnds === 'function' && typeof buildRadioBridgePortFeederCableName === 'function') {
         var rbEndsName = resolveRadioBridgePortCableEnds(points, pendingRadioBridgePortPreset);
@@ -319,7 +312,6 @@ function createCableFromPoints(points, cableType, existingCableId = null, fiberN
         }
     }
 
-    // PON/RB-назначения до save (только мутация; add_cable ниже, затем finalize).
     var rbPresetApplied = false;
     var oltPortPresetApplied = false;
     if (!existingCableId && !isCopperCableType(cableType)) {

@@ -1,6 +1,4 @@
-/* Живость приложения: модалки, HUD кабеля, empty states, кнопки */
 
-/* ——— Modal motion ——— */
 .modal.modal-motion-open {
     animation: appModalBackdropIn 0.2s ease-out;
 }
@@ -50,7 +48,6 @@
     }
 }
 
-/* Override старого резкого slide */
 .modal-content {
     animation-duration: 0.22s;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
@@ -67,7 +64,6 @@
     }
 }
 
-/* ——— Sidebar categories ——— */
 .sidebar-category-body {
     transition: opacity 0.18s ease, transform 0.18s ease;
 }
@@ -92,7 +88,6 @@
     }
 }
 
-/* ——— Cable length HUD ——— */
 .cable-lay-length-hud {
     position: fixed;
     left: 50%;
@@ -120,7 +115,6 @@
     transform: translateX(-50%) translateY(0);
 }
 
-/* ——— Busy / done buttons ——— */
 .app-btn-busy {
     position: relative;
     pointer-events: none;
@@ -148,7 +142,6 @@
     to { transform: rotate(360deg); }
 }
 
-/* ——— Empty states ——— */
 .app-empty-state {
     display: flex;
     flex-direction: column;
@@ -222,7 +215,6 @@
     object-fit: contain;
 }
 
-/* ——— Search result hover liveliness ——— */
 .search-result-item {
     transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
 }

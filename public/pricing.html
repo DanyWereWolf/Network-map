@@ -45,7 +45,7 @@
             "availableLanguage": ["ru"]
         }
     }
-    </script>
+</script>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=mark2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -64,7 +64,7 @@
                 document.documentElement.setAttribute('data-theme', theme);
             } catch (e) {}
         })();
-    </script>
+</script>
     <link rel="stylesheet" href="css/landing.css">
     <link rel="stylesheet" href="css/landing-header.css">
     <link rel="stylesheet" href="css/pages-mobile.css">
@@ -77,7 +77,7 @@
     </div>
     <div class="auth-container landing-root">
         <div class="auth-card landing-shell">
-            <!-- Навигация -->
+            
             <header class="landing-nav" id="landingNav">
                 <div class="landing-nav-overlay" id="landingNavOverlay" aria-hidden="true"></div>
                 <div class="landing-nav-left">
@@ -122,7 +122,7 @@
                 </div>
             </header>
 
-            <!-- Главная / hero -->
+            
             <section id="home" class="landing-hero">
                 <div class="landing-hero-map" aria-hidden="true">
                     <svg class="landing-hero-map-svg" viewBox="0 0 1200 720" preserveAspectRatio="xMidYMid slice" focusable="false">
@@ -321,7 +321,7 @@
                 </details>
             </section>
 
-            <!-- Условия использования -->
+            
             <section id="pricing" class="landing-pricing landing-block">
                 <div class="landing-block-head">
                     <h2 class="capability-section-title">Условия</h2>
@@ -346,7 +346,7 @@
                     </span>
                 </div>
                 <div id="pricingCards" class="pricing-grid">
-                    <!-- Карточки витрины подставляются с сервера -->
+                    
                 </div>
             </section>
 
@@ -404,7 +404,7 @@
                 </details>
             </section>
 
-            <!-- Контакты -->
+            
             <section id="contacts" class="landing-block">
                 <div class="landing-block-head">
                     <h2 class="capability-section-title">Связаться с нами</h2>
@@ -447,7 +447,7 @@
                 </div>
             </div>
 
-            <!-- Футер -->
+            
             <footer class="landing-footer">
                 <div>© 2024–2026 «Карта оптической сети». Все права защищены.</div>
                 <nav class="landing-footer-nav" aria-label="Нижняя навигация">
@@ -510,7 +510,7 @@
             });
         }
     })();
-    </script>
+</script>
     <script>
     (function() {
         var nav = document.getElementById('landingNav');
@@ -522,7 +522,7 @@
         window.addEventListener('scroll', onScroll, { passive: true });
         onScroll();
     })();
-    </script>
+</script>
     <script>
     (function() {
         var navLinks = document.querySelectorAll('.landing-nav-menu a[href^="#"]');
@@ -546,7 +546,7 @@
         window.addEventListener('scroll', updateActiveNav, { passive: true });
         updateActiveNav();
     })();
-    </script>
+</script>
     <script>
     (function() {
         var HERO_STATS_REFRESH_MS = 5 * 60 * 1000;
@@ -590,7 +590,7 @@
         });
         window.addEventListener('focus', loadHeroStats);
     })();
-    </script>
+</script>
     <script>
     (function() {
         function parseLocalDateStart(s) {
@@ -633,7 +633,6 @@
             var rs = trimDatePart(p.promoStartsAt);
             var re = trimDatePart(p.promoEndsAt);
             var now = Date.now();
-            // Только процент без дат — показываем акцию (данные из админки до введения дат и т.п.)
             if (!rs && !re) return true;
             var st = rs ? parseLocalDateStart(rs) : -Infinity;
             var en = re ? parseLocalDateEnd(re) : Infinity;
@@ -847,7 +846,7 @@
             })
             .catch(function() {});
     })();
-    </script>
+</script>
     <script src="js/landing-nav.js"></script>
     <script src="js/landing-motion.js"></script>
     <script src="js/ui/assistant-avatars.js"></script>
@@ -857,5 +856,4 @@
     <script src="js/support-chat.js"></script>
 </body>
 </html>
-
 

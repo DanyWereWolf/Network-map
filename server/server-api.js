@@ -28,7 +28,6 @@ const zabbixClient = require('./lib/zabbix-client');
 const nedImport = require('./lib/ned-import');
 const perfMonitor = require('./lib/perf-monitor');
 
-/** Блокировка параллельных массовых рассылок. */
 var updateBroadcastInFlight = false;
 
 const SERVER_CONFIG_PATH = path.join(ROOT_DIR, 'server-config.json');
@@ -37,7 +36,6 @@ function loadServerConfig() {
     try {
         if (!fs.existsSync(SERVER_CONFIG_PATH)) return { ok: true, config: {} };
         const raw = fs.readFileSync(SERVER_CONFIG_PATH, 'utf8');
-        // BOM от некоторых редакторов Windows
         const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
         return { ok: true, config: JSON.parse(text) };
     } catch (e) {
@@ -46,11 +44,6 @@ function loadServerConfig() {
     }
 }
 
-/**
- * Перечитать server-config.json без перезапуска процесса
- * (SMTP, adminEmail, publicSiteUrl, ключи карт и т.п.).
- * При ошибке парсинга оставляем прежний конфиг.
- */
 function reloadServerConfig(options) {
     const silent = !!(options && options.silent);
     const prev = serverConfig;
@@ -75,11 +68,6 @@ function reloadServerConfig(options) {
     return serverConfig;
 }
 
-/**
- * Dev: public/ (читаемые исходники). Prod: dist/ после `npm run build`,
- * если serveObfuscatedClient / SERVE_OBFUSCATED_CLIENT включены.
- * При включённом флаге без dist/js процесс завершается — fallback на public/ запрещён.
- */
 function resolvePublicDir(config) {
     const wantObfuscated =
         config.serveObfuscatedClient === true ||
@@ -106,7 +94,6 @@ function isServeObfuscatedEnabled(config) {
     );
 }
 
-/** Прод-признаки: NODE_ENV=production или публичный site URL (не localhost). */
 function looksLikeProductionDeploy(config) {
     if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') return true;
     var site = String((config && config.publicSiteUrl) || process.env.PUBLIC_SITE_URL || '').trim().toLowerCase();
@@ -117,6 +104,27 @@ function looksLikeProductionDeploy(config) {
 
 var _initialConfigLoad = loadServerConfig();
 let serverConfig = (_initialConfigLoad.ok && _initialConfigLoad.config) ? _initialConfigLoad.config : {};
+
+function shouldBuildClientOnStart(config) {
+    if (config && config.buildClientOnStart === true) return true;
+    if (String(process.env.BUILD_CLIENT_ON_START || '').trim() === '1') return true;
+    if (String(process.env.BUILD_CLIENT_ON_START || '').toLowerCase() === 'true') return true;
+    return isServeObfuscatedEnabled(config);
+}
+
+if (shouldBuildClientOnStart(serverConfig)) {
+    try {
+        require(path.join(ROOT_DIR, 'scripts', 'ensure-obfuscated-client.js')).ensureObfuscatedClientSync();
+    } catch (e) {
+        console.error('[Static] Не удалось собрать клиент при старте:', e && e.message ? e.message : e);
+        process.exit(1);
+    }
+    if (!isServeObfuscatedEnabled(serverConfig)) {
+        serverConfig = Object.assign({}, serverConfig, { serveObfuscatedClient: true });
+        process.env.SERVE_OBFUSCATED_CLIENT = '1';
+    }
+}
+
 const PUBLIC_DIR = resolvePublicDir(serverConfig);
 const SERVING_OBFUSCATED_CLIENT = isServeObfuscatedEnabled(serverConfig);
 
@@ -174,7 +182,6 @@ const PORT = parseInt(process.env.PORT || process.argv[2] || serverConfig.port |
 const HOST = process.env.HOST || serverConfig.host || '0.0.0.0';
 const app = express();
 
-/** Запасной лимит объектов, если в хранилище и конфиге не задано иное. */
 var FALLBACK_FREE_MAP_OBJECT_LIMIT = parseInt(
     process.env.FREE_MAP_OBJECT_LIMIT || serverConfig.freeMapObjectLimit || '2000',
     10
@@ -297,10 +304,8 @@ function validateMapDataObjectLimit(orgId, data) {
 perfMonitor.wrapMapSave(db);
 app.use(perfMonitor.httpMiddleware);
 app.use(cors({ origin: true, credentials: true }));
-// 50mb: карты 10k+ объектов / фото в payload; 10mb часто мало и провоцирует обрывы/ретраи.
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '50mb' }));
 
-/** Базовые заголовки + запрет source maps (не отдаём .js.map / .css.map). */
 app.use(function(req, res, next) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -311,7 +316,6 @@ app.use(function(req, res, next) {
     next();
 });
 
-/** Разрешить встраивание карты (Zabbix URL widget и др.). */
 app.use(function(req, res, next) {
     var raw = serverConfig.embedFrameAncestors;
     if (raw === false || raw === 'deny') {
@@ -326,11 +330,9 @@ app.use(function(req, res, next) {
         list = raw.split(/[\s,]+/).map(function(v) { return v.trim(); }).filter(Boolean);
     }
     if (!list.length) {
-        // По умолчанию разрешаем iframe (для Zabbix и аналогов).
         list = ['*'];
     }
     res.setHeader('Content-Security-Policy', 'frame-ancestors ' + list.join(' '));
-    // CSP frame-ancestors перекрывает X-Frame-Options в современных браузерах.
     res.removeHeader('X-Frame-Options');
     next();
 });
@@ -377,7 +379,6 @@ function buildEmbedUserPayload(organization) {
     };
 }
 
-/** Кэш проверки токена для WS (курсоры бьют десятки раз/сек). */
 var sessionTokenCache = new Map();
 var SESSION_TOKEN_CACHE_MS = 3000;
 var cursorAvatarCache = new Map();
@@ -496,7 +497,6 @@ function userToClientFields(u) {
 }
 
 function isGlobalAdmin(user) {
-    // Глобальный админ панели: роль admin и нет привязки к организации
     return !!(user && user.role === 'admin' && (user.organizationId == null));
 }
 
@@ -518,7 +518,6 @@ function getAuthRateLimitOptions() {
     return { windowMs: windowMs, maxAttempts: maxAttempts };
 }
 
-/** Лимит запросов «забыли пароль» с одного IP (по умолчанию 3 / 15 мин). */
 function getPasswordResetIpLimitOptions() {
     var windowMs = parseInt(
         process.env.PASSWORD_RESET_RATE_LIMIT_WINDOW_MS || serverConfig.passwordResetRateLimitWindowMs || '900000',
@@ -533,7 +532,6 @@ function getPasswordResetIpLimitOptions() {
     return { windowMs: windowMs, maxAttempts: maxAttempts };
 }
 
-/** Лимит реальных писем на один аккаунт/почту (по умолчанию 1 / 5 мин). */
 function getPasswordResetEmailLimitOptions() {
     var windowMs = parseInt(
         process.env.PASSWORD_RESET_EMAIL_LIMIT_WINDOW_MS || serverConfig.passwordResetEmailLimitWindowMs || '300000',
@@ -552,7 +550,6 @@ function isOrgAdmin(user) {
     return !!(user && user.role === 'admin' && user.organizationId);
 }
 
-/** Число администраторов в организации (роль admin + organizationId). */
 function countOrgAdmins(organizationId, usersList) {
     if (!organizationId) return 0;
     var list = usersList || db.getUsers();
@@ -684,9 +681,6 @@ app.get('/api/map', (req, res) => {
             try { mig = db.ensureMapRegionsMigrated(orgId); } catch (eMig) { mig = null; }
         }
         if (mig && mig.changed) dropSyncMapCache(orgId);
-        // Живое sync-состояние приоритетнее store: иначе reload до debounce (1.5с)
-        // отдаёт карту без только что добавленного кабеля.
-        // Не вызываем getSyncStateForOrg на cold path — он deepClone всей org-карты (~21k).
         var full = [];
         var live = null;
         if (orgId) {
@@ -704,7 +698,6 @@ app.get('/api/map', (req, res) => {
         }
         var core = db.mapRegionsCore;
         var data = core ? core.filterItemsByRegionId(full, regionId) : full;
-        // Кэш синхронизации мог остаться со старыми mapRegionId — тогда срез региона пустой, а в store объекты есть.
         if (orgId && data.length === 0 && live && Array.isArray(live.data) && live.data.length > 0) {
             var dbFull = db.getMapData(orgId) || [];
             var dbSlice = core ? core.filterItemsByRegionId(dbFull, regionId) : dbFull;
@@ -817,7 +810,6 @@ app.post('/api/map/move-to-region', (req, res) => {
             return res.status(400).json({ error: 'Укажите uniqueIds' });
         }
         if (!targetRegionId) return res.status(400).json({ error: 'Укажите targetRegionId' });
-        // Сначала слить live sync в store
         try { flushMapDbSave(orgId); } catch (eFlush) {}
         var result = db.moveMapItemsToRegion(orgId, uniqueIds, targetRegionId);
         try {
@@ -848,7 +840,6 @@ app.post('/api/map/move-to-region', (req, res) => {
     }
 });
 
-/** Конвертация .ned (NeD) → JSON карты. Тело: raw bytes, Content-Type: application/octet-stream */
 app.post('/api/import/ned', express.raw({ type: '*/*', limit: '120mb' }), async function(req, res) {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -881,8 +872,6 @@ app.post('/api/map', (req, res) => {
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
-        // Org-admin (единственный, кто может POST /api/map): allowShrink для явного импорта/замены.
-        // Раньше требовали isGlobalAdmin — а глобальному админу сохранение карты запрещено → флаг был мёртвый.
         var allowShrink = !!(req.body && req.body.allowShrink);
         var replaceAll = !!(req.body && req.body.replaceAll);
         var regionId = req.body && req.body.regionId != null ? String(req.body.regionId).trim() : '';
@@ -952,8 +941,6 @@ app.post('/api/map', (req, res) => {
                 });
             }
         }
-        // Как при восстановлении бэкапа: живой sync-кэш = новая карта, иначе GET /api/map
-        // отдаст старое состояние до debounce, и F5/reload после импорта «откатит» объекты.
         try {
             var syncKey = normalizeSyncOrgId(orgId);
             if (syncKey) {
@@ -1194,12 +1181,10 @@ app.put('/api/admin/platform-limits', (req, res) => {
     }
 });
 
-/** Бессрочные офлайн-лицензии Portable: ключ + fingerprint машины. */
 const portableLicenseCrypto = require('./lib/portable-license-crypto');
 const portableLicenseKeypairStore = require('./lib/portable-license-keypair-store');
 
 function getPortableLicenseKeypair() {
-    // Один vendor-keypair в server/config/ — едет с обновлением приложения, без ручной настройки на хосте.
     return portableLicenseKeypairStore.getOrCreateKeypair(DATA_DIR);
 }
 
@@ -1407,7 +1392,7 @@ app.get('/api/organizations', (req, res) => {
     const admin = getSessionUser(req);
     if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для администратора' });
     try {
-        try { db.purgeExpiredEmailVerificationTokens(); } catch (ePurge) { /* ignore */ }
+        try { db.purgeExpiredEmailVerificationTokens(); } catch (ePurge) {  }
         var list = db.getOrganizations().map(function(o) {
             var activeSessions = db.countActiveSessionsForOrganization(o.id);
             var limits = getMapObjectLimitPayload(o.id);
@@ -1492,7 +1477,6 @@ app.get('/api/maintenance-notice', (req, res) => {
     }
 });
 
-/** Присутствие главного администратора (heartbeat из site-admin). */
 var adminPresenceAt = 0;
 var ADMIN_PRESENCE_TTL_MS = 2 * 60 * 1000;
 
@@ -1603,7 +1587,6 @@ app.post('/api/support/message', (req, res) => {
     }
 });
 
-/** Запрос организации на удаление персональных данных / данных организации (152-ФЗ). */
 app.post('/api/privacy/deletion-request', (req, res) => {
     try {
         var ip = getClientIp(req);
@@ -2019,10 +2002,8 @@ app.patch('/api/organizations/:id', (req, res) => {
     var ok = db.updateOrganization(orgId, updates);
     if (!ok) return res.status(404).json({ error: 'Организация не найдена' });
 
-    // При приостановке организации принудительно завершаем все её активные сессии
     if (updates.status === 'suspended') {
         try { db.deleteSessionsForOrganization(orgId); } catch (e) {}
-        // Отключаем всех WebSocket‑клиентов этой организации от синхронизации
         try {
             wss.clients.forEach(function(client) {
                 if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
@@ -2083,7 +2064,6 @@ app.delete('/api/organizations/:id', (req, res) => {
         perfMonitor.forgetOrg(org.id);
         try { chatMedia.removeOrgStorage(orgId); } catch (e) {}
         try { objectMedia.removeOrgStorage(orgId); } catch (e) {}
-        // Отключаем WebSocket‑клиентов удалённой организации
         try {
             wss.clients.forEach(function(client) {
                 if (client.readyState === WebSocket.OPEN && client.orgId === orgId) {
@@ -2131,13 +2111,13 @@ app.post('/api/auth/register', function(req, res) {
 function rollbackFailedRegistration(userId, organizationId) {
     try {
         if (db.deleteEmailVerificationTokensForUser) db.deleteEmailVerificationTokensForUser(userId);
-    } catch (e) { /* ignore */ }
+    } catch (e) {  }
     try {
         db.setUsers(db.getUsers().filter(function(u) { return String(u.id) !== String(userId); }));
-    } catch (e2) { /* ignore */ }
+    } catch (e2) {  }
     try {
         if (organizationId && db.deleteOrganization) db.deleteOrganization(organizationId);
-    } catch (e3) { /* ignore */ }
+    } catch (e3) {  }
 }
 
 async function handleAuthRegister(req, res, body) {
@@ -2166,7 +2146,6 @@ async function handleAuthRegister(req, res, body) {
     var organizationId = db.addOrganization({
         name: String(organizationName).trim(),
         mapObjectLimitUnlocked: false,
-        // Активируется только после подтверждения e-mail
         status: 'pending',
         contactEmail: emailTrim
     });
@@ -2178,7 +2157,6 @@ async function handleAuthRegister(req, res, body) {
         full_name: fullName || username,
         email: emailTrim,
         emailVerified: false,
-        // Администратор карты для своей организации (но не глобальный админ панели)
         role: 'admin',
         status: organizationId ? 'approved' : 'pending',
         organizationId: organizationId,
@@ -2660,7 +2638,6 @@ app.delete('/api/organizations/me/embed', (req, res) => {
     res.json({ ok: true, enabled: false });
 });
 
-/** Обмен embed-токена на сессию просмотра (для Zabbix / iframe). */
 app.post('/api/auth/embed', (req, res) => {
     var body = req.body || {};
     var embedToken = String(body.embedToken || body.token || '').trim();
@@ -2951,7 +2928,6 @@ app.get('/api/zabbix/status', async function(req, res) {
     var cacheKey = String(orgId);
     var cached = zabbixStatusCache[cacheKey];
     var now = Date.now();
-    // Кэш чуть короче клиентского опроса, чтобы карта чаще получала свежие данные.
     var cacheMs = Math.max(10000, Math.min(ZABBIX_STATUS_CACHE_MS, pollIntervalSec * 1000 - 5000));
     if (cached && (now - cached.at) < cacheMs) {
         return res.json(cached.payload);
@@ -2978,7 +2954,6 @@ app.get('/api/users', (req, res) => {
     const isGlobal = isGlobalAdmin(user);
     const users = db.getUsers().filter(u => {
         if (isGlobal) return true;
-        // Администратор организации видит только пользователей своей организации
         return u.organizationId && u.organizationId === user.organizationId;
     });
     const allOrgs = db.getOrganizations();
@@ -3085,11 +3060,9 @@ app.put('/api/users/:userId', async (req, res) => {
 
     const targetIsMainAdmin = users[i].username === 'admin';
     if (targetIsMainAdmin) {
-        // Только сам главный администратор может менять параметры своей учётки.
         if (!isGlobalAdmin(admin) || admin.userId !== userId) {
             return res.status(403).json({ error: 'Только главный администратор может менять параметры главного администратора' });
         }
-        // Главный админ всегда должен оставаться глобальным (без привязки к организации).
         users[i].organizationId = null;
     }
 
@@ -3764,7 +3737,6 @@ app.get('/api/object-media/file/:mediaId', (req, res) => {
     res.sendFile(path.resolve(file));
 });
 
-// ===== On-prem basemap / ортофото (GeoTIFF → XYZ tiles) =====
 var basemapUpload = multer({
     dest: path.join(DATA_DIR, 'basemaps', '_tmp'),
     limits: {
@@ -4066,7 +4038,6 @@ app.post('/api/backups/restore', (req, res) => {
     if (!orgId) return res.status(403).json({ error: 'Восстановление доступно только для привязанной организации' });
     const filename = req.body && req.body.filename;
     if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
-    // force: админ организации может подтвердить откат к меньшей карте (старый бэкап)
     var force = !!(req.body && req.body.force);
     try {
         db.restoreFromBackup(orgId, filename.trim(), { force: force });
@@ -4110,7 +4081,6 @@ app.post('/api/admin/store-backups/restore', (req, res) => {
     if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Укажите filename' });
     try {
         var result = db.restoreFullStoreBackup(filename.trim());
-        // Drop in-memory sync caches — clients must reconnect
         Object.keys(syncCurrentStateByOrg).forEach(function (oid) {
             delete syncCurrentStateByOrg[oid];
         });
@@ -4575,7 +4545,6 @@ app.get('/api/static-map-image', async (req, res) => {
     }
 });
 
-// Лицевая страница по умолчанию — условия (pricing.html)
 app.get('/', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(PUBLIC_DIR, 'pricing.html'));
@@ -4589,21 +4558,18 @@ app.get('/updates.html', (req, res) => {
     res.redirect(301, '/news.html');
 });
 
-// Браузеры по умолчанию запрашивают /favicon.ico; в репозитории только favicon.svg
 app.get('/favicon.ico', (req, res) => {
     res.type('image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.sendFile(path.join(PUBLIC_DIR, 'favicon.svg'));
 });
 
-// Раздача JS с явным Content-Type (избегаем text/html от прокси/404)
 app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), {
     setHeaders: function (res, filePath) {
         if (filePath && String(filePath).endsWith('.js')) {
             res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
             res.setHeader('X-Content-Type-Options', 'nosniff');
             if (SERVING_OBFUSCATED_CLIENT) {
-                // Обфусцированный бандл — без долгого кэша у прокси со старым читаемым файлом.
                 res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
             }
         }
@@ -4612,7 +4578,6 @@ app.use('/js', express.static(path.join(PUBLIC_DIR, 'js'), {
 
 app.use(express.static(PUBLIC_DIR));
 
-/** Клиент оборвал соединение во время чтения body (reload, таймаут, cancel) — не ошибка приложения. */
 function isRequestAbortedError(err) {
     if (!err) return false;
     if (err.type === 'request.aborted') return true;
@@ -4644,8 +4609,6 @@ app.use(function(err, req, res, next) {
         res.status(status).json({ error: (err && err.message) ? String(err.message) : 'Internal Server Error' });
     }
 });
-
-// Storage bootstrap (JSON sync or MySQL hydrate) happens in initStorage before listen.
 
 function normalizeSyncOrgId(orgId) {
     if (orgId == null || orgId === '') return null;
@@ -4886,7 +4849,6 @@ function isSyncClientAdmin(clientId) {
     return user && user.role === 'admin';
 }
 
-/** Resolve cable endpoints from serialized map data (client uses full-array indices + optional uniqueIds). */
 function cableEndpointUniqueIdsFromSerialized(fullState, cable) {
     var fu = cable.fromUniqueId;
     var tu = cable.toUniqueId;
@@ -5107,7 +5069,6 @@ function applyOperationToState(state, op) {
         fromUid = op.data.fromUniqueId; toUid = op.data.toUniqueId;
         fromIdx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === fromUid; });
         toIdx = state.findIndex(function(i) { return i.type !== 'cable' && i.uniqueId === toUid; });
-        // Fallback: uniqueId как строка / без строгого type filter если концы потерялись в индексе
         if (fromIdx < 0 && fromUid != null && fromUid !== '') {
             fromIdx = state.findIndex(function(i) { return i && i.type !== 'cable' && String(i.uniqueId) === String(fromUid); });
         }
@@ -5224,7 +5185,6 @@ wss.on('connection', (ws, req) => {
             const msg = JSON.parse(str);
             perfMsgType = msg && msg.type;
             if (msg.type === 'cursor') {
-                // Курсоры частые — не гоняем проверку сессии на каждое сообщение.
                 var pos = msg.position;
                 if (Array.isArray(pos) && pos.length >= 2 && typeof pos[0] === 'number' && typeof pos[1] === 'number') {
                     ws.cursor = {
@@ -5265,11 +5225,9 @@ wss.on('connection', (ws, req) => {
                     if (orgId) syncClientOrgIds.set(clientId, orgId);
                 }
                 if (orgId) {
-                    // Не клонируем всю карту на каждый hello — берём кэш, если уже есть.
                     var state = getSyncStateForOrg(orgId, { forceFromDb: false });
                     if (state) {
                         var groupNames = syncGroupNamesByOrg[orgId] || syncGroupNames;
-                        // reason=hello: клиент пропускает reload при коротком reconnect (иначе карта «мигает»).
                         var helloPayload = { type: 'map_refresh', organizationId: orgId, reason: 'hello' };
                         if (groupNames && (groupNames.cross || groupNames.node)) helloPayload.groupNames = groupNames;
                         try { ws.send(JSON.stringify(helloPayload)); } catch (e) {}
@@ -5374,7 +5332,6 @@ wss.on('connection', (ws, req) => {
                 }
                 state.data = nextData;
                 state.clientId = msg.clientId || clientId;
-                // Структурные op (кабель/объект) — сразу в store/БД, иначе F5 до debounce теряет данные.
                 if (msg.op.type === 'add_cable' || msg.op.type === 'delete_cable' ||
                     msg.op.type === 'add_object' || msg.op.type === 'delete_object') {
                     flushMapDbSave(orgId);
@@ -5440,7 +5397,6 @@ wss.on('connection', (ws, req) => {
                         return;
                     }
                 }
-                // Dedupe после merge (для regionId старый fp по slice никогда не совпадал с full → thrash map_refresh).
                 var nextFp = fingerprintMapData(nextData);
                 var prevFp = syncStateFingerprintByOrg[orgId];
                 if (!prevFp && Array.isArray(state.data)) {
@@ -5547,7 +5503,6 @@ function broadcastOrgSettings(orgId, settings) {
 }
 
 function broadcastCursors() {
-    // Формируем курсоры отдельно по организациям и отправляем только соответствующим клиентам.
     const byOrg = {};
     const payloadByOrg = {};
     wss.clients.forEach(client => {

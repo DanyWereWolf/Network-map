@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Проверка SMTP из server-config.json в корне проекта.
- * Запуск: node scripts/test-smtp.js [--send test@example.com]
- */
 const path = require('path');
 const fs = require('fs');
 const mail = require('../server/lib/mail');

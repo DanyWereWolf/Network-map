@@ -1,6 +1,3 @@
-/**
- * Удаление объектов с карты и GPON-последствия.
- */
 function getDeleteObjectConfirmDetails(obj) {
     var fallback = { title: 'Удаление объекта', message: 'Вы уверены, что хотите удалить этот объект?', gponImpact: null };
     if (!obj || !obj.properties) return fallback;
@@ -98,8 +95,8 @@ async function confirmAndDeleteObject(obj, opts) {
 }
 
 function deleteObject(obj, opts) {
-    
-    const objType = obj.properties.get('type');
+
+        const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
     const objUniqueId = obj.properties.get('uniqueId');
     if (objUniqueId != null && typeof clearPendingLocalMapAdd === 'function') {
@@ -307,8 +304,8 @@ function deleteObject(obj, opts) {
     if (typeof removeObjectLockMapBadge === 'function') {
         try { removeObjectLockMapBadge(obj); } catch (eBadge) {}
     }
-    
-    if (objType === 'support' || objType === 'attachment' || isFiberHostType(objType)) {
+
+        if (objType === 'support' || objType === 'attachment' || isFiberHostType(objType)) {
         var waypointUid = getObjectUniqueId(obj);
         for (var ci = 0; ci < objects.length; ci++) {
             var cable = objects[ci];
@@ -356,8 +353,8 @@ function deleteObject(obj, opts) {
         var cuid = cable.properties && cable.properties.get('uniqueId');
         if (cuid) removedUniqueIds.push(cuid);
     });
-    
-    cablesToRemove.forEach(cable => {
+
+        cablesToRemove.forEach(cable => {
         var cableUniqueId = cable.properties.get('uniqueId');
         if (cableUniqueId) {
             deleteCableByUniqueId(cableUniqueId, { skipSync: true, skipRefreshModal: true, deferMapRefresh: true });
@@ -367,8 +364,8 @@ function deleteObject(obj, opts) {
             objects = objects.filter(o => o !== cable);
         }
     });
-    
-    myMap.geoObjects.remove(obj);
+
+        myMap.geoObjects.remove(obj);
     if ((objType === 'region' || objType === 'zone') && window.MapRegions && MapRegions.removeRegionLabel) {
         MapRegions.removeRegionLabel(obj, myMap);
     } else {
@@ -377,8 +374,6 @@ function deleteObject(obj, opts) {
     }
     mapPerfUnregister(obj);
     objects = objects.filter(o => o !== obj);
-    // После исключения из objects — иначе итерация по objects + getObjectUniqueId
-    // могла снова зарегистрировать кросс в MapPerf и вернуть его на карту.
     if (objType === 'cross' && objUniqueId && typeof removeCrossPortPatchesReferencingCross === 'function') {
         removeCrossPortPatchesReferencingCross(objUniqueId);
     }
@@ -447,6 +442,6 @@ function deleteObject(obj, opts) {
             setTimeout(function() { try { renderRegionsSidebarList(); } catch (eR2) {} }, 0);
         }
     }
-    
-    closeInfoModalForDeletedHost((opts && opts.deletedModalUid) || objUniqueId);
+
+        closeInfoModalForDeletedHost((opts && opts.deletedModalUid) || objUniqueId);
 }

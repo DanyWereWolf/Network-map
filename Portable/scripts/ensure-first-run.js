@@ -1,10 +1,3 @@
-/**
- * Подготовка Portable при первом запуске:
- * - проверка Node >= 20.9
- * - server-config.json из example
- * - каталог data/
- * - печать учётки bootstrap (если только что создали конфиг)
- */
 'use strict';
 
 const fs = require('fs');

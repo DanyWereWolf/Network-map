@@ -1,13 +1,9 @@
-/**
- * Вспомогательные функции кабелей и меди.
- */
 function findCableByUniqueId(cableId) {
     if (cableId == null || cableId === '') return null;
     var uid = String(cableId);
     if (typeof MapPerf !== 'undefined' && MapPerf.getByUid) {
         var hit = MapPerf.getByUid(uid, 'cable');
         if (hit) return hit;
-        // Иногда uid без type-фильтра (если индекс не различает тип)
         hit = MapPerf.getByUid(uid);
         if (hit && hit.properties && hit.properties.get('type') === 'cable') return hit;
     }
@@ -27,16 +23,16 @@ function markFiberAsUsed(obj, cableId, fiberNumber) {
     if (!usedFibersData) {
         usedFibersData = {};
     }
-    
-    if (!usedFibersData[cableId]) {
+
+        if (!usedFibersData[cableId]) {
         usedFibersData[cableId] = [];
     }
-    
-    if (!usedFibersData[cableId].includes(fiberNumber)) {
+
+        if (!usedFibersData[cableId].includes(fiberNumber)) {
         usedFibersData[cableId].push(fiberNumber);
     }
-    
-    obj.properties.set('usedFibers', usedFibersData);
+
+        obj.properties.set('usedFibers', usedFibersData);
     saveData();
 }
 
@@ -59,18 +55,6 @@ function getFiberRoutingPreviewStroke(targetType) {
     return '#f97316';
 }
 
-/**
- * Проверяет, занята ли волокно (cableId + fiberNumber) где-либо: порт OLT, подключение к узлу/ONU/медиаконвертеру,
- * вход/выход сплиттера. exclude — контекст текущего назначения (чтобы не считать «занятой» ту же волокно при замене).
- * atCrossId/atSleeveId — проверять использование только в этом кроссе/муфте (волокно имеет два конца,
- * подключение на одном конце не блокирует использование другого).
- * Назначение на OLT (oltPort / oltIncoming) не блокируется ответвлениями GPON (ONU, сплиттер) на том же волокне.
- * Назначение ONU/сплиттера (onuConn / splitterInput) не блокируется OLT на том же волокне (GPON feeder).
- * @param {string} cableId
- * @param {number} fiberNumber
- * @param {{ type?: string, oltId?: string, portNumber?: number, splitterId?: string, outputIndex?: number, crossId?: string, sleeveId?: string, atCrossId?: string, atSleeveId?: string }} exclude
- * @returns {{ used: boolean, where?: string }}
- */
 function isOltFiberAssignmentExclude(exclude) {
     return !!(exclude && (exclude.type === 'oltPort' || exclude.type === 'oltIncoming'));
 }
@@ -121,8 +105,8 @@ function getFiberUsage(cableId, fiberNumber, exclude) {
                 if (isGponBranchAssignmentExclude(exclude)) continue;
                 return { used: true, where: 'соединение волокон в ' + (t === 'cross' ? 'кроссе' : (t === 'spliceCassette' ? 'сплайс-кассете' : 'муфте')) };
             }
-            
-            var nodeAss = getHostAssignment(obj, 'nodeConnections', cableId, fiberNumber);
+
+                        var nodeAss = getHostAssignment(obj, 'nodeConnections', cableId, fiberNumber);
             if (nodeAss) {
                 if (exclude && exclude.type === 'nodeConn' && (exclude.crossId === uid || exclude.sleeveId === uid)) continue;
                 return { used: true, where: 'подключение к узлу' };
@@ -284,7 +268,6 @@ function repairCablesAfterImport() {
     objects.forEach(function (cable) {
         if (!cable || !cable.properties || cable.properties.get('type') !== 'cable') return;
         try {
-            // Через MapPerf: учитывает LOD/virtualization (не форсим raw add — иначе вспышка всех кабелей).
             if (typeof mapGeoAdd === 'function') mapGeoAdd(cable);
             else if (!isGeoObjectOnMap(cable)) myMap.geoObjects.add(cable);
         } catch (eAdd) {}
@@ -375,13 +358,11 @@ function validateAndFixCableGeometryOnLoad() {
     });
 }
 
-/** Обновить from/to/points кабеля и обновить reverse-индекс касаний. */
 function setCableRoutePoints(cable, points) {
     if (!cable || !cable.properties || !Array.isArray(points) || points.length < 2) return;
     cable.properties.set('points', points);
     cable.properties.set('from', points[0]);
     cable.properties.set('to', points[points.length - 1]);
-    // Полный dirty на каждый set → снова «холодный» первый move; лучше точечно.
     if (typeof MapPerf !== 'undefined') {
         if (MapPerf.reindexOneCableLinks) MapPerf.reindexOneCableLinks(cable);
         else if (MapPerf.markCableLinksDirty) MapPerf.markCableLinksDirty();
@@ -431,7 +412,6 @@ function getCablesTouchingObject(obj) {
     return out;
 }
 
-/** Лёгкое обновление кабелей во время drag: только setCoordinates, без recreate overlays. */
 function updateConnectedCablesLight(obj) {
     var cables = getCablesTouchingObject(obj);
     for (var i = 0; i < cables.length; i++) {
@@ -543,7 +523,6 @@ function buildCableRouteDisplayName(cable) {
     return fromLabel + ' → ' + toLabel;
 }
 
-/** Человекочитаемое имя кабеля: своё название, «Кабель N» в кроссе/муфте, маршрут или тип ВОЛС. */
 function resolveCableDisplayNameById(cableId, opts) {
     opts = opts || {};
     if (!cableId) return 'Кабель';
@@ -591,7 +570,6 @@ function buildSwitchPortTypesArray(count, defaultKind) {
     return arr;
 }
 
-/** Порт коммутатора под оптику с кросса: SFP/QSFP/CFP/FC/Комбо и т.п. */
 function isSwitchPortSfpFiberType(portTypeLabel) {
     if (typeof isSwitchPortOpticalFiberType === 'function') {
         return isSwitchPortOpticalFiberType(portTypeLabel);
@@ -613,7 +591,6 @@ function isSwitchPortSfpFiberType(portTypeLabel) {
     return false;
 }
 
-/** Медный кабель: RJ45 и комбо RJ45/SFP. */
 function isSwitchPortCopperCapable(portTypeLabel) {
     if (!portTypeLabel || typeof portTypeLabel !== 'string') return false;
     var L = portTypeLabel.trim();

@@ -1,6 +1,3 @@
-/**
- * Офлайн-кэш карты организации (IndexedDB / нативное хранилище Android).
- */
 (function(global) {
     'use strict';
 

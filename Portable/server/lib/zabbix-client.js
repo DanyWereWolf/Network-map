@@ -1,8 +1,5 @@
 'use strict';
 
-/**
- * Minimal Zabbix JSON-RPC client (API token / Bearer).
- */
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
@@ -90,7 +87,6 @@ async function callWithFallback(apiUrl, token, method, params, options) {
         return await rpcCall(apiUrl, token, method, params, options);
     } catch (e) {
         var msg = String(e && e.message || '');
-        // Старые Zabbix / прокси без Bearer — повторяем с auth в body
         if (/auth|token|unauthorized|permission|not authorized/i.test(msg) || /HTTP 401/.test(msg)) {
             return rpcCall(apiUrl, token, method, params, Object.assign({}, options, { authInBody: true }));
         }
@@ -103,7 +99,7 @@ async function testConnection(apiUrl, token) {
     try {
         var v = await callWithFallback(apiUrl, token, 'apiinfo.version', {});
         version = v != null ? String(v) : '';
-    } catch (e) { /* optional */ }
+    } catch (e) {  }
     await callWithFallback(apiUrl, token, 'host.get', {
         output: ['hostid'],
         limit: 1

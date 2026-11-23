@@ -1,10 +1,5 @@
 'use strict';
 
-/**
- * Мониторинг нагрузки для админки (вкладка «Нагрузка»).
- * Всё хранится только в памяти процесса: счётчики, кольцевая история за ~1 час,
- * последние замеры от браузеров. После рестарта сервера статистика начинается заново.
- */
 const os = require('os');
 const { monitorEventLoopDelay, performance } = require('perf_hooks');
 
@@ -60,7 +55,6 @@ function counterAdd(counter, n) {
     }
 }
 
-/** Сумма за последние `minutes` минут (текущая неполная минута включается). */
 function counterSum(counter, minutes) {
     var minute = Math.floor(Date.now() / MINUTE_MS);
     var from = minute - Math.max(1, minutes) + 1;
@@ -154,8 +148,6 @@ function takeSample() {
 var sampleTimer = setInterval(takeSample, SAMPLE_INTERVAL_MS);
 if (sampleTimer && typeof sampleTimer.unref === 'function') sampleTimer.unref();
 
-/* ---------- HTTP ---------- */
-
 var ID_SEGMENT_RE = /^(\d+|[0-9a-f]{8}-[0-9a-f-]{27,}|[0-9a-f]{16,}|(tk|emb|id|org|u|usr)_[\w-]+|[\w-]{24,})$/i;
 
 function normalizePath(p) {
@@ -209,8 +201,6 @@ function httpMiddleware(req, res, next) {
     next();
 }
 
-/* ---------- WebSocket ---------- */
-
 function getOrgStats(orgId) {
     var key = orgId == null ? '' : String(orgId);
     var s = orgStats.get(key);
@@ -253,7 +243,6 @@ function recordWsMessage(orgId, type, bytes, ms) {
     else if (t === 'state') counterAdd(s.states, 1);
 }
 
-/** Считает исходящий трафик сокета; орг берётся на момент отправки (после hello). */
 function instrumentWs(ws) {
     if (!ws || ws.__perfInstrumented) return;
     ws.__perfInstrumented = true;
@@ -273,8 +262,6 @@ function instrumentWs(ws) {
     };
 }
 
-/* ---------- Сохранения карты ---------- */
-
 function recordMapSave(orgId, ms, items) {
     if (orgId == null) return;
     var sv = getOrgStats(orgId).saves;
@@ -288,7 +275,6 @@ function recordMapSave(orgId, ms, items) {
     if (sv.samples.length > 100) sv.samples.shift();
 }
 
-/** Оборачивает db.setMapData, чтобы мерить время записи карты (синхронную часть или промис). */
 function wrapMapSave(db) {
     if (!db || typeof db.setMapData !== 'function' || db.setMapData.__perfWrapped) return;
     var orig = db.setMapData;
@@ -316,8 +302,6 @@ function wrapMapSave(db) {
     wrapped.__perfWrapped = true;
     db.setMapData = wrapped;
 }
-
-/* ---------- Анализ состава карты ---------- */
 
 function geometryPointCount(geometry) {
     if (!Array.isArray(geometry) || !geometry.length) return 0;
@@ -396,7 +380,6 @@ function analyzeMapData(arr, labelFn) {
     return res;
 }
 
-/** Кэш анализа: пересчёт не чаще раза в минуту и только если массив карты сменился. */
 function getMapAnalysis(orgId, arr, labelFn, force) {
     var key = String(orgId);
     var cached = mapAnalysisCache.get(key);
@@ -443,8 +426,6 @@ function getOrgLoad(orgId) {
         }
     };
 }
-
-/* ---------- Замеры из браузеров ---------- */
 
 function num(v, max) {
     var n = Number(v);
@@ -524,8 +505,6 @@ function listClientReports() {
         return (a.fpsAvg == null ? 999 : a.fpsAvg) - (b.fpsAvg == null ? 999 : b.fpsAvg);
     });
 }
-
-/* ---------- Сводка ---------- */
 
 function getServerSnapshot() {
     var mem = process.memoryUsage();

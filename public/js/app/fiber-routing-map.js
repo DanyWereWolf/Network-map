@@ -1,6 +1,3 @@
-/**
- * Прокладка GPON-волокон и сплиттер-маршрутов по карте.
- */
 function getGponFiberRoutingSourceAnchor(data) {
     if (!data) return null;
     if (data.sourceKind === 'oltPort') return data.oltObj || data.routingAnchor;
@@ -231,32 +228,32 @@ function applyGponRoutingMapHighlight(sourceObj, targetObj) {
 
 function handleSplitterFiberRoutingClick(coords) {
     if (!splitterFiberRoutingMode || !splitterFiberRoutingData) return;
-    
-    var data = splitterFiberRoutingData;
+
+        var data = splitterFiberRoutingData;
     var clickedObject = findObjectAtCoords(coords);
-    
-    if (clickedObject && clickedObject.geometry) {
+
+        if (clickedObject && clickedObject.geometry) {
         var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
         var objId = getObjectUniqueId(clickedObject);
-        
-        if (objId === data.targetId || isGponFiberRoutingTargetReachableClick(data, clickedObject)) {
+
+                if (objId === data.targetId || isGponFiberRoutingTargetReachableClick(data, clickedObject)) {
             completeSplitterFiberRouting();
             return;
         }
-        
-        if (objType === 'support' || objType === 'attachment') {
+
+                if (objType === 'support' || objType === 'attachment') {
             addSplitterFiberWaypoint(clickedObject);
             updateSplitterFiberPreview();
             return;
         }
-        
-        if (isGponFiberRoutingSourceUid(data, objId)) {
+
+                if (isGponFiberRoutingSourceUid(data, objId)) {
             splitterFiberWaypoints = [];
             updateSplitterFiberPreview();
             return;
         }
-        
-        var targetName = getFiberRoutingTargetLabel(data.targetType, data.targetObj);
+
+                var targetName = getFiberRoutingTargetLabel(data.targetType, data.targetObj);
         showWarning('Кликните по опоре или креплению для добавления промежуточной точки, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
     } else {
         var targetName = getFiberRoutingTargetLabel(data.targetType, data.targetObj);
@@ -266,33 +263,33 @@ function handleSplitterFiberRoutingClick(coords) {
 
 function updateSplitterFiberPreview() {
     if (!splitterFiberRoutingMode || !splitterFiberRoutingData) return;
-    
-    if (splitterFiberPreviewLine) {
+
+        if (splitterFiberPreviewLine) {
         myMap.geoObjects.remove(splitterFiberPreviewLine);
         splitterFiberPreviewLine = null;
     }
-    
-    var data = splitterFiberRoutingData;
+
+        var data = splitterFiberRoutingData;
     var points = [];
-    
-    var splitterCoords = getGponFiberRoutingSourceCoords(data);
+
+        var splitterCoords = getGponFiberRoutingSourceCoords(data);
     if (!splitterCoords) return;
     points.push(splitterCoords);
-    
-    splitterFiberWaypoints.forEach(function(wp) {
+
+        splitterFiberWaypoints.forEach(function(wp) {
         if (wp.geometry) {
             points.push(wp.geometry.getCoordinates());
         }
     });
-    
-    if (points.length >= 1) {
+
+        if (points.length >= 1) {
         var targetCoords = typeof getObjectRoutingCoords === 'function'
             ? getObjectRoutingCoords(data.targetObj)
             : (data.targetObj && data.targetObj.geometry ? data.targetObj.geometry.getCoordinates() : null);
         if (!targetCoords) return;
         points.push(targetCoords);
-        
-        splitterFiberPreviewLine = new ymaps.Polyline(points, {}, {
+
+                splitterFiberPreviewLine = new ymaps.Polyline(points, {}, {
             strokeColor: getFiberRoutingPreviewStroke(data.targetType),
             strokeWidth: 2,
             strokeStyle: 'shortdash',
@@ -304,28 +301,28 @@ function updateSplitterFiberPreview() {
 
 function updateSplitterFiberPreviewWithCursor(cursorCoords) {
     if (!splitterFiberRoutingMode || !splitterFiberRoutingData) return;
-    
-    if (splitterFiberPreviewLine) {
+
+        if (splitterFiberPreviewLine) {
         myMap.geoObjects.remove(splitterFiberPreviewLine);
         splitterFiberPreviewLine = null;
     }
-    
-    var data = splitterFiberRoutingData;
+
+        var data = splitterFiberRoutingData;
     var points = [];
-    
-    var splitterCoords = getGponFiberRoutingSourceCoords(data);
+
+        var splitterCoords = getGponFiberRoutingSourceCoords(data);
     if (!splitterCoords) return;
     points.push(splitterCoords);
-    
-    splitterFiberWaypoints.forEach(function(wp) {
+
+        splitterFiberWaypoints.forEach(function(wp) {
         if (wp.geometry) {
             points.push(wp.geometry.getCoordinates());
         }
     });
-    
-    points.push(cursorCoords);
-    
-    splitterFiberPreviewLine = new ymaps.Polyline(points, {}, {
+
+        points.push(cursorCoords);
+
+        splitterFiberPreviewLine = new ymaps.Polyline(points, {}, {
         strokeColor: getFiberRoutingPreviewStroke(data.targetType),
         strokeWidth: 2,
         strokeStyle: 'shortdash',
@@ -411,8 +408,8 @@ function cancelFiberRouting() {
 function completeFiberRouting() {
     if (!fiberRoutingMode || !fiberRoutingData) return;
     var data = fiberRoutingData;
-    
-    var routeIds = resolveGponRouteIds(fiberRoutingWaypoints.map(function(wp) {
+
+        var routeIds = resolveGponRouteIds(fiberRoutingWaypoints.map(function(wp) {
         if (wp.properties) {
             var wpId = getObjectUniqueId(wp);
             if (!wpId) {
@@ -423,8 +420,8 @@ function completeFiberRouting() {
         }
         return null;
     }).filter(function(id) { return id !== null; }));
-    
-    var refreshedUi = false;
+
+        var refreshedUi = false;
     if (data.targetType === 'onu') {
         connectFiberToOnuWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds);
         refreshedUi = true;
@@ -443,17 +440,17 @@ function completeFiberRouting() {
         connectFiberToOltWithRoute(data.sleeveObj, data.cableId, data.fiberNumber, data.targetObj, routeIds, data.uplinkPortIndex);
         refreshedUi = true;
     }
-    
-    if (fiberRoutingPreviewLine) {
+
+        if (fiberRoutingPreviewLine) {
         myMap.geoObjects.remove(fiberRoutingPreviewLine);
         fiberRoutingPreviewLine = null;
     }
-    
-    fiberRoutingMode = false;
+
+        fiberRoutingMode = false;
     fiberRoutingData = null;
     fiberRoutingWaypoints = [];
-    
-    clearGponRoutingMapHighlight();
+
+        clearGponRoutingMapHighlight();
     clearSelection();
     if (!refreshedUi) {
         savedFiberConnectionsScrollPos = getFiberSchemeScrollPos();
@@ -464,36 +461,36 @@ function completeFiberRouting() {
 
 function handleFiberRoutingClick(coords) {
     if (!fiberRoutingMode || !fiberRoutingData) return;
-    
-    var data = fiberRoutingData;
+
+        var data = fiberRoutingData;
     var clickedObject = findObjectAtCoords(coords);
-    
-    if (clickedObject && clickedObject.geometry) {
+
+        if (clickedObject && clickedObject.geometry) {
         if (typeof tryCompleteFiberRoutingForCabinetClick === 'function' &&
             tryCompleteFiberRoutingForCabinetClick(clickedObject)) {
             return;
         }
         var objType = clickedObject.properties ? clickedObject.properties.get('type') : null;
         var objId = getObjectUniqueId(clickedObject);
-        
-        if (objId === data.targetId) {
+
+                if (objId === data.targetId) {
             completeFiberRouting();
             return;
         }
-        
-        if (objType === 'support' || objType === 'attachment') {
+
+                if (objType === 'support' || objType === 'attachment') {
             addFiberRoutingWaypoint(clickedObject);
             updateFiberRoutingPreview();
             return;
         }
-        
-        if (objId === getObjectUniqueId(data.sleeveObj)) {
+
+                if (objId === getObjectUniqueId(data.sleeveObj)) {
             fiberRoutingWaypoints = [];
             updateFiberRoutingPreview();
             return;
         }
-        
-        var targetName = getFiberRoutingTargetLabel(data.targetType, data.targetObj);
+
+                var targetName = getFiberRoutingTargetLabel(data.targetType, data.targetObj);
         showWarning('Кликните по опоре или креплению для добавления промежуточной точки, или по целевому объекту (' + escapeHtml(targetName) + ') для завершения.', 'Режим прокладки');
     } else {
         var targetName = getFiberRoutingTargetLabel(data.targetType, data.targetObj);
@@ -503,29 +500,29 @@ function handleFiberRoutingClick(coords) {
 
 function updateFiberRoutingPreview() {
     if (!fiberRoutingMode || !fiberRoutingData) return;
-    
-    if (fiberRoutingPreviewLine) {
+
+        if (fiberRoutingPreviewLine) {
         myMap.geoObjects.remove(fiberRoutingPreviewLine);
         fiberRoutingPreviewLine = null;
     }
-    
-    var data = fiberRoutingData;
+
+        var data = fiberRoutingData;
     var points = [];
-    
-    var sleeveCoords = data.sleeveObj.geometry.getCoordinates();
+
+        var sleeveCoords = data.sleeveObj.geometry.getCoordinates();
     points.push(sleeveCoords);
-    
-    fiberRoutingWaypoints.forEach(function(wp) {
+
+        fiberRoutingWaypoints.forEach(function(wp) {
         if (wp.geometry) {
             points.push(wp.geometry.getCoordinates());
         }
     });
-    
-    if (points.length >= 1) {
+
+        if (points.length >= 1) {
         var targetCoords = data.targetObj.geometry.getCoordinates();
         points.push(targetCoords);
-        
-        fiberRoutingPreviewLine = new ymaps.Polyline(points, {}, {
+
+                fiberRoutingPreviewLine = new ymaps.Polyline(points, {}, {
             strokeColor: getFiberRoutingPreviewStroke(data.targetType),
             strokeWidth: 2,
             strokeStyle: 'shortdash',
@@ -537,27 +534,27 @@ function updateFiberRoutingPreview() {
 
 function updateFiberRoutingPreviewWithCursor(cursorCoords) {
     if (!fiberRoutingMode || !fiberRoutingData) return;
-    
-    if (fiberRoutingPreviewLine) {
+
+        if (fiberRoutingPreviewLine) {
         myMap.geoObjects.remove(fiberRoutingPreviewLine);
         fiberRoutingPreviewLine = null;
     }
-    
-    var data = fiberRoutingData;
+
+        var data = fiberRoutingData;
     var points = [];
-    
-    var sleeveCoords = data.sleeveObj.geometry.getCoordinates();
+
+        var sleeveCoords = data.sleeveObj.geometry.getCoordinates();
     points.push(sleeveCoords);
-    
-    fiberRoutingWaypoints.forEach(function(wp) {
+
+        fiberRoutingWaypoints.forEach(function(wp) {
         if (wp.geometry) {
             points.push(wp.geometry.getCoordinates());
         }
     });
-    
-    points.push(cursorCoords);
-    
-    fiberRoutingPreviewLine = new ymaps.Polyline(points, {}, {
+
+        points.push(cursorCoords);
+
+        fiberRoutingPreviewLine = new ymaps.Polyline(points, {}, {
         strokeColor: getFiberRoutingPreviewStroke(data.targetType),
         strokeWidth: 2,
         strokeStyle: 'shortdash',

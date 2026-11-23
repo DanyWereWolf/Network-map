@@ -1,11 +1,5 @@
 'use strict';
 
-/**
- * Logical JSON export + optional mysqldump wrapper for MySQL mode.
- *
- *   node scripts/mysql-backup.js              # export assembled store JSON to data/backups/full/
- *   node scripts/mysql-backup.js --dump       # also run mysqldump if available
- */
 const fs = require('fs');
 const path = require('path');
 

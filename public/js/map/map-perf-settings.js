@@ -1,7 +1,3 @@
-/**
- * Настройки производительности карты: пресеты и флаги отрисовки.
- * Хранятся локально по userId и синхронизируются в /api/settings (perfSettings).
- */
 (function (global) {
     var STORAGE_PREFIX = 'networkMap_perfSettings';
     var syncTimer = null;
@@ -177,7 +173,6 @@
         };
     }
 
-    /** Сколько объектов в видимой области допускается с подписями (дальше подписи скрываются). */
     var LABEL_BUDGET_BY_MODE = { auto: 500, economy: 200, max: 1500, custom: 500 };
 
     function getPerfLabelBudget() {
@@ -187,10 +182,6 @@
     var BIG_MAP_OBJECTS = 10000;
     var bigMapAutoLite = false;
 
-    /**
-     * Режим «Авто» на большой карте: без декоративного фона и анимаций карты.
-     * В настройки не сохраняется — пользователь может явно включить их или выбрать «Максимум».
-     */
     function applyAutoPerfForMapSize(objectCount) {
         var lite = settings.mode === 'auto' && objectCount >= BIG_MAP_OBJECTS;
         if (lite === bigMapAutoLite) return;

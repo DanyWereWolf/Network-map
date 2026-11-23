@@ -1,6 +1,3 @@
-/**
- * Модалки подключения волокон к OLT, ONU, узлу.
- */
 function showSplitterOutputSplitterDialog(splitterObj, outIdx) {
     syncSplitterInputFromHost(splitterObj);
     var effectiveInput = getSplitterRootInputFiber(splitterObj);
@@ -71,11 +68,11 @@ function deleteSplitterOutput(splitterObj, outIdx) {
     var outputs = (splitterObj.properties.get('outputConnections') || []).slice();
     while (outputs.length < ratio) outputs.push(null);
     if (outputs.length > ratio) outputs = outputs.slice(0, ratio);
-    
-    var oldOutput = outputs[outIdx];
+
+        var oldOutput = outputs[outIdx];
     if (!oldOutput) return;
-    
-    if (oldOutput.onuId) {
+
+        if (oldOutput.onuId) {
         var onuObj = objects.find(function(o) { return o.properties && o.properties.get('type') === 'onu' && getObjectUniqueId(o) === oldOutput.onuId; });
         if (onuObj) {
             onuObj.properties.set('incomingFiber', null);
@@ -94,8 +91,8 @@ function deleteSplitterOutput(splitterObj, outIdx) {
             targetSplitter.properties.set('inputFiber', null);
         }
     }
-    
-    outputs[outIdx] = null;
+
+        outputs[outIdx] = null;
     splitterObj.properties.set('outputConnections', outputs);
     if (splitterObj._embedded && splitterObj._host) {
         persistEmbeddedSplittersOnHost(splitterObj._host);

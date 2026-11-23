@@ -1,6 +1,3 @@
-/**
- * Линии GPON-связей на карте.
- */
 function getNodeConnFiberUsageExclude(hostObj) {
     var uid = getObjectUniqueId(hostObj);
     if (hostObj.properties.get('type') === 'sleeve' || hostObj.properties.get('type') === 'spliceCassette') {
@@ -309,10 +306,10 @@ function createOnuConnectionLine(sleeveObj, onuObj, cableId, fiberNumber, routeI
     removeOnuConnectionLineByKey(key);
     const onuName = onuObj.properties.get('name') || 'ONU';
     routeIds = resolveGponRouteIds(routeIds);
-    
-    var points = [sleeveCoords].concat(gponRouteWaypointCoords(routeIds)).concat([onuCoords]);
-    
-    const line = new ymaps.Polyline(points, {}, getConnectionLinePolylineOptions('#22c55e'));
+
+        var points = [sleeveCoords].concat(gponRouteWaypointCoords(routeIds)).concat([onuCoords]);
+
+        const line = new ymaps.Polyline(points, {}, getConnectionLinePolylineOptions('#22c55e'));
     line.properties.set('type', 'onuConnectionLine');
     line.properties.set('connectionKey', key);
     line.properties.set('sleeveId', sleeveUniqueId);
@@ -365,8 +362,8 @@ function createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber) {
     const key = `${crossUniqueId}-${cableId}-${fiberNumber}`;
 
     removeNodeConnectionLineByKey(key);
-    
-    const nodeName = nodeObj.properties.get('name') || 'Узел';
+
+        const nodeName = nodeObj.properties.get('name') || 'Узел';
     const nodeUniqueId = nodeObj.properties.get('uniqueId');
     const line = new ymaps.Polyline([crossCoords, nodeCoords], {}, getConnectionLinePolylineOptions('#22c55e'));
 
@@ -392,8 +389,8 @@ function createNodeConnectionLine(crossObj, nodeObj, cableId, fiberNumber) {
             '</div></div>';
         myMap.balloon.open(coords, balloonHtml, { maxWidth: 320, closeButton: false });
     });
-    
-    nodeConnectionLines.push(line);
+
+        nodeConnectionLines.push(line);
     myMap.geoObjects.add(line);
 }
 
@@ -407,8 +404,8 @@ function removeNodeConnectionLineByKey(key) {
     const lineIndex = nodeConnectionLines.findIndex(line => 
         line.properties.get('connectionKey') === key
     );
-    
-    if (lineIndex !== -1) {
+
+        if (lineIndex !== -1) {
         myMap.geoObjects.remove(nodeConnectionLines[lineIndex]);
         nodeConnectionLines.splice(lineIndex, 1);
     }
@@ -722,7 +719,6 @@ function rebuildLinesTargetingEndpoint(endpointUid, endpointType) {
     }
 }
 
-/** uid → GPON-линии, касающиеся endpoint/host/route. Лениво, сбрасывается при rebuild. */
 var _connLinesByUidIndex = null;
 
 function invalidateConnLinesByUidIndex() {
@@ -772,20 +768,17 @@ function ensureConnLinesByUidIndex() {
     return map;
 }
 
-/** Лёгкое обновление геометрии уже существующих GPON-линий во время drag (без remove/add). */
 function nudgeConnectionLinesDuringDrag(obj) {
     if (!obj || !obj.properties || !obj.geometry) return;
     var type = obj.properties.get('type');
     var uid = getObjectUniqueId(obj);
     if (!uid) return;
-    // Камеры/радио — coverage; линии GPON только setCoordinates (полный rebuild на dragend).
     if (type === 'camera') {
         if (typeof updateCameraCoverage === 'function') updateCameraCoverage(obj);
         return;
     }
     if (type === 'radioBridge') {
         if (typeof updateRadioBridgeCoverage === 'function') updateRadioBridgeCoverage(obj);
-        // не зовём updateRadioBridgeConnectionLines() на каждый кадр
     }
     var isHost = type === 'cross' || (typeof isSleeveLikeHostType === 'function' && isSleeveLikeHostType(type));
     var isWaypoint = type === 'support' || type === 'attachment';
@@ -930,7 +923,6 @@ function updateAllConnectionLines() {
     if (typeof updateAllRadioBridgeCoverages === 'function') updateAllRadioBridgeCoverages();
     if (typeof updateAllCameraCoverages === 'function') updateAllCameraCoverages();
     applyConnectionLinesVisibility();
-    // После пересоздания зон подтянуть актуальный цвет темы (если уже пришёл с сервера).
     if (typeof window.applyOrgCoverageColors === 'function' && window._orgCoverageColorSettings) {
         try {
             window.applyOrgCoverageColors(window._orgCoverageColorSettings, { applyAll: true });
@@ -951,10 +943,10 @@ function createSplitterOutputConnectionLine(sourceObj, targetObj, outIdx, routeI
     var targetCoords = targetObj.geometry.getCoordinates();
     var targetType = targetObj.properties ? targetObj.properties.get('type') : '';
     routeIds = resolveGponRouteIds(routeIds);
-    
-    var lineCoords = [sourceCoords].concat(gponRouteWaypointCoords(routeIds)).concat([targetCoords]);
-    
-    var stroke = targetType === 'onu' ? '#a855f7' : (targetType === 'mediaConverter' ? '#14b8a6' : (targetType === 'node' ? '#22c55e' : (isFiberHostType(targetType) ? '#ef4444' : '#f97316')));
+
+        var lineCoords = [sourceCoords].concat(gponRouteWaypointCoords(routeIds)).concat([targetCoords]);
+
+        var stroke = targetType === 'onu' ? '#a855f7' : (targetType === 'mediaConverter' ? '#14b8a6' : (targetType === 'node' ? '#22c55e' : (isFiberHostType(targetType) ? '#ef4444' : '#f97316')));
     var line = new ymaps.Polyline(lineCoords, {}, getConnectionLinePolylineOptions(stroke));
     line.properties.set('type', 'splitterOutputConnectionLine');
     line.properties.set('connectionKey', key);
@@ -1248,10 +1240,10 @@ function createSplitterConnectionLine(sleeveObj, splitterObj, cableId, fiberNumb
     removeSplitterConnectionLineByKey(key);
     const splitterName = splitterObj.properties.get('name') || 'Сплиттер';
     routeIds = resolveGponRouteIds(routeIds);
-    
-    var points = [sleeveCoords].concat(gponRouteWaypointCoords(routeIds)).concat([splitterCoords]);
-    
-    const line = new ymaps.Polyline(points, {}, getConnectionLinePolylineOptions('#f97316'));
+
+        var points = [sleeveCoords].concat(gponRouteWaypointCoords(routeIds)).concat([splitterCoords]);
+
+        const line = new ymaps.Polyline(points, {}, getConnectionLinePolylineOptions('#f97316'));
     line.properties.set('type', 'splitterConnectionLine');
     line.properties.set('connectionKey', key);
     line.properties.set('sleeveId', sleeveUniqueId);
@@ -1300,8 +1292,8 @@ function updateSplitterConnectionLines() {
 }
 
 function updateAllNodeConnectionLines() {
-    
-    nodeConnectionLines.forEach(line => {
+
+        nodeConnectionLines.forEach(line => {
         myMap.geoObjects.remove(line);
     });
     nodeConnectionLines = [];

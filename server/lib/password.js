@@ -2,7 +2,6 @@ const argon2 = require('argon2');
 
 const LEGACY_HASH_RE = /^hash_[0-9a-f]+_\d+$/;
 
-/** @deprecated Старый алгоритм — только для проверки при миграции. */
 function legacyHashPassword(password) {
     const pwd = String(password);
     let hash = 0;

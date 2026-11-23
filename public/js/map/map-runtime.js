@@ -1,12 +1,3 @@
-/**
- * Два независимых рантайма карты (не смешивать в одном canvas):
- *  - yandex  — официальный JS API (схема / спутник / гибрид)
- *  - leaflet — шим + ортофото / OSM / без подложки
- *
- * Выбор слоя:
- *  - орг. дефолт — только для тех, кто ещё не выбирал сам;
- *  - личный выбор пользователя сохраняется (localStorage + /api/settings).
- */
 (function (global) {
     'use strict';
 
@@ -17,7 +8,6 @@
     var pendingAfterLoad = null;
     var NATIVE_LOAD_TIMEOUT_MS = 20000;
     var SHIM_WAIT_MS = 15000;
-    /** Keep-alive слоты: карта не destroy при переключении Яндекс ↔ Leaflet. */
     var slots = {
         yandex: null,
         leaflet: null
@@ -31,11 +21,6 @@
     var hydratingOpposite = false;
     var hydratePromise = null;
     var hydrateResolve = null;
-    /**
-     * Фоновая заливка opposite через importData временно подменяет global.objects/myMap
-     * и ломает статистику / первичную загрузку (гонка с flushPendingAfterLoad).
-     * Переключение слоёв и так делает restoreObjects при первом switch — оставляем только warm движка.
-     */
     var ENABLE_BG_HYDRATE = false;
     var hydrateFrozenData = null;
     var USER_KEY_PREFIX = 'volsmap.basemapType.user.';
@@ -118,7 +103,6 @@
         try {
             var v = localStorage.getItem(ORG_DEFAULT_PREFIX + orgId);
             if (desiredRuntimeForType(v)) return v;
-            // legacy keys
             var legacy = localStorage.getItem(LEGACY_ORG_PREFIX + orgId);
             if (desiredRuntimeForType(legacy)) return legacy;
         } catch (e) {}
@@ -134,7 +118,6 @@
         } catch (e) {}
     }
 
-    /** Личный выбор пользователя (меню слоёв). Не перезаписывается орг. дефолтом. */
     function persistUserBasemapType(type) {
         var t = String(type || '');
         if (!desiredRuntimeForType(t)) return;
@@ -145,12 +128,10 @@
         var uid = getUserIdForCache();
         try {
             if (uid) localStorage.setItem(USER_KEY_PREFIX + uid, t);
-            // legacy boot helpers
             localStorage.setItem(LEGACY_KEY, t);
             var orgId = getOrgIdForCache();
             if (orgId) localStorage.setItem(LEGACY_ORG_PREFIX + orgId, t);
         } catch (e) {}
-        // Сервер — чтобы выбор переживал смену браузера/устройства
         try {
             if (typeof getApiBase === 'function' && typeof getAuthToken === 'function') {
                 var token = getAuthToken();
@@ -169,7 +150,6 @@
         } catch (eApi) {}
     }
 
-    /** @deprecated: только session memory / boot без пометки «личный выбор» */
     function persistBasemapType(type) {
         var t = String(type || '');
         if (!desiredRuntimeForType(t)) return;
@@ -236,7 +216,6 @@
         ]);
     }
 
-    /** Ждём пассивный шим (dual-boot на Яндексе грузит Leaflet в фоне). */
     function ensureLeafletShimApi() {
         if (global.__ymapsShim && global.__ymapsShim.Map) {
             return Promise.resolve(global.__ymapsShim);
@@ -292,7 +271,6 @@
         if (hydratingOpposite && Array.isArray(hydrateFrozenData)) {
             return hydrateFrozenData;
         }
-        // lastSavedState уже полный JSON-снимок — без повторной сериализации ~25k объектов.
         try {
             if (typeof lastSavedState !== 'undefined' && Array.isArray(lastSavedState) && lastSavedState.length) {
                 var liveLen = (typeof objects !== 'undefined' && Array.isArray(objects)) ? objects.length : 0;
@@ -491,7 +469,6 @@
         }, WARM_WAIT_MS);
         p.then(function () {
             if (settled) return;
-            // Дать warm→hydrate стартовать синхронно/в том же тике
             setTimeout(function () {
                 if (settled) return;
                 if (hydratingOpposite && hydratePromise) {
@@ -679,17 +656,12 @@
         if (typeof done === 'function') done(null);
     }
 
-    /**
-     * Keep-alive: два контейнера, без destroy.
-     * Если opposite уже гидратирован (objects+fp) — только show, без importData.
-     */
     function switchTo(runtime, mapType, done) {
         if (switching) {
             if (mapType) pendingAfterLoad = mapType;
             if (typeof done === 'function') done(new Error('switch in progress'));
             return;
         }
-        // Не переключать, пока фоновая гидратация держит чужой objects/myMap
         if (hydratingOpposite || global.__volsmapHydratingOpposite) {
             if (mapType) pendingAfterLoad = mapType;
             waitBackgroundThen(function () {
@@ -740,7 +712,6 @@
                     }, true);
                     return;
                 }
-                // Карта уже на экране — не держим blur на весь reimport.
                 showSwitchOverlay(false);
                 restoreObjects(data, function () {
                     slot.objects = getObjectsRef();
@@ -778,7 +749,6 @@
                         if (typeof done === 'function') done(eCreate);
                         return;
                     }
-                    // Пустая карта уже видна — reimport идёт без блокирующего оверлея.
                     showSwitchOverlay(false);
                     fitActiveMap();
                     restoreObjects(data, function () {
@@ -833,9 +803,8 @@
             }
             if (typeof done === 'function') done(err);
         });
-        } // end beginSwitchBody
+        } 
 
-        // Сразу переключаем. Warm в фоне конкурировал с import и давал зависание «Смена подложки…».
         beginSwitchBody();
     }
 
@@ -849,15 +818,9 @@
         }
     }
 
-    /**
-     * @param {string} mapType
-     * @param {function=} done
-     * @param {{ asUserChoice?: boolean }=} opts
-     */
     function applyBasemapType(mapType, done, opts) {
         opts = opts || {};
         var type = String(mapType || '');
-        // Облачная веб-версия: ортофото отключено (остаётся в Portable)
         if (type === 'leaflet#orthophoto') type = 'yandex#map';
         var want = desiredRuntimeForType(type);
         if (!want) {
@@ -910,7 +873,6 @@
     }
 
     function flushPendingAfterLoad() {
-        // Только лёгкая подгрузка API opposite — без createMap и без switch сразу после reveal.
         try {
             var activeBoot = getActiveRuntime();
             if (activeBoot === 'leaflet') preloadNativeIfDual();
@@ -919,11 +881,9 @@
                 ensureLeafletShimApi().catch(function () {});
             }
         } catch (ePre) {}
-        // Не греем opposite по таймеру после загрузки — только при реальной смене подложки.
 
         var type = pendingAfterLoad;
         pendingAfterLoad = null;
-        // Орг. дефолт не должен перебивать личный выбор
         if (hasUserBasemapPreference()) {
             var userType = readUserBasemapType();
             if (userType) {
@@ -935,8 +895,6 @@
                     }
                     return;
                 }
-                // Не переключаем runtime сразу после загрузки — это и был фриз на 25k.
-                // Личный слой применится при следующем явном выборе / следующей сессии (boot).
                 lastBasemapType = userType;
                 return;
             }
@@ -952,7 +910,6 @@
             persistBasemapType(type);
             return;
         }
-        // Отложенный cross-runtime switch после загрузки — только по явному клику пользователя.
         lastBasemapType = type;
     }
 
@@ -1035,9 +992,6 @@
         return !!(data && data.length);
     }
 
-    /**
-     * Фоновый прогрев движка (API + пустая карта) без подмены globals.
-     */
     function warmOppositeSlot() {
         if (warmingOpposite || switching || hydratingOpposite) return;
         var active = getActiveRuntime();
@@ -1169,11 +1123,6 @@
         });
     }
 
-    /**
-     * Фоновая заливка объектов на opposite-слот.
-     * Краткий swap globals → importData → restore активной карты.
-     * После этого switch = только show контейнера.
-     */
     function hydrateOppositeSlot() {
         if (!ENABLE_BG_HYDRATE) {
             setWarmStatus('ready', 'hydrate-disabled');
@@ -1237,7 +1186,6 @@
             applyRuntimeApi(target, api);
             global.myMap = slot.map;
 
-            // Не шумим оверлеем импорта во время гидратации
             var prevSetText = global.setMapLoadingOverlayText;
             if (typeof prevSetText === 'function') {
                 global.setMapLoadingOverlayText = function () {};

@@ -1,6 +1,3 @@
-/**
- * Доп. трассировка: узлы, OLT, show-on-map.
- */
 function traceUidEq(a, b) {
     if (a == null || b == null) return false;
     return String(a) === String(b);
@@ -57,7 +54,6 @@ function collectNodeSplitterFiberConnections(nodeUniqueId, seen) {
 }
 
 function nodePanelFiberStillExists(cableId, fiberNumber) {
-    // Лёгкая проверка для карточки узла: без getConnectedCables (дорого на больших картах).
     if (!cableId || fiberNumber == null || isNaN(fiberNumber)) return false;
     var cable = typeof findCableByUniqueId === 'function'
         ? findCableByUniqueId(cableId)
@@ -67,7 +63,6 @@ function nodePanelFiberStillExists(cableId, fiberNumber) {
     return fiberNumber >= 1 && fiberNumber <= n;
 }
 
-/** Обратный индекс nodeId → связи. Один полный скан карты вместо скана на каждый открытый узел. */
 var _nodeFibersIndex = null;
 var _nodeFibersIndexEpoch = -1;
 
@@ -127,7 +122,6 @@ function ensureNodeConnectedFibersIndex() {
         }
     }
 
-    // Сплиттеры → узлы (полный скан один раз при построении индекса)
     var splitterSeen = new Set();
     function indexSplitter(sp, hostObj) {
         if (!sp || !sp.properties) return;
@@ -300,14 +294,14 @@ function traceFromNodeSplitter(nodeObj, splitterId, outputIndex) {
 }
 
 function traceFromNode(hostUniqueId, cableId, fiberNumber) {
-    
-    const hostObj = objects.find(obj =>
+
+        const hostObj = objects.find(obj =>
         obj.properties &&
         isFiberHostType(obj.properties.get('type')) &&
         obj.properties.get('uniqueId') === hostUniqueId
     );
-    
-    if (!hostObj) {
+
+        if (!hostObj) {
         showError('Кросс или муфта были удалены. Информация обновлена.', 'Данные устарели');
         if (currentModalObject && currentModalObject.properties) {
             var currentType = currentModalObject.properties.get('type');
@@ -331,8 +325,8 @@ function traceFromNode(hostUniqueId, cableId, fiberNumber) {
     }
 
     const nodeConn = resolveHostNodeConnectionAtFiber(hostObj, cableId, fiberNumber);
-    
-    if (!nodeConn) {
+
+        if (!nodeConn) {
         showError('Соединение было удалено. Информация обновлена.', 'Данные устарели');
         if (currentModalObject && currentModalObject.properties) {
             var currentType = currentModalObject.properties.get('type');
@@ -483,7 +477,6 @@ function traceFromOLTPort(oltObj, portNumber) {
         }
         startHostDirect = oltObj;
     }
-    // Всегда идём «вниз» по сети: иначе embedded-сплиттер в кроссе не попадает в путь.
     var directTraceOpts = { traceTowardOnu: true };
     var targetOnuDirect = null;
     if (ass.onuId) {
@@ -661,8 +654,8 @@ function renderOnePathToTraceHtml(path, startStepNumber) {
         var objUniqueId = item.object ? getObjectUniqueId(item.object) : null;
         var showOnMapBtn = objUniqueId ? '<button type="button" class="trace-show-on-map-btn" data-object-id="' + escapeHtml(objUniqueId) + '" style="margin-left: 8px; padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 600; white-space: nowrap;" title="Показать на карте">📍</button>' : '';
         var traceIcon = (window.FiberTrace && FiberTrace.getObjectIcon) ? FiberTrace.getObjectIcon(item.objectType) : '📍';
-        
-        if (item.type === 'start') {
+
+                if (item.type === 'start') {
             var portBadge = (item.objectType === 'cross' && item.port) ? ' <span class="trace-port-badge">Порт ' + escapeHtml(String(item.port)) + '</span>' : '';
             var reserveBadge = (item.reserveM != null && item.reserveM > 0) ? ' <span class="trace-item-reserve">+' + item.reserveM + ' м</span>' : '';
             html += '<div class="trace-step-row"><span class="trace-step-num trace-step-num-start">' + stepNumber + '</span><div class="trace-path-block trace-path-start"><div><span>' + traceIcon + ' ' + escapeHtml(item.objectName) + '</span>' + portBadge + reserveBadge + '<span class="trace-path-muted"> (' + getObjectTypeName(item.objectType) + ')</span></div>' + showOnMapBtn + '</div></div>';
@@ -1405,7 +1398,6 @@ function prependOltPrefixToPath(path, oltObj, portNumber, startObj, cableId, fib
         rest[0] && rest[0].type === 'cable' && prefix[prefix.length - 2].cableId === rest[0].cableId) {
         rest = rest.slice(1);
     }
-    // Убрать «возврат» на тот же OLT по feeder — иначе схема: OLT → кросс → OLT без сегмента.
     var oltUid = getObjectUniqueId(oltObj);
     while (rest.length) {
         var head = rest[0];
@@ -1577,7 +1569,6 @@ function preferNodeTracePaths(paths, startNodeObj) {
     });
 }
 
-/** Приоритет веток при старте с кросса/муфты: завершённые и локальные выводы выше. */
 function preferHostWorkspaceTracePaths(paths) {
     if (!paths || paths.length <= 1) return paths;
     function hostPathScore(path) {
@@ -1596,7 +1587,6 @@ function preferHostWorkspaceTracePaths(paths) {
                 score += 200;
             }
         }
-        // Короткий локальный вывод без ухода в кабель — показать первым
         if (!hasCable && score >= 200) score += 500;
         score += Math.min(path.length, 40);
         return score;
@@ -1672,7 +1662,6 @@ function showFiberTraceFromCross(startCrossObj, cableId, fiberNumber, startNodeO
             var highlightPaths = sortedPaths;
             if (startNodeObj && window.FiberTrace && FiberTrace.prependNodePrefixToPath) {
                 displayPaths = sortedPaths.map(function(p) {
-                    // foldLocalNodeIntoCablePaths уже мог вшить узел — не prepend повторно.
                     if (p && p[0] && (p[0].object === startNodeObj || p[0].objectType === 'node')) {
                         return p;
                     }

@@ -1,11 +1,5 @@
 'use strict';
 
-/**
- * Patch server-config.json for MySQL storage from env vars.
- * Used by scripts/setup-mysql-linux.sh
- *
- * Env: MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
- */
 const fs = require('fs');
 const path = require('path');
 
