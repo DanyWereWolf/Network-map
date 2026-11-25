@@ -1274,14 +1274,33 @@
             return isEndpointEquipmentNode(node);
         }
 
-        var branchCount = 0;
-        segments.forEach(function (s) {
+        var branchCardH = 72;
+        var branchCardGap = 16;
+        var branchTopPad = 24;
+        var branchBottomPad = 32;
+        var branchMaxSlots = 8;
+        /* Считаем только реально рисуемые отводы (те же фильтры, что в блоке ВЕТВЬ) */
+        var branchDrawCount = 0;
+        var branchSeenKeys = {};
+        segments.forEach(function (s, si) {
+            var nextS = segments[si + 1];
             (s.fibers || []).forEach(function (f) {
                 if (!f || !f.fate || f.fate.kind !== 'branch') return;
-                branchCount++;
+                if (nextS && f.fate.peerCableId && nextS.cableId &&
+                    String(f.fate.peerCableId) === String(nextS.cableId)) return;
+                if (f.fate.peerCableId && s.cableId &&
+                    String(f.fate.peerCableId) === String(s.cableId)) return;
+                var bk = si + '|' + f.number + '|' + (f.fate.peerCableId || '');
+                if (branchSeenKeys[bk]) return;
+                branchSeenKeys[bk] = true;
+                branchDrawCount++;
             });
         });
-        var branchExtra = Math.max(56, Math.min(300, 36 + branchCount * 62));
+        var branchSlots = Math.min(branchMaxSlots, branchDrawCount);
+        /* Высота под все карточки ВЕТВЬ — без потолка 420 (иначе обрезает SVG) */
+        var branchExtra = branchSlots
+            ? (branchTopPad + branchSlots * (branchCardH + branchCardGap) + branchBottomPad)
+            : 36;
 
         /*
          * Геометрия: две колонки только где есть вход+выход.
@@ -1809,10 +1828,11 @@
 
         /*
          * --- 7. Отводы на ДРУГОЙ кабель ---
-         * Уход из колонки ВХОДА (приходящий кабель), не из общей оси.
+         * Карточка как СТАРТ/КОНЕЦ: бейдж «ВЕТВЬ», кабель, жила.
          */
         var branchSlot = 0;
         var usedBranchKeys = {};
+        var branchCardW = 140;
         segments.forEach(function (seg, si) {
             var nextSeg = segments[si + 1];
             var gTo = nodeGeom[si + 1];
@@ -1830,46 +1850,47 @@
                 var bkey = inColX + '|' + fiber.number + '|' + (fiber.fate.peerCableId || '');
                 if (usedBranchKeys[bkey]) return;
                 usedBranchKeys[bkey] = true;
-                if (branchSlot >= 8) return;
+                if (branchSlot >= branchMaxSlots) return;
 
                 var yPort = laneY(fiber.number, inCount);
                 var stroke = fiberOwnStroke(fiber);
                 var peerN = fiber.fate.peerFiber != null ? fiber.fate.peerFiber : fiber.number;
-                var dropY = r1(fibersBot + 36 + branchSlot * 58);
-                var elbowX = r1(inColX + 36);
-                var dropX1 = r1(elbowX + 78);
+                var cabNm = fiber.fate.peerCableName || 'другой кабель';
+                var cardCy = r1(fibersBot + branchTopPad + branchSlot * (branchCardH + branchCardGap) + branchCardH / 2);
+                var cardCx = r1(inColX + 24 + branchCardW / 2);
+                var x0 = r1(cardCx - branchCardW / 2);
+                var y0 = r1(cardCy - branchCardH / 2);
+                var joinX = x0;
                 branchSlot++;
 
                 var dLeave = 'M ' + r1(inColX) + ' ' + yPort +
-                    ' C ' + r1(inColX + 12) + ' ' + yPort + ', ' +
-                    elbowX + ' ' + r1(yPort + Math.max(24, (dropY - yPort) * 0.35)) + ', ' +
-                    elbowX + ' ' + dropY;
+                    ' C ' + r1(inColX + 14) + ' ' + yPort + ', ' +
+                    r1(joinX - 18) + ' ' + r1(yPort + Math.max(20, (cardCy - yPort) * 0.4)) + ', ' +
+                    joinX + ' ' + cardCy;
                 pushFiberPath(parts, dLeave, stroke, {
                     traced: !!fiber.traced,
                     opacity: 0.95,
                     width: fiber.traced ? 2.3 : 1.45
                 });
 
-                parts.push('<path class="trace-sch-trunk" d="M ' + elbowX + ' ' + dropY + ' L ' + dropX1 + ' ' + dropY + '"/>');
-                parts.push('<path class="trace-sch-trunk-core" d="M ' + elbowX + ' ' + dropY + ' L ' + dropX1 + ' ' + dropY + '"/>');
-
-                /* Мини-бантик второго кабеля */
-                var tipX = r1(dropX1 + 36);
-                var yPeer = r1(dropY - 12);
-                pushFiberPath(parts, fanCurve(dropX1, dropY, tipX, yPeer), stroke, {
-                    traced: !!fiber.traced, width: 1.4, opacity: 0.95
-                });
-                parts.push('<circle cx="' + tipX + '" cy="' + yPeer + '" r="3" fill="' +
-                    fiberStrokeSafe(fiber.color) + '" stroke="' + shadeHex(fiber.color, -40) +
-                    '" stroke-width="0.85"/>');
-                parts.push('<text class="trace-sch-fiber-num" x="' + r1(tipX + 6) + '" y="' + r1(yPeer + 3) +
-                    '">ж' + peerN + '</text>');
-
-                var cabNm = fiber.fate.peerCableName || 'другой кабель';
-                var brLabel = 'ж' + fiber.number + ' → «' + cabNm + '» ж' + peerN;
-                parts.push('<text class="trace-sch-branch-label" x="' + r1((elbowX + dropX1) / 2) +
-                    '" y="' + r1(dropY - 10) + '" text-anchor="middle">' +
-                    svgEsc(truncateText(brLabel, 34)) + '</text>');
+                parts.push('<g class="trace-sch-endpoint trace-sch-endpoint--branch">');
+                parts.push('<rect class="trace-sch-ep-card" x="' + x0 + '" y="' + y0 +
+                    '" width="' + branchCardW + '" height="' + branchCardH + '" rx="10"/>');
+                parts.push('<rect class="trace-sch-ep-badge" x="' + r1(x0 + 8) + '" y="' + r1(y0 + 8) +
+                    '" width="48" height="15" rx="7"/>');
+                parts.push('<text class="trace-sch-ep-badge-txt" x="' + r1(x0 + 32) +
+                    '" y="' + r1(y0 + 19) + '" text-anchor="middle">ВЕТВЬ</text>');
+                parts.push('<text class="trace-sch-ep-fiber" x="' + r1(x0 + branchCardW - 10) + '" y="' +
+                    r1(y0 + 19) + '" text-anchor="end">ж' + peerN + '</text>');
+                parts.push('<text class="trace-sch-ep-type" x="' + cardCx + '" y="' + r1(y0 + 40) +
+                    '" text-anchor="middle">' + svgEsc(truncateText(cabNm, 18)) + '</text>');
+                parts.push('<text class="trace-sch-ep-name" x="' + cardCx + '" y="' + r1(y0 + 56) +
+                    '" text-anchor="middle"><title>' +
+                    svgEsc('ж' + fiber.number + ' → «' + cabNm + '» ж' + peerN) + '</title>' +
+                    svgEsc('ж' + fiber.number + ' → ж' + peerN) + '</text>');
+                parts.push('<circle class="trace-sch-ep-join trace-sch-ep-join--branch" cx="' +
+                    joinX + '" cy="' + cardCy + '" r="5"/>');
+                parts.push('</g>');
             });
         });
 
@@ -2000,8 +2021,7 @@
         html += '<button type="button" class="trace-sch-zoom-btn trace-sch-pdf-btn" data-trace-sch-pdf="1" title="Экспорт PDF">⎙</button>';
         html += '</div></div>';
         html += '<div class="trace-sch-export-root"><div class="trace-sch-meta-row">';
-        html += '<div class="trace-sch-meta-main">' + buildEndpointSummaryHtml(model) +
-            buildOverviewHtml(model) + '</div>';
+        html += '<div class="trace-sch-meta-main">' + buildEndpointSummaryHtml(model) + '</div>';
         html += '<div class="trace-sch-meta-side">' + buildLengthCardHtml(metrics) + '</div></div>';
         html += '<div class="trace-schematic-scroll"><div class="trace-sch-zoom-inner">';
         html += renderFiberbaseSvg(model);

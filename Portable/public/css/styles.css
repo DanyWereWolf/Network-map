@@ -18334,6 +18334,7 @@ html.cable-split-mode-active #map {
     display: flex;
     flex-direction: column;
     padding: 6px 10px 0;
+    overflow: hidden;
 }
 .trace-studio-canvas .trace-schematic {
     flex: 1;
@@ -18343,11 +18344,23 @@ html.cable-split-mode-active #map {
     margin: 0;
     border-radius: 14px;
     background: color-mix(in srgb, var(--bg-card) 92%, #e2e8f0 8%);
+    overflow: hidden;
+}
+.trace-studio-canvas .trace-sch-export-root {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 .trace-studio-canvas .trace-schematic-scroll {
-    flex: 1;
-    min-height: 280px;
+    flex: 1 1 auto;
+    min-height: 200px;
     max-height: none !important;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     background:
         radial-gradient(ellipse 80% 60% at 12% 0%, color-mix(in srgb, var(--accent-primary) 10%, transparent) 0%, transparent 55%),
         radial-gradient(ellipse 70% 50% at 88% 100%, color-mix(in srgb, var(--accent-primary) 8%, transparent) 0%, transparent 50%),
@@ -18361,7 +18374,7 @@ html.cable-split-mode-active #map {
 }
 .trace-studio-steps {
     flex: 0 0 auto;
-    max-height: 42vh;
+    max-height: min(32vh, 280px);
     border-top: 1px solid var(--border-color);
     background: color-mix(in srgb, var(--bg-card) 94%, var(--accent-primary) 3%);
     display: flex;
@@ -18843,6 +18856,15 @@ html.cable-split-mode-active #map {
 }
 .trace-schematic--studio {
     padding-bottom: 8px;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.trace-schematic--studio > .trace-schematic-head,
+.trace-schematic--studio > .trace-schematic-hint {
+    flex: 0 0 auto;
 }
 .trace-sch-mode-controls {
     display: inline-flex;
@@ -18874,6 +18896,7 @@ html.cable-split-mode-active #map {
     gap: 12px 18px;
     flex-wrap: wrap;
     margin-bottom: 8px;
+    flex: 0 0 auto;
 }
 .trace-sch-meta-main {
     flex: 1 1 240px;
@@ -19073,6 +19096,10 @@ html.cable-split-mode-active #map {
     fill: color-mix(in srgb, var(--bg-card) 86%, var(--accent-warning) 10%);
     stroke: color-mix(in srgb, var(--accent-warning) 48%, var(--border-color));
 }
+.trace-schematic-svg--fiberbase .trace-sch-endpoint--branch .trace-sch-ep-card {
+    fill: color-mix(in srgb, var(--bg-card) 86%, #0d9488 10%);
+    stroke: color-mix(in srgb, #0d9488 46%, var(--border-color));
+}
 .trace-schematic-svg--fiberbase .trace-sch-ep-badge {
     fill: color-mix(in srgb, var(--accent-primary) 28%, var(--bg-card));
     stroke: color-mix(in srgb, var(--accent-primary) 50%, var(--border-color));
@@ -19082,6 +19109,10 @@ html.cable-split-mode-active #map {
     fill: color-mix(in srgb, var(--accent-warning) 26%, var(--bg-card));
     stroke: color-mix(in srgb, var(--accent-warning) 55%, var(--border-color));
 }
+.trace-schematic-svg--fiberbase .trace-sch-endpoint--branch .trace-sch-ep-badge {
+    fill: color-mix(in srgb, #0d9488 24%, var(--bg-card));
+    stroke: color-mix(in srgb, #0d9488 52%, var(--border-color));
+}
 .trace-schematic-svg--fiberbase .trace-sch-ep-badge-txt {
     font-size: 8.5px;
     font-weight: 800;
@@ -19090,6 +19121,9 @@ html.cable-split-mode-active #map {
 }
 .trace-schematic-svg--fiberbase .trace-sch-endpoint--end .trace-sch-ep-badge-txt {
     fill: color-mix(in srgb, var(--accent-warning) 85%, var(--text-primary));
+}
+.trace-schematic-svg--fiberbase .trace-sch-endpoint--branch .trace-sch-ep-badge-txt {
+    fill: color-mix(in srgb, #0d9488 80%, var(--text-primary));
 }
 .trace-schematic-svg--fiberbase .trace-sch-ep-fiber {
     font-size: 10px;
@@ -19113,6 +19147,9 @@ html.cable-split-mode-active #map {
 }
 .trace-schematic-svg--fiberbase .trace-sch-ep-join--end {
     fill: color-mix(in srgb, var(--accent-warning) 75%, var(--accent-primary));
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-join--branch {
+    fill: color-mix(in srgb, #0d9488 70%, var(--accent-primary));
 }
 .trace-endpoint-summary {
     display: flex;
@@ -19186,10 +19223,28 @@ html.cable-split-mode-active #map {
 .trace-studio-canvas .trace-schematic--fiberbase {
     background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-tertiary));
     border: 1px solid var(--border-color);
+    overflow: hidden;
 }
 [data-theme="dark"] .trace-studio-canvas .trace-schematic--fiberbase {
     background: color-mix(in srgb, var(--bg-card) 88%, #0b1526);
     border-color: var(--border-color);
+}
+/* Высокая схема с ветвями — вертикальный скролл внутри холста */
+.trace-schematic--fiberbase .trace-sch-export-root {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.trace-schematic--fiberbase .trace-schematic-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+.trace-schematic--fiberbase .trace-sch-zoom-inner {
+    padding-bottom: 12px;
 }
 .trace-sch-overview--fiberbase {
     align-items: center;
@@ -19433,8 +19488,8 @@ html.cable-split-mode-active #map {
     max-height: min(54vh, 520px);
 }
 #infoModal[data-trace-view="1"] .trace-studio-canvas .trace-schematic-scroll {
-    min-height: 320px;
-    max-height: none;
+    min-height: 200px;
+    max-height: none !important;
 }
 .trace-schematic--tree .trace-schematic-scroll {
     min-height: 240px;
