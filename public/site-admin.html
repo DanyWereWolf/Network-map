@@ -1730,6 +1730,7 @@
                                 <li>Режим <code>json</code> — файл <code>data/store.json</code>; режим <code>mysql</code> — таблицы MySQL (пароль в UI не показывается).</li>
                                 <li>JSON-снимки в <code>data/backups/full/store-*.json</code> — полный логический снимок платформы. Суточные <code>store-ГГГГ-ММ-ДД</code> хранятся 30 дней, почасовые — последние 48.</li>
                                 <li>SQL dumps (<code>mysqldump-*.sql</code>) — нативный бэкап MySQL, один файл в сутки, хранится 30 дней. Восстановление перезаписывает БД и сбрасывает сессии.</li>
+                                <li>Снимки и dumps можно <strong>выгрузить</strong> на компьютер и <strong>загрузить</strong> обратно (файл попадёт в список и его можно восстановить).</li>
                                 <li>Сервер сам отказывается записывать «пустую» базу поверх полной.</li>
                             </ul>
                         </details>
@@ -1746,9 +1747,11 @@
                     </div>
 
                     <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">JSON-снимки (store)</h3>
-                    <p class="hint" style="margin:0 0 14px;">Полные снимки пользователей, организаций и карт. Суточные хранятся 30 дней, почасовые — последние 48. «Восстановить» заменяет текущую базу выбранным снимком.</p>
-                    <div class="field-row" style="margin-bottom:14px;gap:10px;align-items:center;">
+                    <p class="hint" style="margin:0 0 14px;">Полные снимки пользователей, организаций и карт. Суточные хранятся 30 дней, почасовые — последние 48. «Скачать» — выгрузка файла, «Загрузить» — импорт .json в список, «Восстановить» заменяет текущую базу.</p>
+                    <div class="field-row" style="margin-bottom:14px;gap:10px;align-items:center;flex-wrap:wrap;">
                         <button type="button" class="btn-sm-primary" id="storeBackupCreateBtn">Создать снимок сейчас</button>
+                        <button type="button" class="btn-sm" id="storeBackupUploadBtn">Загрузить JSON…</button>
+                        <input type="file" id="storeBackupUploadInput" accept=".json,application/json" hidden>
                         <button type="button" class="btn-sm" id="storeBackupRefreshBtn">Обновить список</button>
                         <span class="hint" id="storeBackupStatus" style="margin:0;"></span>
                     </div>
@@ -1769,9 +1772,11 @@
                     </div>
 
                     <h3 class="panel-title" style="font-size:0.95rem;margin:0 0 12px;">MySQL SQL dumps</h3>
-                    <p class="hint" style="margin:0 0 14px;">Раз в сутки сервер пишет <code>mysqldump</code> в <code>data/backups/full/</code>. Файлы хранятся 30 дней. Нужны клиенты <code>mysqldump</code>/<code>mysql</code> на сервере.</p>
-                    <div class="field-row" style="margin-bottom:14px;gap:10px;align-items:center;">
+                    <p class="hint" style="margin:0 0 14px;">Раз в сутки сервер пишет <code>mysqldump</code> в <code>data/backups/full/</code>. Файлы хранятся 30 дней. Можно скачать или загрузить .sql. Нужны клиенты <code>mysqldump</code>/<code>mysql</code> на сервере.</p>
+                    <div class="field-row" style="margin-bottom:14px;gap:10px;align-items:center;flex-wrap:wrap;">
                         <button type="button" class="btn-sm-primary" id="mysqlDumpCreateBtn">Создать SQL dump</button>
+                        <button type="button" class="btn-sm" id="mysqlDumpUploadBtn">Загрузить SQL…</button>
+                        <input type="file" id="mysqlDumpUploadInput" accept=".sql,application/sql,text/plain" hidden>
                         <button type="button" class="btn-sm" id="mysqlDumpRefreshBtn">Обновить список</button>
                         <span class="hint" id="mysqlDumpStatus" style="margin:0;"></span>
                     </div>
@@ -4094,8 +4099,12 @@
                             '<td><code style="font-size:0.8em;">' + escapeHtml(name) + '</code></td>' +
                             '<td>' + escapeHtml(formatBytes(b.size)) + '</td>' +
                             '<td>' + escapeHtml(mtime) + '</td>' +
-                            '<td><button type="button" class="btn-sm mysql-dump-restore-btn" data-filename="' +
-                            escapeHtml(name) + '">Восстановить</button></td>' +
+                            '<td style="white-space:nowrap;">' +
+                            '<button type="button" class="btn-sm mysql-dump-download-btn" data-filename="' +
+                            escapeHtml(name) + '">Скачать</button> ' +
+                            '<button type="button" class="btn-sm mysql-dump-restore-btn" data-filename="' +
+                            escapeHtml(name) + '">Восстановить</button>' +
+                            '</td>' +
                             '</tr>';
                     }).join('');
                     setMysqlDumpStatus('Dumps: ' + list.length);
@@ -4128,7 +4137,10 @@
                             '<td><code style="font-size:0.8em;">' + escapeHtml(name) + '</code></td>' +
                             '<td>' + escapeHtml(formatBytes(b.size)) + '</td>' +
                             '<td>' + escapeHtml(mtime) + '</td>' +
-                            '<td><button type="button" class="btn-sm store-backup-restore-btn" data-filename="' + escapeHtml(name) + '">Восстановить</button></td>' +
+                            '<td style="white-space:nowrap;">' +
+                            '<button type="button" class="btn-sm store-backup-download-btn" data-filename="' + escapeHtml(name) + '">Скачать</button> ' +
+                            '<button type="button" class="btn-sm store-backup-restore-btn" data-filename="' + escapeHtml(name) + '">Восстановить</button>' +
+                            '</td>' +
                             '</tr>';
                     }).join('');
                     setStoreBackupStatus('Снимков: ' + list.length);
@@ -4144,6 +4156,57 @@
             var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
             if (token) h['Authorization'] = 'Bearer ' + token;
             return h;
+        }
+
+        function authHeadersNoJson() {
+            var h = {};
+            var token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+            if (token) h['Authorization'] = 'Bearer ' + token;
+            return h;
+        }
+
+        function downloadAdminBackupFile(url, filename) {
+            return fetch(url, { credentials: 'include', headers: authHeadersNoJson() })
+                .then(function(r) {
+                    if (!r.ok) {
+                        return r.json().catch(function() { return {}; }).then(function(j) {
+                            throw new Error((j && j.error) || ('Ошибка скачивания (' + r.status + ')'));
+                        });
+                    }
+                    return r.blob().then(function(blob) {
+                        return { blob: blob, filename: filename };
+                    });
+                })
+                .then(function(pack) {
+                    var a = document.createElement('a');
+                    var objUrl = URL.createObjectURL(pack.blob);
+                    a.href = objUrl;
+                    a.download = pack.filename || 'backup';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(function() {
+                        URL.revokeObjectURL(objUrl);
+                        a.remove();
+                    }, 1000);
+                });
+        }
+
+        function uploadAdminBackupFile(url, file, onStatus) {
+            if (!file) return Promise.reject(new Error('Файл не выбран'));
+            var fd = new FormData();
+            fd.append('file', file);
+            if (onStatus) onStatus('Загрузка…');
+            return fetch(url, {
+                method: 'POST',
+                credentials: 'include',
+                headers: authHeadersNoJson(),
+                body: fd
+            }).then(function(r) {
+                return r.json().then(function(j) { return { ok: r.ok, j: j }; });
+            }).then(function(res) {
+                if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка загрузки');
+                return res.j;
+            });
         }
 
         function clearAdminSessionAndReload(message) {
@@ -4183,9 +4246,30 @@
                     });
                 return;
             }
+            if (e.target.closest('#storeBackupUploadBtn')) {
+                var storeInput = document.getElementById('storeBackupUploadInput');
+                if (storeInput) storeInput.click();
+                return;
+            }
             var refreshBtn = e.target.closest('#storeBackupRefreshBtn');
             if (refreshBtn) {
                 window.adminLoadStoreBackups();
+                return;
+            }
+            var downloadBtn = e.target.closest('.store-backup-download-btn');
+            if (downloadBtn) {
+                var dlName = downloadBtn.getAttribute('data-filename');
+                if (!dlName) return;
+                setStoreBackupStatus('Скачивание…');
+                downloadAdminBackupFile(
+                    'api/admin/store-backups/download/' + encodeURIComponent(dlName),
+                    dlName
+                ).then(function() {
+                    setStoreBackupStatus('Скачано: ' + dlName);
+                }).catch(function(err) {
+                    setStoreBackupStatus(err.message || 'Ошибка');
+                    alert(err.message || 'Ошибка');
+                });
                 return;
             }
             var restoreBtn = e.target.closest('.store-backup-restore-btn');
@@ -4229,8 +4313,29 @@
                     });
                 return;
             }
+            if (e.target.closest('#mysqlDumpUploadBtn')) {
+                var mysqlInput = document.getElementById('mysqlDumpUploadInput');
+                if (mysqlInput) mysqlInput.click();
+                return;
+            }
             if (e.target.closest('#mysqlDumpRefreshBtn')) {
                 window.adminLoadMysqlDumps();
+                return;
+            }
+            var mysqlDownloadBtn = e.target.closest('.mysql-dump-download-btn');
+            if (mysqlDownloadBtn) {
+                var mysqlDlName = mysqlDownloadBtn.getAttribute('data-filename');
+                if (!mysqlDlName) return;
+                setMysqlDumpStatus('Скачивание…');
+                downloadAdminBackupFile(
+                    'api/admin/mysql-dumps/download/' + encodeURIComponent(mysqlDlName),
+                    mysqlDlName
+                ).then(function() {
+                    setMysqlDumpStatus('Скачано: ' + mysqlDlName);
+                }).catch(function(err) {
+                    setMysqlDumpStatus(err.message || 'Ошибка');
+                    alert(err.message || 'Ошибка');
+                });
                 return;
             }
             var mysqlRestoreBtn = e.target.closest('.mysql-dump-restore-btn');
@@ -4249,6 +4354,40 @@
                     .then(function(res) {
                         if (!res.ok) throw new Error((res.j && res.j.error) || 'Ошибка restore');
                         clearAdminSessionAndReload((res.j && res.j.message) || 'MySQL восстановлен. Войдите снова.');
+                    })
+                    .catch(function(err) {
+                        setMysqlDumpStatus(err.message || 'Ошибка');
+                        alert(err.message || 'Ошибка');
+                    });
+            }
+        });
+
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.id === 'storeBackupUploadInput') {
+                var storeFile = e.target.files && e.target.files[0];
+                e.target.value = '';
+                if (!storeFile) return;
+                uploadAdminBackupFile('api/admin/store-backups/upload', storeFile, setStoreBackupStatus)
+                    .then(function(j) {
+                        var name = (j && j.backup && j.backup.filename) || storeFile.name;
+                        setStoreBackupStatus('Загружено: ' + name);
+                        return window.adminLoadStoreBackups();
+                    })
+                    .catch(function(err) {
+                        setStoreBackupStatus(err.message || 'Ошибка');
+                        alert(err.message || 'Ошибка');
+                    });
+                return;
+            }
+            if (e.target && e.target.id === 'mysqlDumpUploadInput') {
+                var dumpFile = e.target.files && e.target.files[0];
+                e.target.value = '';
+                if (!dumpFile) return;
+                uploadAdminBackupFile('api/admin/mysql-dumps/upload', dumpFile, setMysqlDumpStatus)
+                    .then(function(j) {
+                        var name = (j && j.dump && j.dump.filename) || dumpFile.name;
+                        setMysqlDumpStatus('Загружено: ' + name);
+                        return window.adminLoadMysqlDumps();
                     })
                     .catch(function(err) {
                         setMysqlDumpStatus(err.message || 'Ошибка');

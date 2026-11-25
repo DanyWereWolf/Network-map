@@ -4368,6 +4368,85 @@ app.get('/api/admin/store-backups', (req, res) => {
     }
 });
 
+var adminBackupUpload = multer({
+    dest: path.join(DATA_DIR, 'backups', '_tmp'),
+    limits: { fileSize: 512 * 1024 * 1024 },
+    fileFilter: function (req, file, cb) {
+        var name = String(file.originalname || '').toLowerCase();
+        var kind = String((req.query && req.query.kind) || (req.body && req.body.kind) || '').toLowerCase();
+        if (kind === 'mysql' || /\.sql$/i.test(name)) {
+            if (!/\.sql$/i.test(name)) return cb(new Error('Для SQL dump нужен файл .sql'));
+            return cb(null, true);
+        }
+        if (!/\.json$/i.test(name)) return cb(new Error('Для JSON-снимка нужен файл .json'));
+        cb(null, true);
+    }
+});
+
+function ensureAdminBackupTmpDir() {
+    var dir = path.join(DATA_DIR, 'backups', '_tmp');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+ensureAdminBackupTmpDir();
+
+function unlinkQuiet(filePath) {
+    try { if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) {}
+}
+
+app.get('/api/admin/store-backups/download/:filename', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    try {
+        var filename = decodeURIComponent(String(req.params.filename || ''));
+        var abs = db.getFullStoreBackupPath ? db.getFullStoreBackupPath(filename) : null;
+        if (!abs) return res.status(404).json({ error: 'Снимок не найден' });
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="' + path.basename(abs).replace(/"/g, '') + '"');
+        res.setHeader('Cache-Control', 'no-store');
+        res.sendFile(path.resolve(abs));
+    } catch (e) {
+        res.status(500).json({ error: String(e && e.message ? e.message : e) });
+    }
+});
+
+app.post('/api/admin/store-backups/upload', function (req, res) {
+    ensureAdminBackupTmpDir();
+    adminBackupUpload.single('file')(req, res, function (err) {
+        if (err) {
+            return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+        }
+        const admin = getSessionUser(req);
+        if (!admin) {
+            unlinkQuiet(req.file && req.file.path);
+            return res.status(401).json({ error: 'Требуется авторизация' });
+        }
+        if (!isGlobalAdmin(admin)) {
+            unlinkQuiet(req.file && req.file.path);
+            return res.status(403).json({ error: 'Доступ только для главного администратора' });
+        }
+        if (!req.file || !req.file.path) {
+            return res.status(400).json({ error: 'Прикрепите JSON-файл снимка' });
+        }
+        try {
+            if (!db.saveUploadedFullStoreBackup) {
+                throw new Error('Загрузка снимков недоступна');
+            }
+            var saved = db.saveUploadedFullStoreBackup(req.file.path, req.file.originalname);
+            unlinkQuiet(req.file.path);
+            res.json({
+                ok: true,
+                backup: saved,
+                backups: db.listFullStoreBackups ? db.listFullStoreBackups() : []
+            });
+        } catch (e) {
+            unlinkQuiet(req.file.path);
+            res.status(400).json({ error: e && e.message ? String(e.message) : 'Ошибка загрузки' });
+        }
+    });
+});
+
 app.post('/api/admin/store-backups/restore', (req, res) => {
     const admin = getSessionUser(req);
     if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -4430,6 +4509,61 @@ app.get('/api/admin/mysql-dumps', (req, res) => {
     } catch (e) {
         res.status(500).json({ error: String(e && e.message ? e.message : e) });
     }
+});
+
+app.get('/api/admin/mysql-dumps/download/:filename', (req, res) => {
+    const admin = getSessionUser(req);
+    if (!admin) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isGlobalAdmin(admin)) return res.status(403).json({ error: 'Доступ только для главного администратора' });
+    try {
+        const mysqlOps = require('./db/mysql-ops');
+        var filename = decodeURIComponent(String(req.params.filename || ''));
+        var abs = mysqlOps.getMysqlDumpPath ? mysqlOps.getMysqlDumpPath(filename) : null;
+        if (!abs) return res.status(404).json({ error: 'Dump не найден' });
+        res.setHeader('Content-Type', 'application/sql; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="' + path.basename(abs).replace(/"/g, '') + '"');
+        res.setHeader('Cache-Control', 'no-store');
+        res.sendFile(path.resolve(abs));
+    } catch (e) {
+        res.status(500).json({ error: String(e && e.message ? e.message : e) });
+    }
+});
+
+app.post('/api/admin/mysql-dumps/upload', function (req, res) {
+    ensureAdminBackupTmpDir();
+    adminBackupUpload.single('file')(req, res, function (err) {
+        if (err) {
+            return res.status(400).json({ error: err.message || 'Ошибка загрузки' });
+        }
+        const admin = getSessionUser(req);
+        if (!admin) {
+            unlinkQuiet(req.file && req.file.path);
+            return res.status(401).json({ error: 'Требуется авторизация' });
+        }
+        if (!isGlobalAdmin(admin)) {
+            unlinkQuiet(req.file && req.file.path);
+            return res.status(403).json({ error: 'Доступ только для главного администратора' });
+        }
+        if (!req.file || !req.file.path) {
+            return res.status(400).json({ error: 'Прикрепите .sql файл dump' });
+        }
+        try {
+            const mysqlOps = require('./db/mysql-ops');
+            var result = mysqlOps.saveUploadedMysqlDump(req.file.path, req.file.originalname);
+            unlinkQuiet(req.file.path);
+            if (!result || !result.ok) {
+                return res.status(400).json({ error: (result && result.error) || 'Ошибка загрузки' });
+            }
+            res.json({
+                ok: true,
+                dump: result,
+                dumps: mysqlOps.listMysqlDumps()
+            });
+        } catch (e) {
+            unlinkQuiet(req.file && req.file.path);
+            res.status(400).json({ error: e && e.message ? String(e.message) : 'Ошибка загрузки' });
+        }
+    });
 });
 
 app.post('/api/admin/mysql-dumps/create', (req, res) => {

@@ -262,6 +262,63 @@ function createMysqlDump() {
     return { ok: true, path: dumpPath, filename: dumpName };
 }
 
+function getMysqlDumpPath(filename) {
+    var trimmed = typeof filename === 'string' ? filename.trim() : '';
+    if (!isSafeDumpFilename(trimmed)) return null;
+    var abs = path.join(FULL_BACKUPS_DIR, trimmed);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return null;
+    return abs;
+}
+
+function saveUploadedMysqlDump(sourcePath, originalName) {
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
+        return { ok: false, error: 'Файл загрузки не найден' };
+    }
+    var stSrc;
+    try {
+        stSrc = fs.statSync(sourcePath);
+    } catch (e) {
+        return { ok: false, error: 'Файл загрузки не найден' };
+    }
+    if (!stSrc.size) {
+        return { ok: false, error: 'Пустой SQL dump' };
+    }
+    var head = '';
+    try {
+        var fd = fs.openSync(sourcePath, 'r');
+        var buf = Buffer.alloc(Math.min(4096, stSrc.size));
+        var n = fs.readSync(fd, buf, 0, buf.length, 0);
+        fs.closeSync(fd);
+        head = buf.slice(0, n).toString('utf8');
+    } catch (eRead) {
+        return { ok: false, error: 'Не удалось прочитать dump' };
+    }
+    if (!/--\s*MySQL|CREATE\s+DATABASE|CREATE\s+TABLE|INSERT\s+INTO|USE\s+/i.test(head)) {
+        return { ok: false, error: 'Файл не похож на mysqldump (.sql)' };
+    }
+    ensureFullBackupsDir();
+    var stamp = formatDumpDate(new Date()) + '-' +
+        String(new Date().getHours()).padStart(2, '0') +
+        String(new Date().getMinutes()).padStart(2, '0') +
+        String(new Date().getSeconds()).padStart(2, '0');
+    var base = typeof originalName === 'string' ? path.basename(originalName).trim() : '';
+    var destName;
+    if (isSafeDumpFilename(base) && !fs.existsSync(path.join(FULL_BACKUPS_DIR, base))) {
+        destName = base;
+    } else {
+        destName = 'mysqldump-upload-' + stamp + '.sql';
+    }
+    var destPath = path.join(FULL_BACKUPS_DIR, destName);
+    fs.copyFileSync(sourcePath, destPath);
+    var st = fs.statSync(destPath);
+    return {
+        ok: true,
+        filename: destName,
+        size: st.size,
+        mtime: st.mtime.toISOString()
+    };
+}
+
 function restoreMysqlDump(filename) {
     var trimmed = typeof filename === 'string' ? filename.trim() : '';
     if (!isSafeDumpFilename(trimmed)) {
@@ -309,6 +366,8 @@ module.exports = {
     createDailyMysqlDump,
     pruneMysqlDumps,
     restoreMysqlDump,
+    getMysqlDumpPath,
+    saveUploadedMysqlDump,
     isSafeDumpFilename,
     ensureFullBackupsDir,
     FULL_BACKUPS_DIR,

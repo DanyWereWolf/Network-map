@@ -2636,6 +2636,54 @@ function restoreFromBackup(orgId, filename, opts) {
     console.log('[Backup] Восстановлено из:', orgId + '/' + trimmed);
 }
 
+function isSafeFullStoreBackupFilename(name) {
+    return typeof name === 'string' &&
+        /^store-[\w.-]+\.json$/i.test(name.trim()) &&
+        name.indexOf('..') === -1 &&
+        name.indexOf('/') === -1 &&
+        name.indexOf('\\') === -1;
+}
+
+function getFullStoreBackupPath(filename) {
+    var trimmed = typeof filename === 'string' ? filename.trim() : '';
+    if (!isSafeFullStoreBackupFilename(trimmed)) return null;
+    var abs = path.join(FULL_BACKUPS_DIR, trimmed);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return null;
+    return abs;
+}
+
+function saveUploadedFullStoreBackup(sourcePath, originalName) {
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
+        throw new Error('Файл загрузки не найден');
+    }
+    var parsed = tryParseStoreFile(sourcePath);
+    if (!parsed) {
+        throw new Error('Неверный формат JSON-снимка (ожидается store с users/organizations)');
+    }
+    if (!Array.isArray(parsed.users) || !Array.isArray(parsed.organizations)) {
+        throw new Error('В снимке нет users/organizations');
+    }
+    ensureFullBackupsDir();
+    var stamp = formatSnapshotStamp(new Date());
+    var base = typeof originalName === 'string' ? path.basename(originalName).trim() : '';
+    var destName;
+    if (isSafeFullStoreBackupFilename(base) && !fs.existsSync(path.join(FULL_BACKUPS_DIR, base))) {
+        destName = base;
+    } else {
+        destName = 'store-upload-' + stamp + '.json';
+    }
+    var destPath = path.join(FULL_BACKUPS_DIR, destName);
+    fs.copyFileSync(sourcePath, destPath);
+    var st = fs.statSync(destPath);
+    return {
+        filename: destName,
+        size: st.size,
+        mtime: st.mtime.toISOString(),
+        organizations: parsed.organizations.length,
+        users: parsed.users.length
+    };
+}
+
 function listFullStoreBackups() {
     try {
         ensureFullBackupsDir();
@@ -3512,6 +3560,9 @@ module.exports = {
     listBackups,
     restoreFromBackup,
     listFullStoreBackups,
+    isSafeFullStoreBackupFilename,
+    getFullStoreBackupPath,
+    saveUploadedFullStoreBackup,
     restoreFullStoreBackup,
     reloadStoreFromDisk,
     reloadStoreFromMysql,

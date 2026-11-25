@@ -5,3 +5,5 @@ dist/
 server-config.json
 *.log
 .DS_Store
+_start.err
+_start.out
