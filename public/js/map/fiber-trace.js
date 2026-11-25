@@ -661,16 +661,28 @@
         };
     }
 
-    function buildFiberRows(seg, toHost, nextCableId, nextTracedFiber) {
+    function buildFiberRows(seg, toHost, nextCableId, nextTracedFiber, paletteHint) {
         var cable = seg.cable || findCableById(seg.cableId);
+        if (!cable && paletteHint && paletteHint.cable) cable = paletteHint.cable;
         var colors = (typeof global.getFiberColors === 'function' && cable) ? (global.getFiberColors(cable) || []) : [];
+        if (!colors.length && global.FiberCableConfig &&
+            typeof global.FiberCableConfig.buildStandardPalette === 'function') {
+            var hintCount = (paletteHint && paletteHint.fiberCount) ||
+                Math.max(Number(seg.tracedFiber) || 0, Number(seg.fiberCount) || 0, 24);
+            colors = global.FiberCableConfig.buildStandardPalette(hintCount) || [];
+        }
         var total = (typeof global.getFiberCount === 'function' && cable) ? (Number(global.getFiberCount(cable)) || 0) : 0;
         if (!total) total = colors.length || Math.max(1, Number(seg.tracedFiber) || 1);
+        /* Patch/nodeLink без кабеля: не сжимать веер до «жN = низ колонки» */
+        if ((!seg.cableId || seg.kind === 'nodeLink') && paletteHint && paletteHint.fiberCount > total) {
+            total = paletteHint.fiberCount;
+        }
         var rows = [];
         for (var fi = 1; fi <= total; fi++) {
-            var meta = colors.find(function (f) { return f.number === fi; }) || { number: fi, color: '#94a3b8', name: '' };
+            var meta = colors.find(function (f) { return f.number === fi; });
+            var col = (meta && meta.color) ? meta.color : colorForFiberNumber(cable, fi);
             var traced = Number(seg.tracedFiber) === fi;
-            var fate = resolveFiberFateAtHost(toHost && toHost.object, seg.cableId, fi, nextCableId);
+            var fate = resolveFiberFateAtHost(toHost && toHost.object, seg.cableId || (paletteHint && paletteHint.cableId), fi, nextCableId);
             /*
              * Трасса важнее портов кросса: если путь идёт на следующий кабель,
              * рисуем continue даже когда fiberPorts дал fate=end (иначе пропадает перемычка).
@@ -685,13 +697,25 @@
                     peerFiber: peerF,
                     pathOnly: true
                 };
-            } else if (traced && fate.kind === 'free') {
-                fate = { kind: 'end', label: 'конец трассы' };
+            } else if (traced && (fate.kind === 'free' || fate.kind === 'end')) {
+                /* На кроссе/patch без сварки — ровная перемычка той же жилы */
+                if (nextTracedFiber != null || seg.kind === 'nodeLink' || !seg.cableId) {
+                    var peerFlat = nextTracedFiber != null ? Number(nextTracedFiber) : fi;
+                    fate = {
+                        kind: 'continue',
+                        label: '→ ж' + peerFlat,
+                        peerCableId: nextCableId || seg.cableId,
+                        peerFiber: peerFlat,
+                        pathOnly: true
+                    };
+                } else if (fate.kind === 'free') {
+                    fate = { kind: 'end', label: 'конец трассы' };
+                }
             }
             rows.push({
                 number: fi,
-                color: meta.color || '#94a3b8',
-                name: meta.name || '',
+                color: col,
+                name: (meta && meta.name) || '',
                 traced: traced,
                 fate: fate
             });
@@ -1021,14 +1045,40 @@
         }
         segments = ordered;
 
+        function paletteHintFromSeg(s) {
+            if (!s) return null;
+            var cab = s.cable || findCableById(s.cableId);
+            if (!cab && !(Number(s.fiberCount) > 0)) return null;
+            return {
+                cable: cab,
+                cableId: s.cableId,
+                fiberCount: Number(s.fiberCount) ||
+                    (cab && typeof global.getFiberCount === 'function' ? Number(global.getFiberCount(cab)) || 0 : 0)
+            };
+        }
+
         segments.forEach(function (seg, si) {
             var toHost = nodes[seg.toIdx];
             var nextSeg = segments[si + 1];
+            var prevSeg = si > 0 ? segments[si - 1] : null;
             var nextCableId = nextSeg ? nextSeg.cableId : null;
             var nextTraced = nextSeg && nextSeg.tracedFiber != null ? nextSeg.tracedFiber : null;
-            var built = buildFiberRows(seg, toHost, nextCableId, nextTraced);
+            /* Без кабеля (patch) — палитра с соседнего оптического участка */
+            var hint = null;
+            if (!seg.cable && !findCableById(seg.cableId)) {
+                hint = paletteHintFromSeg(prevSeg) || paletteHintFromSeg(nextSeg);
+                if (hint && nextSeg && nextSeg.tracedFiber != null && seg.tracedFiber == null) {
+                    seg.tracedFiber = nextSeg.tracedFiber;
+                }
+                if (hint && prevSeg && prevSeg.tracedFiber != null && seg.tracedFiber == null) {
+                    seg.tracedFiber = prevSeg.tracedFiber;
+                }
+                /* жN→жN на кроссе: peer = та же жила, не «сжатый» низ колонки */
+                if (seg.tracedFiber != null && nextTraced == null) nextTraced = seg.tracedFiber;
+            }
+            var built = buildFiberRows(seg, toHost, nextCableId, nextTraced, hint);
             seg.fibers = built.rows;
-                seg.fiberCount = built.total;
+            seg.fiberCount = built.total;
             seg.cable = built.cable || seg.cable;
         });
 
@@ -1037,13 +1087,45 @@
 
     /* ========== FiberBase SVG ========== */
 
+    var TIA_BASE_FIBER_COLORS = [
+        '#0000FF', '#FF8C00', '#00FF00', '#8B4513',
+        '#808080', '#FFFFFF', '#FF0000', '#000000',
+        '#FFFF00', '#800080', '#FFC0CB', '#00CED1'
+    ];
+
     function fiberStrokeSafe(color) {
         if (!color) return '#94a3b8';
         var c = String(color).trim().toUpperCase();
-        if (c === '#FFFFFF' || c === '#FFF' || c === 'WHITE') return '#cbd5e1';
+        if (c === '#FFFFFF' || c === '#FFF' || c === 'WHITE') return '#e2e8f0';
         if (c === '#FFFF00' || c === '#FF0' || c === '#FFFACD' || c === 'YELLOW') return '#eab308';
-        if (c === '#000000' || c === '#000' || c === 'BLACK') return '#64748b';
+        if (c === '#000000' || c === '#000' || c === 'BLACK') return '#1e293b';
+        if (c === '#808080' || c === 'GRAY' || c === 'GREY') return '#64748b';
         return color;
+    }
+
+    /** Цвет жилы N: палитра кабеля → стандарт TIA (не серый fallback). */
+    function colorForFiberNumber(cable, fiberNumber) {
+        var n = Math.max(1, Number(fiberNumber) || 1);
+        var colors = [];
+        if (cable && typeof global.getFiberColors === 'function') {
+            try { colors = global.getFiberColors(cable) || []; } catch (eC) { colors = []; }
+        }
+        if ((!colors || !colors.length) && global.FiberCableConfig &&
+            typeof global.FiberCableConfig.buildStandardPalette === 'function') {
+            colors = global.FiberCableConfig.buildStandardPalette(Math.max(n, 24)) || [];
+        }
+        if ((!colors || !colors.length) && typeof global.getFiberColors === 'function') {
+            try {
+                /* getFiberColors(fiber24) / число через legacy type */
+                colors = global.getFiberColors('fiber' + Math.max(n, 12)) || [];
+            } catch (eT) { colors = []; }
+        }
+        var meta = null;
+        for (var i = 0; i < (colors || []).length; i++) {
+            if (colors[i] && Number(colors[i].number) === n) { meta = colors[i]; break; }
+        }
+        if (meta && meta.color) return meta.color;
+        return TIA_BASE_FIBER_COLORS[(n - 1) % 12];
     }
 
     /** Затемнить/осветлить hex для обводки порта. */
@@ -1357,17 +1439,10 @@
         function fibersForSeg(seg) {
             var list = (seg.fibers || []).slice();
             if (!list.length && seg.tracedFiber != null) {
-                var fallbackColor = '#06b6d4';
-                try {
-                    var cab = seg.cable || findCableById(seg.cableId);
-                    var cols = (typeof global.getFiberColors === 'function' && cab)
-                        ? (global.getFiberColors(cab) || []) : [];
-                    var meta = cols.find(function (f) { return f.number === Number(seg.tracedFiber); });
-                    if (meta && meta.color) fallbackColor = meta.color;
-                } catch (eFc) {}
+                var cab = seg.cable || findCableById(seg.cableId);
                 list = [{
                     number: Number(seg.tracedFiber),
-                    color: fallbackColor,
+                    color: colorForFiberNumber(cab, seg.tracedFiber),
                     traced: true,
                     fate: { kind: 'continue' }
                 }];
@@ -1477,19 +1552,18 @@
 
         function pickTracedFibers(fibers, seg) {
             var traced = (fibers || []).filter(function (f) { return f && f.traced; });
-            if (traced.length) return traced;
+            if (traced.length) {
+                return traced.map(function (f) {
+                    if (f.color && f.color !== '#94a3b8' && f.color !== '#888888') return f;
+                    var cabFix = seg && (seg.cable || findCableById(seg.cableId));
+                    return Object.assign({}, f, { color: colorForFiberNumber(cabFix, f.number) });
+                });
+            }
             if (seg && seg.tracedFiber != null) {
-                var c = '#eab308';
-                try {
-                    var cabPf = seg.cable || findCableById(seg.cableId);
-                    var colsPf = (typeof global.getFiberColors === 'function' && cabPf)
-                        ? (global.getFiberColors(cabPf) || []) : [];
-                    var metaPf = colsPf.find(function (f) { return f.number === Number(seg.tracedFiber); });
-                    if (metaPf && metaPf.color) c = metaPf.color;
-                } catch (ePf) {}
+                var cabPf = seg.cable || findCableById(seg.cableId);
                 return [{
                     number: Number(seg.tracedFiber),
-                    color: c,
+                    color: colorForFiberNumber(cabPf, seg.tracedFiber),
                     traced: true,
                     fate: { kind: 'continue' }
                 }];

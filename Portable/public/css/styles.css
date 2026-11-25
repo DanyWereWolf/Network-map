@@ -18946,9 +18946,9 @@ html.cable-split-mode-active #map {
     display: inline !important;
     fill: none;
     stroke: #9ca3af;
-    stroke-width: 16;
+    stroke-width: 14;
     stroke-linecap: round;
-    stroke-opacity: 0.48;
+    stroke-opacity: 0.32;
     filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.12));
 }
 /* «Сигнал» по трассируемой жиле */
