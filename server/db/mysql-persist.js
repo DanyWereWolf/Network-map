@@ -53,6 +53,12 @@ async function hydrateStoreFromMysql() {
             embedEnabled: !!o.embed_enabled,
             embedToken: o.embed_token || null,
             embedCreatedAt: o.embed_created_at ? new Date(o.embed_created_at).toISOString() : null,
+            shareLinks: (function () {
+                try {
+                    var parsed = o.share_links_json ? JSON.parse(o.share_links_json) : [];
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (eShare) { return []; }
+            })(),
             zabbixEnabled: !!o.zabbix_enabled,
             zabbixApiUrl: o.zabbix_api_url || null,
             zabbixApiToken: o.zabbix_api_token || null,
@@ -70,11 +76,19 @@ async function hydrateStoreFromMysql() {
             password: u.password_hash,
             fullName: u.full_name,
             full_name: u.full_name,
-            role: u.role,
+            role: u.role === 'user' ? 'viewer' : u.role,
             status: u.status,
             email: u.email || '',
             emailVerified: u.email_verified === undefined || u.email_verified === null ? true : !!u.email_verified,
             organizationId: u.organization_id,
+            allowedRegionIds: (function () {
+                try {
+                    var parsed = u.allowed_region_ids_json ? JSON.parse(u.allowed_region_ids_json) : [];
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (eParse) { return []; }
+            })(),
+            canDeleteObjects: u.can_delete_objects === undefined || u.can_delete_objects === null ? true : !!u.can_delete_objects,
+            canDeleteCables: u.can_delete_cables === undefined || u.can_delete_cables === null ? true : !!u.can_delete_cables,
             avatarUpdatedAt: u.avatar_updated_at,
             mustChangePassword: !!u.must_change_password,
             createdAt: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString()
@@ -295,10 +309,10 @@ async function writeOrganizations(conn, orgs) {
             `INSERT INTO organizations (
                 id, name, map_object_limit_unlocked, custom_map_object_limit, max_concurrent_users,
                 status, contact_email, two_factor_enabled, two_factor_secret,
-                embed_enabled, embed_token, embed_created_at,
+                embed_enabled, embed_token, embed_created_at, share_links_json,
                 zabbix_enabled, zabbix_api_url, zabbix_api_token, zabbix_updated_at,
                 zabbix_poll_interval_sec, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE
                 name=VALUES(name), map_object_limit_unlocked=VALUES(map_object_limit_unlocked),
                 custom_map_object_limit=VALUES(custom_map_object_limit),
@@ -306,7 +320,7 @@ async function writeOrganizations(conn, orgs) {
                 contact_email=VALUES(contact_email), two_factor_enabled=VALUES(two_factor_enabled),
                 two_factor_secret=VALUES(two_factor_secret),
                 embed_enabled=VALUES(embed_enabled), embed_token=VALUES(embed_token),
-                embed_created_at=VALUES(embed_created_at),
+                embed_created_at=VALUES(embed_created_at), share_links_json=VALUES(share_links_json),
                 zabbix_enabled=VALUES(zabbix_enabled), zabbix_api_url=VALUES(zabbix_api_url),
                 zabbix_api_token=VALUES(zabbix_api_token), zabbix_updated_at=VALUES(zabbix_updated_at),
                 zabbix_poll_interval_sec=VALUES(zabbix_poll_interval_sec)`,
@@ -322,6 +336,7 @@ async function writeOrganizations(conn, orgs) {
                 o.embedEnabled ? 1 : 0,
                 o.embedToken || null,
                 toMysqlDate(o.embedCreatedAt) || null,
+                JSON.stringify(Array.isArray(o.shareLinks) ? o.shareLinks : []),
                 o.zabbixEnabled ? 1 : 0,
                 o.zabbixApiUrl || null,
                 o.zabbixApiToken || null,
@@ -341,15 +356,19 @@ async function writeUsers(conn, users) {
         await conn.query(
             `INSERT INTO users (
                 id, username, password_hash, full_name, role, status, email, email_verified, organization_id,
+                allowed_region_ids_json, can_delete_objects, can_delete_cables,
                 avatar_updated_at, must_change_password, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [
                 u.id, u.username, u.password || '',
                 u.fullName || u.full_name || null,
-                u.role || 'user', u.status || 'pending',
+                (u.role === 'user' ? 'viewer' : (u.role || 'viewer')), u.status || 'pending',
                 u.email || null,
                 u.emailVerified === false ? 0 : 1,
                 u.organizationId || null,
+                JSON.stringify(Array.isArray(u.allowedRegionIds) ? u.allowedRegionIds : []),
+                u.canDeleteObjects === false ? 0 : 1,
+                u.canDeleteCables === false ? 0 : 1,
                 toMysqlDate(u.avatarUpdatedAt),
                 u.mustChangePassword ? 1 : 0,
                 toMysqlDate(u.createdAt) || toMysqlDate(new Date())

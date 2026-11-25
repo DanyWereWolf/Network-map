@@ -4364,6 +4364,18 @@ function showObjectInfoBody(obj) {
         }
     }
     bindObjectGalleryModal(modalInfo, obj);
+    if (modalInfo && type !== 'cable' && type !== 'cableLabel' && window.ObjectComments) {
+        var ocUid = getObjectUniqueId(obj);
+        if (ocUid) {
+            var openN = typeof ObjectComments.getOpenCount === 'function' ? ObjectComments.getOpenCount(ocUid) : 0;
+            var ocTitle = 'Комментарии' + (openN ? (' · задач: ' + openN) : '');
+            modalInfo.insertAdjacentHTML('beforeend',
+                '<div class="info-section object-comments-section" style="margin-top:16px;padding:12px;background:var(--bg-tertiary);border-radius:6px;border:1px solid var(--border-color);">' +
+                '<h4 style="margin:0 0 10px 0;font-size:0.9375rem;">' + ocTitle + '</h4>' +
+                ObjectComments.renderCommentsPanelHtml(ocUid) + '</div>');
+            ObjectComments.bindCommentsPanel(ocUid);
+        }
+    }
     presentInfoCard({ workspace: fiberUsesWorkspace, title: title });
     updateModalLockBanner(getObjectUniqueId(obj));
     syncPropertiesLockFromModal();

@@ -20,15 +20,29 @@
         q = q || parseQuery();
         if (q.embed === '1' || q.embed === 'true' || q.embed === 'yes') return true;
         if (q.embedToken || q.embed_token) return true;
+        if (q.share === '1' || q.share === 'true' || q.share === 'yes') return true;
+        if (q.shareToken || q.share_token) return true;
         try {
             if (document.documentElement.classList.contains('volsmap-embed')) return true;
         } catch (e) {}
         return false;
     }
 
+    function detectShareMode(q) {
+        q = q || parseQuery();
+        if (q.share === '1' || q.share === 'true' || q.share === 'yes') return true;
+        if (q.shareToken || q.share_token) return true;
+        return false;
+    }
+
     function getEmbedTokenFromUrl(q) {
         q = q || parseQuery();
         return String(q.embedToken || q.embed_token || '').trim();
+    }
+
+    function getShareTokenFromUrl(q) {
+        q = q || parseQuery();
+        return String(q.shareToken || q.share_token || '').trim();
     }
 
     function applyEmbedChrome() {
@@ -61,17 +75,31 @@
         } catch (e) {}
     }
 
+    function applyShareViewHints(user) {
+        if (!user || !user.shareView) return;
+        try {
+            global.__VOLSMAP_SHARE_VIEW__ = user.shareView;
+            if (user.shareView.regionId) {
+                global.__VOLSMAP_SHARE_REGION_ID__ = String(user.shareView.regionId);
+            }
+        } catch (e) {}
+    }
+
     function bootstrapAuth() {
         var q = parseQuery();
         var isEmbed = detectEmbedMode(q);
         var embedToken = getEmbedTokenFromUrl(q);
+        var shareToken = getShareTokenFromUrl(q);
 
         if (isEmbed) {
             applyEmbedChrome();
             global.__VOLSMAP_EMBED__ = true;
         }
+        if (detectShareMode(q)) {
+            global.__VOLSMAP_SHARE__ = true;
+        }
 
-        if (!embedToken) {
+        if (!embedToken && !shareToken) {
             return Promise.resolve(true);
         }
 
@@ -81,10 +109,13 @@
             return Promise.resolve(false);
         }
 
-        return fetch(apiBase + '/api/auth/embed', {
+        var url = shareToken ? (apiBase + '/api/auth/share') : (apiBase + '/api/auth/embed');
+        var payload = shareToken ? { shareToken: shareToken } : { embedToken: embedToken };
+
+        return fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ embedToken: embedToken }),
+            body: JSON.stringify(payload),
             cache: 'no-store'
         }).then(function(r) {
             return r.json().then(function(body) {
@@ -93,14 +124,18 @@
         }).then(function(res) {
             var body = res.body;
             if (!body.success || !body.token || !body.user) {
-                showEmbedFatal(body.error || 'Ссылка встраивания недействительна');
+                showEmbedFatal(body.error || (shareToken ? 'Ссылка просмотра недействительна' : 'Ссылка встраивания недействительна'));
                 return false;
             }
             storeEmbedSession(body);
             applyEmbedChrome();
+            if (shareToken || body.user.share) {
+                global.__VOLSMAP_SHARE__ = true;
+                applyShareViewHints(body.user);
+            }
             return true;
         }).catch(function() {
-            showEmbedFatal('Не удалось подключить режим встраивания');
+            showEmbedFatal(shareToken ? 'Не удалось открыть ссылку просмотра' : 'Не удалось подключить режим встраивания');
             return false;
         });
     }
@@ -129,18 +164,41 @@
         return !!(global.__VOLSMAP_EMBED__ || detectEmbedMode());
     }
 
+    function isShare() {
+        return !!(global.__VOLSMAP_SHARE__ || detectShareMode());
+    }
+
+    function applyShareMapViewIfNeeded() {
+        var view = global.__VOLSMAP_SHARE_VIEW__;
+        if (!view || !global.myMap) return;
+        try {
+            if (Array.isArray(view.center) && view.center.length >= 2) {
+                var zoom = view.zoom != null ? Number(view.zoom) : (myMap.getZoom ? myMap.getZoom() : 12);
+                if (myMap.setCenter) myMap.setCenter(view.center, isNaN(zoom) ? undefined : zoom);
+            } else if (view.zoom != null && myMap.setZoom) {
+                myMap.setZoom(Number(view.zoom));
+            }
+        } catch (e) {}
+    }
+
     global.VolsmapEmbed = {
         parseQuery: parseQuery,
         detectEmbedMode: detectEmbedMode,
+        detectShareMode: detectShareMode,
         bootstrapAuth: bootstrapAuth,
         applyEmbedChrome: applyEmbedChrome,
-        isEmbed: isEmbed
+        applyShareMapViewIfNeeded: applyShareMapViewIfNeeded,
+        isEmbed: isEmbed,
+        isShare: isShare
     };
 
     try {
         if (detectEmbedMode()) {
             document.documentElement.classList.add('volsmap-embed');
             global.__VOLSMAP_EMBED__ = true;
+        }
+        if (detectShareMode()) {
+            global.__VOLSMAP_SHARE__ = true;
         }
     } catch (e) {}
 })(typeof window !== 'undefined' ? window : this);

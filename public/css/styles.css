@@ -18278,12 +18278,119 @@ html.cable-split-mode-active #map {
     min-height: 0;
     height: 100%;
 }
+.trace-view--studio {
+    background:
+        radial-gradient(1200px 500px at 10% -10%, color-mix(in srgb, var(--accent-primary, #2563eb) 10%, transparent), transparent 60%),
+        var(--bg-card, #fff);
+}
 .trace-toolbar {
     flex-shrink: 0;
     z-index: 2;
     padding: 8px 12px 6px;
     border-bottom: 1px solid var(--border-color);
     background: color-mix(in srgb, var(--bg-card) 88%, var(--accent-primary) 4%);
+}
+.trace-toolbar--studio {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.trace-toolbar-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.trace-tool-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card, #fff);
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+}
+.trace-tool-btn:hover,
+.trace-tool-btn[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--accent-primary) 50%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-card));
+    color: var(--accent-primary);
+}
+.trace-studio-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+.trace-studio-canvas {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 10px 0;
+}
+.trace-studio-canvas .trace-schematic {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-card) 92%, #e2e8f0 8%);
+}
+.trace-studio-canvas .trace-schematic-scroll {
+    flex: 1;
+    min-height: 280px;
+    max-height: none !important;
+    background:
+        radial-gradient(ellipse 80% 60% at 12% 0%, color-mix(in srgb, var(--accent-primary) 10%, transparent) 0%, transparent 55%),
+        radial-gradient(ellipse 70% 50% at 88% 100%, color-mix(in srgb, var(--accent-primary) 8%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-tertiary) 70%, var(--bg-card)) 0%, var(--bg-primary) 100%);
+}
+[data-theme="dark"] .trace-studio-canvas .trace-schematic-scroll {
+    background:
+        radial-gradient(ellipse 75% 55% at 10% 0%, color-mix(in srgb, var(--accent-primary) 18%, transparent) 0%, transparent 58%),
+        radial-gradient(ellipse 60% 45% at 90% 100%, color-mix(in srgb, #0369a1 14%, transparent) 0%, transparent 52%),
+        linear-gradient(180deg, #0d1a2c 0%, #0b1526 55%, #09101c 100%);
+}
+.trace-studio-steps {
+    flex: 0 0 auto;
+    max-height: 42vh;
+    border-top: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-card) 94%, var(--accent-primary) 3%);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.trace-studio-steps.is-collapsed {
+    max-height: 42px;
+}
+.trace-studio-steps.is-collapsed .trace-studio-steps-body {
+    display: none;
+}
+.trace-studio-steps-head {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.trace-studio-steps-body {
+    overflow: auto;
+    padding: 0 12px 10px;
+    min-height: 0;
 }
 .trace-view-scroll {
     flex: 1;
@@ -18296,6 +18403,9 @@ html.cable-split-mode-active #map {
     padding: 0 12px 10px;
     border-top: 1px solid var(--border-color);
     background: color-mix(in srgb, var(--bg-card) 88%, var(--accent-primary) 4%);
+}
+.trace-view--studio .trace-view-footer {
+    display: none;
 }
 .trace-back-btn {
     display: inline-flex;
@@ -18731,6 +18841,405 @@ html.cable-split-mode-active #map {
     background: var(--bg-tertiary);
     flex: 0 0 auto;
 }
+.trace-schematic--studio {
+    padding-bottom: 8px;
+}
+.trace-sch-mode-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+.trace-sch-mode-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.trace-sch-mode-btn.is-active {
+    background: color-mix(in srgb, var(--accent-primary) 18%, var(--bg-card));
+    color: var(--accent-primary);
+}
+.trace-sch-meta-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px 18px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.trace-sch-meta-main {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+.trace-sch-meta-side {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: stretch;
+}
+.trace-length-card,
+.trace-signal-card {
+    min-width: 148px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 80%, #94a3b8);
+    background: color-mix(in srgb, #fff 86%, transparent);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    backdrop-filter: blur(8px);
+}
+[data-theme="dark"] .trace-length-card,
+[data-theme="dark"] .trace-signal-card {
+    background: color-mix(in srgb, #0f172a 82%, transparent);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.trace-length-card__title,
+.trace-signal-card__title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.trace-length-card__rows,
+.trace-signal-card__rows {
+    display: grid;
+    gap: 4px;
+}
+.trace-length-card__rows > div,
+.trace-signal-card__rows > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.trace-length-card__rows strong,
+.trace-signal-card__rows strong {
+    color: var(--text-primary);
+    font-weight: 750;
+}
+.trace-length-card__total,
+.trace-signal-card__end {
+    margin-top: 2px;
+    padding-top: 4px;
+    border-top: 1px dashed var(--border-color);
+}
+.trace-sch-signal-badge {
+    font-size: 9px;
+    font-weight: 700;
+    fill: #2563eb;
+}
+.trace-schematic-svg--cassette .trace-sch-trunk {
+    filter: drop-shadow(0 1px 0 rgba(15, 23, 42, 0.08));
+}
+.trace-schematic-svg--fiberbase .trace-sch-trunk {
+    display: inline !important;
+    fill: none;
+    stroke: #9ca3af;
+    stroke-width: 16;
+    stroke-linecap: round;
+    stroke-opacity: 0.48;
+    filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.12));
+}
+/* «Сигнал» по трассируемой жиле */
+.trace-schematic-svg--fiberbase .trace-sch-signal {
+    stroke-dasharray: 12 22;
+    stroke-dashoffset: 0;
+    animation: traceSchSignalFlow 1.05s linear infinite;
+    pointer-events: none;
+    filter: drop-shadow(0 0 3px currentColor);
+}
+.trace-schematic-svg--fiberbase .trace-sch-port-dot--traced {
+    animation: traceSchPortPulse 1.4s ease-in-out infinite;
+}
+@keyframes traceSchSignalFlow {
+    to { stroke-dashoffset: -34; }
+}
+@keyframes traceSchPortPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .trace-schematic-svg--fiberbase .trace-sch-signal,
+    .trace-schematic-svg--fiberbase .trace-sch-port-dot--traced {
+        animation: none !important;
+    }
+    .trace-schematic-svg--fiberbase .trace-sch-signal {
+        stroke-dasharray: none;
+        opacity: 0.9;
+    }
+}
+.trace-schematic-svg--fiberbase .trace-sch-trunk-core {
+    fill: none;
+    stroke: #6b7280;
+    stroke-width: 7;
+    stroke-linecap: round;
+    stroke-opacity: 0.92;
+}
+[data-theme="dark"] .trace-schematic-svg--fiberbase .trace-sch-trunk {
+    stroke: #64748b;
+    stroke-opacity: 0.42;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+[data-theme="dark"] .trace-schematic-svg--fiberbase .trace-sch-trunk-core {
+    stroke: #94a3b8;
+    stroke-opacity: 0.88;
+}
+.trace-schematic-svg--fiberbase .trace-sch-trunk--patch {
+    stroke-width: 12;
+    stroke-opacity: 0.36;
+}
+.trace-schematic-svg--fiberbase .trace-sch-trunk-core--patch {
+    stroke-width: 5;
+    stroke-opacity: 0.8;
+    stroke-dasharray: 6 4;
+}
+.trace-schematic-svg--fiberbase .trace-sch-node-title--fb {
+    font-size: 10px;
+    font-weight: 650;
+    fill: var(--text-secondary);
+}
+.trace-schematic-svg--fiberbase .trace-sch-trunk-len {
+    font-size: 10px;
+    font-weight: 700;
+    fill: var(--text-secondary);
+}
+.trace-schematic-svg--fiberbase .trace-sch-len-badge {
+    fill: color-mix(in srgb, var(--bg-card) 88%, transparent);
+    stroke: var(--border-color);
+    stroke-width: 0.8;
+}
+.trace-schematic-svg--fiberbase .trace-sch-col-bg {
+    fill: color-mix(in srgb, var(--bg-tertiary) 82%, var(--accent-primary) 6%);
+    stroke: color-mix(in srgb, var(--border-color) 70%, var(--accent-primary) 20%);
+    stroke-width: 0.8;
+}
+[data-theme="dark"] .trace-schematic-svg--fiberbase .trace-sch-col-bg {
+    fill: color-mix(in srgb, #1a2d44 88%, var(--accent-primary) 8%);
+    stroke: #35506a;
+}
+.trace-schematic-svg--fiberbase .trace-sch-fiber-num {
+    font-size: 9px;
+    fill: var(--text-muted);
+    font-weight: 600;
+}
+.trace-schematic-svg--fiberbase .trace-sch-branch-label {
+    font-size: 10px;
+    fill: var(--text-secondary);
+    font-weight: 500;
+}
+.trace-schematic-svg--fiberbase .trace-sch-node-port,
+.trace-schematic-svg--fiberbase .trace-sch-node-reserve {
+    font-size: 9px;
+    fill: var(--text-muted);
+}
+.trace-schematic-svg--fiberbase .trace-sch-port-idx {
+    font-size: 8px;
+    font-weight: 600;
+    fill: var(--text-muted);
+}
+.trace-schematic-svg--fiberbase .trace-sch-fiber-num--traced {
+    fill: var(--text-primary);
+    font-weight: 800;
+}
+.trace-schematic-svg--fiberbase .trace-sch-splice-label {
+    font-size: 9px;
+    font-weight: 700;
+    fill: var(--accent-primary);
+}
+.trace-schematic-svg--fiberbase .trace-sch-col-cap {
+    font-size: 8px;
+    font-weight: 700;
+    fill: var(--text-muted);
+    letter-spacing: 0.02em;
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-card {
+    fill: color-mix(in srgb, var(--bg-card) 88%, var(--accent-primary) 8%);
+    stroke: color-mix(in srgb, var(--accent-primary) 42%, var(--border-color));
+    stroke-width: 1.25;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.18));
+}
+.trace-schematic-svg--fiberbase .trace-sch-endpoint--end .trace-sch-ep-card {
+    fill: color-mix(in srgb, var(--bg-card) 86%, var(--accent-warning) 10%);
+    stroke: color-mix(in srgb, var(--accent-warning) 48%, var(--border-color));
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-badge {
+    fill: color-mix(in srgb, var(--accent-primary) 28%, var(--bg-card));
+    stroke: color-mix(in srgb, var(--accent-primary) 50%, var(--border-color));
+    stroke-width: 0.9;
+}
+.trace-schematic-svg--fiberbase .trace-sch-endpoint--end .trace-sch-ep-badge {
+    fill: color-mix(in srgb, var(--accent-warning) 26%, var(--bg-card));
+    stroke: color-mix(in srgb, var(--accent-warning) 55%, var(--border-color));
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-badge-txt {
+    font-size: 8.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    fill: var(--accent-primary);
+}
+.trace-schematic-svg--fiberbase .trace-sch-endpoint--end .trace-sch-ep-badge-txt {
+    fill: color-mix(in srgb, var(--accent-warning) 85%, var(--text-primary));
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-fiber {
+    font-size: 10px;
+    font-weight: 800;
+    fill: var(--text-primary);
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-type {
+    font-size: 9px;
+    font-weight: 650;
+    fill: var(--text-secondary);
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-name {
+    font-size: 10px;
+    font-weight: 700;
+    fill: var(--text-primary);
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-join {
+    fill: var(--accent-primary);
+    stroke: color-mix(in srgb, var(--bg-card) 40%, #0f172a);
+    stroke-width: 1.2;
+}
+.trace-schematic-svg--fiberbase .trace-sch-ep-join--end {
+    fill: color-mix(in srgb, var(--accent-warning) 75%, var(--accent-primary));
+}
+.trace-endpoint-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-card) 80%, var(--accent-primary) 6%);
+}
+.trace-endpoint-summary__side {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 140px;
+}
+.trace-endpoint-summary__badge {
+    display: inline-block;
+    width: fit-content;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent-primary);
+}
+.trace-endpoint-summary__side--end .trace-endpoint-summary__badge {
+    color: color-mix(in srgb, var(--accent-warning) 80%, var(--text-primary));
+}
+.trace-endpoint-summary__side strong {
+    font-size: 0.86rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.trace-endpoint-summary__muted {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.trace-endpoint-summary__arrow {
+    flex: 0 0 auto;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+.trace-schematic--fiberbase .trace-schematic-scroll,
+.trace-studio-canvas .trace-schematic--fiberbase .trace-schematic-scroll {
+    background-image:
+        linear-gradient(color-mix(in srgb, var(--border-color) 35%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--border-color) 35%, transparent) 1px, transparent 1px),
+        radial-gradient(ellipse 80% 55% at 8% 0%, color-mix(in srgb, var(--accent-primary) 12%, transparent) 0%, transparent 55%),
+        radial-gradient(ellipse 65% 45% at 92% 100%, color-mix(in srgb, var(--accent-primary) 8%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-tertiary) 65%, var(--bg-card)) 0%, var(--bg-primary) 100%);
+    background-size: 24px 24px, 24px 24px, auto, auto, auto;
+    background-color: var(--bg-primary);
+}
+[data-theme="dark"] .trace-schematic--fiberbase .trace-schematic-scroll,
+[data-theme="dark"] .trace-studio-canvas .trace-schematic--fiberbase .trace-schematic-scroll {
+    background-image:
+        linear-gradient(color-mix(in srgb, #2a4058 55%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, #2a4058 55%, transparent) 1px, transparent 1px),
+        radial-gradient(ellipse 75% 50% at 10% 0%, color-mix(in srgb, var(--accent-primary) 20%, transparent) 0%, transparent 58%),
+        radial-gradient(ellipse 55% 40% at 90% 100%, color-mix(in srgb, #0284c7 12%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #0d1a2c 0%, #0b1526 60%, #080f1a 100%);
+    background-size: 24px 24px, 24px 24px, auto, auto, auto;
+    background-color: #0b1526;
+}
+.trace-studio-canvas .trace-schematic--fiberbase {
+    background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-tertiary));
+    border: 1px solid var(--border-color);
+}
+[data-theme="dark"] .trace-studio-canvas .trace-schematic--fiberbase {
+    background: color-mix(in srgb, var(--bg-card) 88%, #0b1526);
+    border-color: var(--border-color);
+}
+.trace-sch-overview--fiberbase {
+    align-items: center;
+    padding: 4px 0 6px;
+    max-width: 420px;
+}
+.trace-sch-overview--fiberbase .trace-sch-overview-node {
+    min-width: 0;
+    max-width: none;
+}
+.trace-sch-overview--fiberbase .trace-sch-overview-dot {
+    width: 10px;
+    height: 10px;
+    background: #2563eb;
+    box-shadow: 0 0 0 1px #2563eb;
+}
+.trace-sch-overview--fiberbase .trace-sch-overview-line {
+    flex: 1 1 28px;
+    min-width: 18px;
+    height: 2px;
+    margin: 0 2px;
+    opacity: 0.7;
+}
+.trace-studio-canvas .trace-schematic--cassette {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+}
+[data-theme="dark"] .trace-studio-canvas .trace-schematic--cassette {
+    background: #0b1220;
+    border-color: #1e293b;
+}
+.trace-length-card {
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+.trace-schematic-legend--compact {
+    gap: 6px 12px;
+    font-size: 0.72rem;
+    margin-bottom: 4px;
+}
+.trace-sch-rendering {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    padding: 24px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
 .trace-schematic-branch {
     margin-bottom: 12px;
 }
@@ -18912,7 +19421,7 @@ html.cable-split-mode-active #map {
     overflow-x: auto;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 14px 8px 12px;
+    padding: 14px 18px 12px;
     min-height: 200px;
     max-height: min(38vh, 360px);
     background: var(--bg-card, var(--bg-primary));
@@ -18923,10 +19432,17 @@ html.cable-split-mode-active #map {
     min-height: 260px;
     max-height: min(54vh, 520px);
 }
+#infoModal[data-trace-view="1"] .trace-studio-canvas .trace-schematic-scroll {
+    min-height: 320px;
+    max-height: none;
+}
 .trace-schematic--tree .trace-schematic-scroll {
     min-height: 240px;
     max-height: min(52vh, 500px);
     padding-top: 18px;
+}
+#infoModal[data-trace-view="1"] .trace-studio-canvas .trace-schematic--tree .trace-schematic-scroll {
+    max-height: none;
 }
 .trace-schematic-svg {
     display: block;
@@ -19634,6 +20150,101 @@ html.cable-split-mode-active #map {
     stroke: #38bdf8;
 }
 
+/* Visio-style tree (режим «Дерево») */
+.trace-schematic-svg--visio {
+    background: transparent;
+}
+.trace-visio-edge {
+    stroke: #94a3b8;
+    stroke-width: 1.75;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+}
+.trace-visio-edge--main {
+    stroke: #06b6d4;
+    stroke-width: 2.35;
+}
+.trace-visio-edge--branch {
+    stroke: #f59e0b;
+    stroke-width: 1.6;
+    stroke-dasharray: 5 3;
+}
+.trace-visio-edge-label {
+    font-size: 10px;
+    font-weight: 600;
+    fill: var(--text-muted, #94a3b8);
+    pointer-events: none;
+}
+.trace-visio-fiber {
+    stroke-linecap: round;
+    opacity: 0.92;
+}
+.trace-visio-fiber--traced {
+    opacity: 1;
+    filter: drop-shadow(0 0 1.5px rgba(6, 182, 212, 0.45));
+}
+.trace-visio-fiber-cable {
+    font-size: 10px;
+    font-weight: 700;
+    fill: var(--text-muted, #94a3b8);
+    pointer-events: none;
+}
+.trace-visio-fiber-num {
+    font-size: 8px;
+    font-weight: 600;
+    fill: var(--text-muted, #94a3b8);
+    pointer-events: none;
+}
+.trace-visio-fiber-num.is-traced {
+    fill: #67e8f9;
+    font-weight: 800;
+}
+.trace-visio-fiber-fate {
+    font-size: 8px;
+    font-weight: 500;
+    fill: var(--text-muted, #64748b);
+    pointer-events: none;
+}
+.trace-visio-node--start .trace-visio-type {
+    fill: #67e8f9;
+}
+.trace-sch-leg--fibers::before {
+    background: linear-gradient(90deg, #f59e0b, #06b6d4, #94a3b8);
+}
+.trace-visio-node-shadow {
+    fill: rgba(15, 23, 42, 0.18);
+}
+.trace-visio-node-bg {
+    stroke-width: 1.5;
+}
+.trace-visio-node--spine .trace-visio-node-bg {
+    stroke-width: 2;
+}
+.trace-visio-type {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    fill: var(--text-muted, #94a3b8);
+}
+.trace-visio-name {
+    font-size: 12px;
+    font-weight: 600;
+    fill: var(--text-primary, #e2e8f0);
+}
+.trace-visio-signal,
+.trace-visio-meta {
+    font-size: 9px;
+    font-weight: 600;
+    fill: #67e8f9;
+}
+[data-theme="light"] .trace-visio-name {
+    fill: #0f172a;
+}
+[data-theme="light"] .trace-visio-node-shadow {
+    fill: rgba(15, 23, 42, 0.08);
+}
+
 .trace-sch-tree-accent { fill: #94a3b8; }
 .trace-sch-tree-accent--olt { fill: #3b82f6; }
 .trace-sch-tree-accent--host { fill: #64748b; }
@@ -19693,9 +20304,9 @@ html.cable-split-mode-active #map {
     fill: var(--text-secondary, #94a3b8);
 }
 .trace-sch-cable-label--link { fill: #a78bfa; }
-.trace-sch-traced-badge,
-.trace-sch-trunk,
-.trace-sch-trunk--link { display: none; }
+.trace-sch-traced-badge { display: none; }
+/* Ствол рисуется в новой продольной схеме FiberBase */
+.trace-schematic-svg--fiberbase .trace-sch-trunk { display: inline; }
 .trace-sch-fiber-num {
     font-size: 9px;
     font-weight: 600;

@@ -50,6 +50,11 @@ function bindCableDeleteDelegation() {
 }
 
 function deleteCableByUniqueId(cableUniqueId, opts) {
+    if (!(opts && (opts.skipSync || opts.remoteOp)) && typeof canDeleteCables === 'function' && !canDeleteCables()) {
+        if (typeof showWarning === 'function') showWarning('Удаление кабелей запрещено для вашей роли', 'Нет доступа');
+        return;
+    }
+
     const cable = objects.find(obj => 
         obj.properties && 
         obj.properties.get('type') === 'cable' &&

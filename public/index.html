@@ -7,7 +7,8 @@
         (function(){try{if((navigator.userAgent||'').indexOf('VolsmapAndroid')>=0)document.documentElement.classList.add('volsmap-android-app');}catch(e){}})();
         (function(){try{
             var q=location.search||'';
-            if(q.indexOf('embed=1')>=0||q.indexOf('embed=true')>=0||q.indexOf('embedToken=')>=0||q.indexOf('embed_token=')>=0)
+            if(q.indexOf('embed=1')>=0||q.indexOf('embed=true')>=0||q.indexOf('embedToken=')>=0||q.indexOf('embed_token=')>=0||
+               q.indexOf('share=1')>=0||q.indexOf('share=true')>=0||q.indexOf('shareToken=')>=0||q.indexOf('share_token=')>=0)
                 document.documentElement.classList.add('volsmap-embed');
         }catch(e){}})();
 </script>
@@ -278,7 +279,7 @@
             } catch (e) {}
         })();
 </script>
-    <link rel="stylesheet" href="css/styles.css?v=sch-badgefit1">
+    <link rel="stylesheet" href="css/styles.css?v=trace-fiberbase20">
     <link rel="stylesheet" href="css/scrollbars.css">
     <link rel="stylesheet" href="css/app-motion.css">
     <link rel="stylesheet" href="css/app-mobile.css?v=fiber-ws-scroll6">
@@ -2339,6 +2340,49 @@
                     </div>
                 </details>
 
+                <details id="orgShareLinksSection" class="org-settings-card org-share-section" style="display: none;">
+                    <summary class="org-settings-summary">
+                        <span class="org-settings-icon org-settings-icon--embed" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="18" cy="5" r="3"></circle>
+                                <circle cx="6" cy="12" r="3"></circle>
+                                <circle cx="18" cy="19" r="3"></circle>
+                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                            </svg>
+                        </span>
+                        <span class="section-title">Ссылки на просмотр</span>
+                        <span id="orgShareSummaryMeta" class="org-settings-summary-meta"></span>
+                    </summary>
+                    <div class="org-settings-body">
+                        <p class="hint org-settings-hint">Временные ссылки только для просмотра (подрядчики, руководство). Без редактирования и чата.</p>
+                        <div class="org-zabbix-fields">
+                            <div class="form-group">
+                                <label for="orgShareLabel">Название</label>
+                                <input type="text" id="orgShareLabel" class="form-input" placeholder="Например: подрядчик" maxlength="120">
+                            </div>
+                            <div class="form-group">
+                                <label for="orgShareTtl">Срок</label>
+                                <select id="orgShareTtl" class="form-select">
+                                    <option value="1">1 день</option>
+                                    <option value="7" selected>7 дней</option>
+                                    <option value="30">30 дней</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="orgShareRegion">Регион</label>
+                                <select id="orgShareRegion" class="form-select">
+                                    <option value="">Все доступные</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="org-security-actions">
+                            <button type="button" id="orgShareCreateBtn" class="btn-primary btn-sm">Создать ссылку</button>
+                        </div>
+                        <div id="orgShareLinksList" class="org-share-links-list" style="margin-top:0.75rem;"></div>
+                    </div>
+                </details>
+
                 <details id="orgZabbixSection" class="org-settings-card org-zabbix-section" style="display: none;">
                     <summary class="org-settings-summary">
                         <span class="org-settings-icon org-settings-icon--zabbix" aria-hidden="true">
@@ -2511,12 +2555,13 @@
                     <div class="form-group user-edit-field user-edit-role-field">
                         <span class="user-edit-field-label" id="editRoleLabel">Роль</span>
                         <select id="editRole" class="form-select user-edit-role-select" aria-labelledby="editRoleLabel">
-                            <option value="user">Пользователь</option>
+                            <option value="viewer">Просмотр</option>
+                            <option value="editor">Редактор</option>
                             <option value="admin">Администратор</option>
                         </select>
                         <div class="user-edit-role-options" role="radiogroup" aria-labelledby="editRoleLabel">
                             <label class="user-edit-role-option">
-                                <input type="radio" name="userEditRoleVisual" value="user" class="user-edit-role-input" checked>
+                                <input type="radio" name="userEditRoleVisual" value="viewer" class="user-edit-role-input" checked>
                                 <span class="user-edit-role-card">
                                     <span class="user-edit-role-icon user-edit-role-icon--user" aria-hidden="true">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2525,8 +2570,23 @@
                                         </svg>
                                     </span>
                                     <span class="user-edit-role-text">
-                                        <span class="user-edit-role-title">Пользователь</span>
-                                        <span class="user-edit-role-desc">Просмотр и работа с картой</span>
+                                        <span class="user-edit-role-title">Просмотр</span>
+                                        <span class="user-edit-role-desc">Только просмотр карты</span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="user-edit-role-option">
+                                <input type="radio" name="userEditRoleVisual" value="editor" class="user-edit-role-input">
+                                <span class="user-edit-role-card">
+                                    <span class="user-edit-role-icon user-edit-role-icon--user" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M12 20h9"></path>
+                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                        </svg>
+                                    </span>
+                                    <span class="user-edit-role-text">
+                                        <span class="user-edit-role-title">Редактор</span>
+                                        <span class="user-edit-role-desc">Правки карты в своих регионах</span>
                                     </span>
                                 </span>
                             </label>
@@ -2545,6 +2605,15 @@
                                 </span>
                             </label>
                         </div>
+                    </div>
+                    <div class="form-group user-edit-field" id="editMapPermissionsGroup" style="display:none;">
+                        <div id="editDeleteFlagsWrap">
+                            <span class="user-edit-field-label">Права редактора</span>
+                            <label class="user-edit-region-option"><input type="checkbox" id="editCanDeleteObjects" checked> Можно удалять объекты</label>
+                            <label class="user-edit-region-option"><input type="checkbox" id="editCanDeleteCables" checked> Можно удалять кабели</label>
+                        </div>
+                        <span class="user-edit-field-label" style="margin-top:0.75rem;display:block;">Регионы (пусто = все)</span>
+                        <div id="editAllowedRegions" class="user-edit-regions-list"></div>
                     </div>
                     <div class="form-group user-edit-field" id="editOrganizationGroup">
                         <label for="editOrganizationId">Организация</label>
@@ -3451,7 +3520,7 @@
     <script src="js/map/theme.js"></script>
     <script src="js/map/map-icons.js"></script>
     <script src="js/map/cable-underground.js?v=ug-sleeve1"></script>
-    <script src="js/map/fiber-trace.js?v=sch-badgefit1"></script>
+    <script src="js/map/fiber-trace.js?v=trace-fiberbase20"></script>
     <script src="js/map/embedded-splitters.js"></script>
     <script src="js/map/regions.js?v=zone-zoom-fix1"></script>
     <script src="js/app/map-regions.js"></script>
@@ -3485,11 +3554,12 @@
     <script src="js/app/map-persistence.js?v=cab-comp2"></script>
     <script src="js/app/cable-laying.js?v=ug-sleeve1"></script>
     <script src="js/app/cable-helpers.js?v=move-sync-rev1"></script>
+    <script src="js/app/object-comments.js"></script>
     <script src="js/app/object-modals.js?v=cab-comp2"></script>
     <script src="js/app/fiber-modal-handlers.js?v=sleeve-open-perf1"></script>
     <script src="js/app/fiber-labels.js"></script>
     <script src="js/app/cabinet-display.js?v=cab-comp2"></script>
-    <script src="js/app/fiber-trace.js?v=trace-harden1"></script>
+    <script src="js/app/fiber-trace.js?v=trace-drop-mc1"></script>
     <script src="js/app/fiber-routing-modals.js"></script>
     <script src="js/app/fiber-routing-map.js"></script>
     <script src="js/app/gpon-connect-modals.js"></script>
@@ -3507,7 +3577,7 @@
     <script src="js/app/map-filter.js?v=zone-zoom-fix1"></script>
     <script src="js/app/fiber-workspace.js?v=sleeve-open-perf1"></script>
     <script src="js/app/main.js"></script>
-    <script src="js/optical-calculator.js"></script>
+    <script src="js/optical-calculator.js?v=trace-studio1"></script>
     <script src="js/sync.js?v=refresh-loop1"></script>
     <script src="js/core/perf-reporter.js"></script>
 </body></html>

@@ -70,11 +70,19 @@ async function hydrateStoreFromMysql() {
             password: u.password_hash,
             fullName: u.full_name,
             full_name: u.full_name,
-            role: u.role,
+            role: u.role === 'user' ? 'viewer' : u.role,
             status: u.status,
             email: u.email || '',
             emailVerified: u.email_verified === undefined || u.email_verified === null ? true : !!u.email_verified,
             organizationId: u.organization_id,
+            allowedRegionIds: (function () {
+                try {
+                    var parsed = u.allowed_region_ids_json ? JSON.parse(u.allowed_region_ids_json) : [];
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (eParse) { return []; }
+            })(),
+            canDeleteObjects: u.can_delete_objects === undefined || u.can_delete_objects === null ? true : !!u.can_delete_objects,
+            canDeleteCables: u.can_delete_cables === undefined || u.can_delete_cables === null ? true : !!u.can_delete_cables,
             avatarUpdatedAt: u.avatar_updated_at,
             mustChangePassword: !!u.must_change_password,
             createdAt: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString()
@@ -341,15 +349,19 @@ async function writeUsers(conn, users) {
         await conn.query(
             `INSERT INTO users (
                 id, username, password_hash, full_name, role, status, email, email_verified, organization_id,
+                allowed_region_ids_json, can_delete_objects, can_delete_cables,
                 avatar_updated_at, must_change_password, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [
                 u.id, u.username, u.password || '',
                 u.fullName || u.full_name || null,
-                u.role || 'user', u.status || 'pending',
+                (u.role === 'user' ? 'viewer' : (u.role || 'viewer')), u.status || 'pending',
                 u.email || null,
                 u.emailVerified === false ? 0 : 1,
                 u.organizationId || null,
+                JSON.stringify(Array.isArray(u.allowedRegionIds) ? u.allowedRegionIds : []),
+                u.canDeleteObjects === false ? 0 : 1,
+                u.canDeleteCables === false ? 0 : 1,
                 toMysqlDate(u.avatarUpdatedAt),
                 u.mustChangePassword ? 1 : 0,
                 toMysqlDate(u.createdAt) || toMysqlDate(new Date())

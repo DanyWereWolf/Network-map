@@ -122,7 +122,24 @@ async function runMigrations() {
         console.log('[MySQL] Migration applied:', zabbixPollMig);
     }
 
-    return { applied: applied.length > 0, ids: applied.length ? applied : [MIGRATION_ID, emailMig, embedMig, zabbixMig, zabbixPollMig] };
+    var userPermsMig = '006_user_map_permissions';
+    if (!(await hasMigration(userPermsMig))) {
+        if (!(await columnExists('users', 'allowed_region_ids_json'))) {
+            await query('ALTER TABLE users ADD COLUMN allowed_region_ids_json LONGTEXT NULL AFTER organization_id');
+        }
+        if (!(await columnExists('users', 'can_delete_objects'))) {
+            await query('ALTER TABLE users ADD COLUMN can_delete_objects TINYINT(1) NOT NULL DEFAULT 1 AFTER allowed_region_ids_json');
+        }
+        if (!(await columnExists('users', 'can_delete_cables'))) {
+            await query('ALTER TABLE users ADD COLUMN can_delete_cables TINYINT(1) NOT NULL DEFAULT 1 AFTER can_delete_objects');
+        }
+        await query("UPDATE users SET role = 'viewer' WHERE role = 'user'");
+        await markMigration(userPermsMig);
+        applied.push(userPermsMig);
+        console.log('[MySQL] Migration applied:', userPermsMig);
+    }
+
+    return { applied: applied.length > 0, ids: applied.length ? applied : [MIGRATION_ID, emailMig, embedMig, zabbixMig, zabbixPollMig, userPermsMig] };
 }
 
 if (require.main === module) {

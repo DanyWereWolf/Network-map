@@ -27,8 +27,14 @@ function checkAuth() {
     return true;
 }
 
+function normalizeClientMapRole(role) {
+    if (role === 'admin') return 'admin';
+    if (role === 'editor') return 'editor';
+    return 'viewer';
+}
+
 function requireAdmin() {
-    if (!currentUser || currentUser.role !== 'admin') {
+    if (!currentUser || normalizeClientMapRole(currentUser.role) !== 'admin') {
         showWarning('Это действие доступно только администраторам', 'Нет доступа');
         return false;
     }
@@ -36,7 +42,44 @@ function requireAdmin() {
 }
 
 function canEdit() {
-    return currentUser && currentUser.role === 'admin';
+    if (!currentUser || currentUser.embed || currentUser.share) return false;
+    var role = normalizeClientMapRole(currentUser.role);
+    return role === 'admin' || role === 'editor';
+}
+
+function canDeleteObjects() {
+    if (!canEdit()) return false;
+    if (normalizeClientMapRole(currentUser.role) === 'admin') return true;
+    return currentUser.canDeleteObjects !== false;
+}
+
+function canDeleteCables() {
+    if (!canEdit()) return false;
+    if (normalizeClientMapRole(currentUser.role) === 'admin') return true;
+    return currentUser.canDeleteCables !== false;
+}
+
+function getUserAllowedRegionIds(user) {
+    var u = user || currentUser;
+    if (!u) return [];
+    if (normalizeClientMapRole(u.role) === 'admin') return [];
+    return Array.isArray(u.allowedRegionIds) ? u.allowedRegionIds.map(String) : [];
+}
+
+function userCanAccessMapRegion(regionId, user) {
+    var u = user || currentUser;
+    if (!u) return false;
+    if (normalizeClientMapRole(u.role) === 'admin') return true;
+    var allowed = getUserAllowedRegionIds(u);
+    if (!allowed.length) return true;
+    return allowed.indexOf(String(regionId)) !== -1;
+}
+
+function mapRoleLabel(role) {
+    var r = normalizeClientMapRole(role);
+    if (r === 'admin') return 'Администратор';
+    if (r === 'editor') return 'Редактор';
+    return 'Просмотр';
 }
 
 function getAvatarImageSrc(avatarUrl) {
@@ -206,38 +249,41 @@ function initUserUI() {
         userName.textContent = currentUser.fullName || currentUser.username;
     }
     if (userRole) {
-        userRole.textContent = currentUser.role === 'admin' ? 'Администратор' : 'Пользователь';
-        userRole.className = 'user-role ' + currentUser.role;
+        var roleNorm = normalizeClientMapRole(currentUser.role);
+        userRole.textContent = mapRoleLabel(roleNorm);
+        userRole.className = 'user-role ' + roleNorm;
     }
 
     const usersManageBtn = document.getElementById('usersManageBtn');
     if (usersManageBtn) {
-        usersManageBtn.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
+        usersManageBtn.style.display = normalizeClientMapRole(currentUser.role) === 'admin' ? 'flex' : 'none';
     }
 
     const backupsSection = document.getElementById('backupsAccordionSection');
     if (backupsSection) {
-        backupsSection.style.display = currentUser.role === 'admin' ? 'block' : 'none';
+        backupsSection.style.display = normalizeClientMapRole(currentUser.role) === 'admin' ? 'block' : 'none';
     }
     const filesSection = document.getElementById('filesAccordionSection');
     if (filesSection) {
-        filesSection.style.display = currentUser.role === 'admin' ? 'block' : 'none';
+        filesSection.style.display = normalizeClientMapRole(currentUser.role) === 'admin' ? 'block' : 'none';
     }
     const deviceCatalogBtn = document.getElementById('deviceCatalogBtn');
     if (deviceCatalogBtn) {
-        deviceCatalogBtn.style.display = currentUser.role === 'admin' ? 'flex' : 'none';
+        deviceCatalogBtn.style.display = normalizeClientMapRole(currentUser.role) === 'admin' ? 'flex' : 'none';
     }
     if (typeof syncThemeFiberMapAdminUi === 'function') {
         try { syncThemeFiberMapAdminUi(); } catch (eFiberUi) {}
     }
 
     const editModeBtn = document.getElementById('editMode');
-    if (editModeBtn && currentUser.role !== 'admin') {
+    if (editModeBtn && !canEdit()) {
         editModeBtn.style.display = 'none';
     }
 
-        if (currentUser.role !== 'admin') {
+    if (normalizeClientMapRole(currentUser.role) !== 'admin') {
         hideAdminOnlyElements();
+    }
+    if (!canEdit()) {
         if (typeof switchToViewMode === 'function') switchToViewMode(false);
     }
 
@@ -631,11 +677,12 @@ function openUsersModal() {
     loadOrgDisplayPanel();
     loadOrgSecurityPanel();
     loadOrgEmbedPanel();
+    loadOrgShareLinksPanel();
     loadOrgZabbixPanel();
 }
 
 function prepareUsersModalLayout() {
-    var ids = ['orgDisplaySection', 'orgSecuritySection', 'orgEmbedSection', 'orgZabbixSection'];
+    var ids = ['orgDisplaySection', 'orgSecuritySection', 'orgEmbedSection', 'orgShareLinksSection', 'orgZabbixSection'];
     var show = isOrgMapAdmin() && !!getApiBase();
     ids.forEach(function(id) {
         var el = document.getElementById(id);
@@ -655,11 +702,13 @@ function updateOrgAdminSettingsVisibility() {
     var display = document.getElementById('orgDisplaySection');
     var security = document.getElementById('orgSecuritySection');
     var embed = document.getElementById('orgEmbedSection');
+    var share = document.getElementById('orgShareLinksSection');
     var zabbix = document.getElementById('orgZabbixSection');
     if (!wrap) return;
     var anyVisible = (display && display.style.display !== 'none') ||
         (security && security.style.display !== 'none') ||
         (embed && embed.style.display !== 'none') ||
+        (share && share.style.display !== 'none') ||
         (zabbix && zabbix.style.display !== 'none');
     wrap.style.display = anyVisible ? 'flex' : 'none';
 }
@@ -942,6 +991,143 @@ function copyOrgEmbedUrl() {
         try { document.execCommand('copy'); } catch (e) {}
         if (typeof showSuccess === 'function') showSuccess('URL скопирован');
     }
+}
+
+function populateOrgShareRegionSelect() {
+    var sel = document.getElementById('orgShareRegion');
+    if (!sel) return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">Все доступные</option>';
+    var regions = [];
+    try {
+        if (typeof MapRegions !== 'undefined' && MapRegions.getCachedRegions) {
+            var cached = MapRegions.getCachedRegions();
+            if (cached && Array.isArray(cached.regions)) regions = cached.regions;
+        }
+    } catch (e) {}
+    regions.forEach(function(r) {
+        var opt = document.createElement('option');
+        opt.value = String(r.id);
+        opt.textContent = r.name || r.id;
+        sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+}
+
+function loadOrgShareLinksPanel() {
+    var section = document.getElementById('orgShareLinksSection');
+    if (!section) return;
+    if (!isOrgMapAdmin() || !getApiBase()) {
+        section.style.display = 'none';
+        updateOrgAdminSettingsVisibility();
+        return;
+    }
+    section.style.display = 'block';
+    updateOrgAdminSettingsVisibility();
+    populateOrgShareRegionSelect();
+    if (typeof MapRegions !== 'undefined' && MapRegions.fetchMapRegions) {
+        MapRegions.fetchMapRegions().then(function() { populateOrgShareRegionSelect(); }).catch(function() {});
+    }
+    fetch(getApiBase() + '/api/organizations/me/share-links', {
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        renderOrgShareLinksPanel(body.links || []);
+    }).catch(function(e) {
+        var list = document.getElementById('orgShareLinksList');
+        if (list) list.textContent = e.message || 'Не удалось загрузить ссылки';
+    });
+}
+
+function renderOrgShareLinksPanel(links) {
+    var list = document.getElementById('orgShareLinksList');
+    var meta = document.getElementById('orgShareSummaryMeta');
+    if (meta) setOrgSettingsSummaryMeta('orgShareSummaryMeta', (links && links.length) ? (links.length + ' шт.') : 'нет', !!(links && links.length));
+    if (!list) return;
+    if (!links || !links.length) {
+        list.innerHTML = '<div class="hint">Активных ссылок нет</div>';
+        return;
+    }
+    list.innerHTML = links.map(function(l) {
+        var exp = l.expiresAt ? new Date(l.expiresAt).toLocaleString('ru-RU') : '—';
+        var label = escapeHtml(l.label || 'Без названия');
+        var url = escapeHtml(l.shareUrl || '');
+        var id = escapeHtml(String(l.id));
+        return '<div class="org-share-link-item" style="margin-bottom:0.75rem;padding:0.5rem 0;border-top:1px solid var(--border-color,rgba(0,0,0,.08));">' +
+            '<div style="font-weight:600;">' + label + '</div>' +
+            '<div class="hint">До: ' + escapeHtml(exp) + (l.regionId ? (' · регион ' + escapeHtml(String(l.regionId))) : '') + '</div>' +
+            '<div class="org-2fa-secret-wrap" style="margin-top:0.35rem;">' +
+            '<input type="text" class="form-input org-share-url" readonly value="' + url + '">' +
+            '<button type="button" class="btn-secondary btn-sm" data-share-copy="' + id + '">Копировать</button>' +
+            '<button type="button" class="btn-secondary btn-sm" data-share-revoke="' + id + '">Отозвать</button>' +
+            '</div></div>';
+    }).join('');
+    list.querySelectorAll('[data-share-copy]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var wrap = btn.closest('.org-share-link-item');
+            var input = wrap && wrap.querySelector('.org-share-url');
+            var url = input ? String(input.value || '').trim() : '';
+            if (!url) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(function() {
+                    if (typeof showSuccess === 'function') showSuccess('Ссылка скопирована');
+                }).catch(function() {});
+            }
+        });
+    });
+    list.querySelectorAll('[data-share-revoke]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            revokeOrgShareLink(btn.getAttribute('data-share-revoke'));
+        });
+    });
+}
+
+function createOrgShareLink() {
+    if (!getApiBase()) return;
+    var labelEl = document.getElementById('orgShareLabel');
+    var ttlEl = document.getElementById('orgShareTtl');
+    var regionEl = document.getElementById('orgShareRegion');
+    var payload = {
+        label: labelEl ? labelEl.value.trim() : '',
+        ttlDays: ttlEl ? parseInt(ttlEl.value, 10) : 7,
+        regionId: regionEl && regionEl.value ? regionEl.value : null
+    };
+    try {
+        if (typeof myMap !== 'undefined' && myMap && myMap.getCenter && myMap.getZoom) {
+            payload.center = myMap.getCenter();
+            payload.zoom = myMap.getZoom();
+        }
+    } catch (eView) {}
+    fetch(getApiBase() + '/api/organizations/me/share-links', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        if (typeof showSuccess === 'function') showSuccess('Ссылка создана');
+        if (labelEl) labelEl.value = '';
+        loadOrgShareLinksPanel();
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось создать ссылку');
+    });
+}
+
+function revokeOrgShareLink(id) {
+    if (!getApiBase() || !id) return;
+    if (!window.confirm('Отозвать эту ссылку?')) return;
+    fetch(getApiBase() + '/api/organizations/me/share-links/' + encodeURIComponent(id), {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(function(r) { return r.json(); })
+    .then(function(body) {
+        if (body.error) throw new Error(body.error);
+        if (typeof showSuccess === 'function') showSuccess('Ссылка отозвана');
+        loadOrgShareLinksPanel();
+    }).catch(function(e) {
+        if (typeof showError === 'function') showError(e.message || 'Не удалось отозвать');
+    });
 }
 
 function loadOrgZabbixPanel() {
@@ -1265,8 +1451,9 @@ function renderUsersList() {
         const onlineIds = (typeof window.syncOnlineUserIds !== 'undefined' && Array.isArray(window.syncOnlineUserIds)) ? window.syncOnlineUserIds : [];
 
         activeUsers.forEach(user => {
-        const roleClass = user.role === 'admin' ? 'admin' : 'user';
-        const roleText = user.role === 'admin' ? 'Администратор' : 'Пользователь';
+        const roleNorm = normalizeClientMapRole(user.role);
+        const roleClass = roleNorm === 'admin' ? 'admin' : (roleNorm === 'editor' ? 'editor' : 'user');
+        const roleText = mapRoleLabel(roleNorm);
         const createdDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU') : '';
         const isCurrentUser = user.id === currentUser.userId;
         const isOnline = onlineIds.some(id => id == user.id);
@@ -1394,12 +1581,75 @@ function populateUserOrganizationSelect(orgSelect, options) {
 }
 
 function syncUserEditRoleVisual(role) {
-    var value = role === 'admin' ? 'admin' : 'user';
+    var value = normalizeClientMapRole(role === 'user' ? 'viewer' : role);
     var roleSelect = document.getElementById('editRole');
     if (roleSelect) roleSelect.value = value;
     document.querySelectorAll('input[name="userEditRoleVisual"]').forEach(function(input) {
         input.checked = input.value === value;
     });
+    var permsBlock = document.getElementById('editMapPermissionsGroup');
+    if (permsBlock) {
+        permsBlock.style.display = (value === 'editor' || value === 'viewer') ? '' : 'none';
+    }
+    var delWrap = document.getElementById('editDeleteFlagsWrap');
+    if (delWrap) {
+        delWrap.style.display = value === 'editor' ? '' : 'none';
+    }
+}
+
+function populateUserAllowedRegions(selectedIds) {
+    var box = document.getElementById('editAllowedRegions');
+    if (!box) return;
+    selectedIds = Array.isArray(selectedIds) ? selectedIds.map(String) : [];
+    var regions = [];
+    try {
+        if (typeof MapRegions !== 'undefined' && MapRegions.getCachedRegions) {
+            var cached = MapRegions.getCachedRegions();
+            if (cached && Array.isArray(cached.regions)) regions = cached.regions;
+        }
+    } catch (eReg) {}
+    if (!regions.length) {
+        box.innerHTML = '<div class="user-edit-field-hint">Список регионов появится после загрузки карты. Пустой выбор = все регионы.</div>';
+        return;
+    }
+    box.innerHTML = regions.map(function(r) {
+        var id = String(r.id);
+        var checked = selectedIds.indexOf(id) !== -1 ? ' checked' : '';
+        return '<label class="user-edit-region-option"><input type="checkbox" class="edit-allowed-region" value="' +
+            escapeHtml(id) + '"' + checked + '> ' + escapeHtml(r.name || id) + '</label>';
+    }).join('');
+}
+
+function readUserEditPermissionPayload() {
+    var roleSelect = document.getElementById('editRole');
+    var role = normalizeClientMapRole(roleSelect ? roleSelect.value : 'viewer');
+    var payload = { role: role };
+    if (role === 'editor') {
+        var ids = [];
+        document.querySelectorAll('.edit-allowed-region:checked').forEach(function(cb) {
+            ids.push(String(cb.value));
+        });
+        payload.allowedRegionIds = ids;
+        var delObj = document.getElementById('editCanDeleteObjects');
+        var delCab = document.getElementById('editCanDeleteCables');
+        payload.canDeleteObjects = !!(delObj && delObj.checked);
+        payload.canDeleteCables = !!(delCab && delCab.checked);
+    } else if (role === 'viewer') {
+        payload.allowedRegionIds = (function() {
+            var ids = [];
+            document.querySelectorAll('.edit-allowed-region:checked').forEach(function(cb) {
+                ids.push(String(cb.value));
+            });
+            return ids;
+        })();
+        payload.canDeleteObjects = false;
+        payload.canDeleteCables = false;
+    } else {
+        payload.allowedRegionIds = [];
+        payload.canDeleteObjects = true;
+        payload.canDeleteCables = true;
+    }
+    return payload;
 }
 
 function setUserEditRoleLocked(locked) {
@@ -1462,6 +1712,16 @@ function openUserEditModal(userId = null) {
         if (passwordHint) passwordHint.style.display = '';
         syncUserEditRoleVisual(user.role);
         setUserEditRoleLocked(lockRole);
+        var delObj = document.getElementById('editCanDeleteObjects');
+        var delCab = document.getElementById('editCanDeleteCables');
+        if (delObj) delObj.checked = user.canDeleteObjects !== false;
+        if (delCab) delCab.checked = user.canDeleteCables !== false;
+        populateUserAllowedRegions(user.allowedRegionIds || []);
+        if (typeof MapRegions !== 'undefined' && MapRegions.fetchMapRegions) {
+            MapRegions.fetchMapRegions().then(function() {
+                populateUserAllowedRegions(user.allowedRegionIds || []);
+            }).catch(function() {});
+        }
         if (deleteUserBtn) {
             var canDelete = !isSelfUser && !isMainAdminUser && !isLastOrgAdminUser(user, users);
             deleteUserBtn.style.display = canDelete ? '' : 'none';
@@ -1478,8 +1738,18 @@ function openUserEditModal(userId = null) {
         passwordInput.value = '';
         passwordInput.placeholder = 'Придумайте пароль';
         if (passwordHint) passwordHint.style.display = 'none';
-        syncUserEditRoleVisual('user');
+        syncUserEditRoleVisual('viewer');
         setUserEditRoleLocked(false);
+        var delObjNew = document.getElementById('editCanDeleteObjects');
+        var delCabNew = document.getElementById('editCanDeleteCables');
+        if (delObjNew) delObjNew.checked = true;
+        if (delCabNew) delCabNew.checked = true;
+        populateUserAllowedRegions([]);
+        if (typeof MapRegions !== 'undefined' && MapRegions.fetchMapRegions) {
+            MapRegions.fetchMapRegions().then(function() {
+                populateUserAllowedRegions([]);
+            }).catch(function() {});
+        }
         if (orgSelect) {
             if (currentUser && currentUser.organizationId != null) {
                 if (orgGroup) orgGroup.style.display = 'none';
@@ -1512,7 +1782,8 @@ function saveUser() {
     const username = usernameInput.value.trim();
     const fullName = fullNameInput.value.trim();
     const password = passwordInput.value;
-    const role = roleSelect.value;
+        const role = normalizeClientMapRole(roleSelect.value);
+        const permPayload = readUserEditPermissionPayload();
 
         const users = AuthSystem.getUsers();
 
@@ -1527,7 +1798,7 @@ function saveUser() {
             showError('Нельзя снять роль администратора с главного администратора');
             return;
         }
-        if (users[userIndex].role === 'admin' && role !== 'admin') {
+        if (normalizeClientMapRole(users[userIndex].role) === 'admin' && role !== 'admin') {
             if (currentUser && String(userId) === String(currentUser.userId)) {
                 showError('Нельзя снять с себя роль администратора');
                 return;
@@ -1552,7 +1823,10 @@ function saveUser() {
         } else {
             organizationId = users[userIndex].organizationId || null;
         }
-        var payload = { fullName: fullName || users[userIndex].username, role: role, organizationId: organizationId };
+        var payload = Object.assign({
+            fullName: fullName || users[userIndex].username,
+            organizationId: organizationId
+        }, permPayload);
         if (password && password.length >= 6) payload.password = password;
         if (getApiBase()) {
             fetch(getApiBase() + '/api/users/' + encodeURIComponent(userId), {
@@ -1573,6 +1847,9 @@ function saveUser() {
         }
         users[userIndex].fullName = payload.fullName;
         users[userIndex].role = role;
+        users[userIndex].allowedRegionIds = payload.allowedRegionIds || [];
+        users[userIndex].canDeleteObjects = payload.canDeleteObjects !== false;
+        users[userIndex].canDeleteCables = payload.canDeleteCables !== false;
         if (password) users[userIndex].password = AuthSystem.hashPassword(password);
         AuthSystem.saveUsers(users);
         showSuccess('Пользователь обновлён');
@@ -1594,7 +1871,12 @@ function saveUser() {
             fetch(getApiBase() + '/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-                body: JSON.stringify({ username: username, password: password, fullName: fullName || username, role: role || 'user', organizationId: organizationId })
+                body: JSON.stringify(Object.assign({
+                    username: username,
+                    password: password,
+                    fullName: fullName || username,
+                    organizationId: organizationId
+                }, permPayload))
             }).then(function(r) {
                 if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Ошибка'); });
                 return (typeof AuthSystem !== 'undefined' && AuthSystem.refreshUsersFromApi) ? AuthSystem.refreshUsersFromApi() : Promise.resolve();
@@ -1612,6 +1894,9 @@ function saveUser() {
             password: AuthSystem.hashPassword(password),
             fullName: fullName || username,
             role: role,
+            allowedRegionIds: permPayload.allowedRegionIds || [],
+            canDeleteObjects: permPayload.canDeleteObjects !== false,
+            canDeleteCables: permPayload.canDeleteCables !== false,
             status: 'approved',
             createdAt: new Date().toISOString()
         };
@@ -1782,6 +2067,8 @@ function setupUsersModalHandlers() {
 
     var orgEmbedEnableBtn = document.getElementById('orgEmbedEnableBtn');
     if (orgEmbedEnableBtn) orgEmbedEnableBtn.addEventListener('click', function() { enableOrgEmbed(false); });
+    var orgShareCreateBtn = document.getElementById('orgShareCreateBtn');
+    if (orgShareCreateBtn) orgShareCreateBtn.addEventListener('click', createOrgShareLink);
     var orgEmbedRotateBtn = document.getElementById('orgEmbedRotateBtn');
     if (orgEmbedRotateBtn) orgEmbedRotateBtn.addEventListener('click', function() { enableOrgEmbed(true); });
     var orgEmbedDisableBtn = document.getElementById('orgEmbedDisableBtn');

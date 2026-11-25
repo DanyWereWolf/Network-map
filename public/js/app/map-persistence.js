@@ -328,6 +328,7 @@ function serializeMapItemFromObject(obj) {
                 else obj.properties.set('_syncClearCabinetId', false);
             }
         }
+        if (props.mapHidden) result.mapHidden = true;
         if (props.type === 'node') {
             if (props.nodeKind) result.nodeKind = props.nodeKind;
             if (props.comment) result.comment = props.comment;
@@ -3383,6 +3384,8 @@ function populatePlacemarkFromSerializedData(placemark, data) {
     if (data.fiberLabels) placemark.properties.set('fiberLabels', data.fiberLabels);
     if (data.zabbixHost) placemark.properties.set('zabbixHost', String(data.zabbixHost).trim());
     else if (placemark.properties.get('zabbixHost') && data.zabbixHost === '') placemark.properties.set('zabbixHost', '');
+    if (data.mapHidden) placemark.properties.set('mapHidden', true);
+    else if (placemark.properties.get('mapHidden')) placemark.properties.set('mapHidden', false);
     if (type === 'node') {
         placemark.properties.set('nodeKind', data.nodeKind || 'network');
         if (data.comment) placemark.properties.set('comment', data.comment);

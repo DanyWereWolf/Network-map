@@ -655,6 +655,7 @@ function applyMapViewportUpdate() {
 
 function isMapFilterObjVisible(obj, filter, hiddenRegions) {
     if (!obj || !obj.properties) return false;
+    if (obj.properties.get('mapHidden')) return false;
     filter = filter || (typeof mapFilter !== 'undefined' && mapFilter ? mapFilter : getMapFilterState());
     var type = obj.properties.get('type');
     if (type === 'cable' || type === 'cableLabel' || (type === 'region' || type === 'zone')) return false;

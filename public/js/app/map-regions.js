@@ -407,6 +407,20 @@
             if (!payload || !Array.isArray(payload.regions) || !payload.regions.length) {
                 return Promise.reject(new Error('Не удалось получить список регионов'));
             }
+            var shareRegionPref = '';
+            try {
+                shareRegionPref = global.__VOLSMAP_SHARE_REGION_ID__
+                    ? String(global.__VOLSMAP_SHARE_REGION_ID__)
+                    : (global.__VOLSMAP_SHARE_VIEW__ && global.__VOLSMAP_SHARE_VIEW__.regionId
+                        ? String(global.__VOLSMAP_SHARE_VIEW__.regionId) : '');
+            } catch (eShareReg) {}
+            if (shareRegionPref) {
+                var shareId = regionIdFromList(payload, shareRegionPref);
+                if (shareId) {
+                    setCurrentMapRegionId(shareId);
+                    return shareId;
+                }
+            }
             if (payload.regions.length === 1 && payload.regions[0] && payload.regions[0].id) {
                 var onlyId = String(payload.regions[0].id);
                 setCurrentMapRegionId(onlyId);

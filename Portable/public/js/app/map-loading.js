@@ -372,6 +372,16 @@ function markMapTilesReady() {
 function markMapDataReady() {
     if (_mapDataReady) return;
     _mapDataReady = true;
+    try {
+        if (window.VolsmapEmbed && typeof VolsmapEmbed.applyShareMapViewIfNeeded === 'function') {
+            VolsmapEmbed.applyShareMapViewIfNeeded();
+        }
+    } catch (eShareView) {}
+    try {
+        if (window.ObjectComments && typeof ObjectComments.refreshOpenCounts === 'function') {
+            ObjectComments.refreshOpenCounts();
+        }
+    } catch (eOc) {}
     if (typeof applyAutoPerfForMapSize === 'function' && Array.isArray(window.objects)) {
         try { applyAutoPerfForMapSize(window.objects.length); } catch (eAuto) {}
     }

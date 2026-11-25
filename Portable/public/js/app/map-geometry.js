@@ -150,14 +150,107 @@ function setupRectSelection() {
                 parts.push(counts[k] + ' ' + label);
             }
         });
+        try {
+            if (typeof clearSelection === 'function') clearSelection();
+            else if (typeof selectedObjects !== 'undefined') selectedObjects = [];
+            selected.placemarks.forEach(function(obj) {
+                if (typeof selectObject === 'function') selectObject(obj, true);
+                else if (typeof selectedObjects !== 'undefined') selectedObjects.push(obj);
+            });
+            selected.cables.forEach(function(obj) {
+                if (typeof selectObject === 'function') selectObject(obj, true);
+                else if (typeof selectedObjects !== 'undefined') selectedObjects.push(obj);
+            });
+        } catch (eSel) {}
+
+        var canBulkEdit = !!(isEditMode && typeof canEdit === 'function' && canEdit());
+        var nodeCount = selected.placemarks.filter(function(o) {
+            return o.properties && o.properties.get('type') === 'node';
+        }).length;
+        var actionBtns = '';
+        if (canBulkEdit) {
+            actionBtns += '<button type="button" class="btn-secondary" id="rectSelectMoveRegionBtn" style="padding:8px 16px;font-size:0.875rem;">Перенести в регион</button>';
+            if (nodeCount) {
+                actionBtns += '<button type="button" class="btn-secondary" id="rectSelectNodeNetworkBtn" style="padding:8px 16px;font-size:0.875rem;">Узлы → обычные</button>';
+                actionBtns += '<button type="button" class="btn-secondary" id="rectSelectNodeAggBtn" style="padding:8px 16px;font-size:0.875rem;">Узлы → агрегация</button>';
+            }
+            actionBtns += '<button type="button" class="btn-secondary" id="rectSelectHideBtn" style="padding:8px 16px;font-size:0.875rem;">Скрыть</button>';
+            actionBtns += '<button type="button" class="btn-secondary" id="rectSelectShowBtn" style="padding:8px 16px;font-size:0.875rem;">Показать</button>';
+            if (typeof canDeleteObjects === 'function' ? canDeleteObjects() : true) {
+                actionBtns += '<button type="button" class="btn-danger" id="rectSelectDeleteBtn" style="padding:8px 16px;font-size:0.875rem;">Удалить выделенное</button>';
+            }
+        }
         panel.innerHTML = '<div style="font-size:0.875rem;color:var(--text-primary);margin-bottom:8px;">В выделенной области: ' + (parts.length ? parts.join(', ') : '—') + '</div>' +
-            (isEditMode ? '<button type="button" class="btn-danger" id="rectSelectDeleteBtn" style="padding:8px 16px;font-size:0.875rem;">Удалить выделенное</button>' : '') +
+            actionBtns +
             '<button type="button" class="btn-secondary" id="rectSelectCloseBtn" style="padding:8px 16px;font-size:0.875rem;">Закрыть</button>';
         panel.style.display = 'flex';
         panel.style.flexDirection = 'column';
+        panel.style.gap = '6px';
+
+        function finishBulkAndClose(message) {
+            if (typeof applyMapFilter === 'function') applyMapFilter();
+            else if (typeof updateCableVisualization === 'function') updateCableVisualization();
+            if (typeof updateStats === 'function') updateStats();
+            if (typeof saveData === 'function') {
+                try { saveData({ syncFull: false }); } catch (eSave) {}
+            }
+            if (message && typeof showInfo === 'function') showInfo(message, 'Выделение');
+            panel.style.display = 'none';
+        }
+
+        function setMapHiddenForSelected(hidden) {
+            var list = selected.placemarks.concat(selected.cables);
+            var n = 0;
+            list.forEach(function(obj) {
+                if (!obj || !obj.properties) return;
+                obj.properties.set('mapHidden', !!hidden);
+                n++;
+            });
+            finishBulkAndClose((hidden ? 'Скрыто' : 'Показано') + ': ' + n);
+        }
+
+        function setNodeKindForSelected(kind) {
+            var n = 0;
+            var keys = {};
+            selected.placemarks.forEach(function(obj) {
+                if (!obj || !obj.properties || obj.properties.get('type') !== 'node') return;
+                obj.properties.set('nodeKind', kind);
+                n++;
+                try {
+                    var c = obj.geometry && obj.geometry.getCoordinates && obj.geometry.getCoordinates();
+                    if (c && typeof groupKey === 'function') keys[groupKey(c)] = true;
+                } catch (eK) {}
+                if (typeof applyMapObjectIcon === 'function') {
+                    try { applyMapObjectIcon(obj); } catch (eIcon) {}
+                } else if (typeof updatePlacemarkIcon === 'function') {
+                    try { updatePlacemarkIcon(obj); } catch (eIcon2) {}
+                }
+            });
+            var keyList = Object.keys(keys);
+            if (keyList.length && typeof updateNodeDisplay === 'function') {
+                updateNodeDisplay(keyList.length === 1 ? keyList[0] : keyList);
+            }
+            finishBulkAndClose('Обновлено узлов: ' + n);
+        }
+
+        var moveBtn = document.getElementById('rectSelectMoveRegionBtn');
+        if (moveBtn) {
+            moveBtn.addEventListener('click', function() {
+                panel.style.display = 'none';
+                if (typeof showMoveSelectedToRegionModal === 'function') showMoveSelectedToRegionModal();
+            });
+        }
+        var netBtn = document.getElementById('rectSelectNodeNetworkBtn');
+        if (netBtn) netBtn.addEventListener('click', function() { setNodeKindForSelected('network'); });
+        var aggBtn = document.getElementById('rectSelectNodeAggBtn');
+        if (aggBtn) aggBtn.addEventListener('click', function() { setNodeKindForSelected('aggregation'); });
+        var hideBtn = document.getElementById('rectSelectHideBtn');
+        if (hideBtn) hideBtn.addEventListener('click', function() { setMapHiddenForSelected(true); });
+        var showBtn = document.getElementById('rectSelectShowBtn');
+        if (showBtn) showBtn.addEventListener('click', function() { setMapHiddenForSelected(false); });
 
         var deleteBtn = document.getElementById('rectSelectDeleteBtn');
-        if (deleteBtn && isEditMode) {
+        if (deleteBtn && canBulkEdit) {
             deleteBtn.addEventListener('click', function() {
                 var toDelete = selected.placemarks.concat(selected.cables);
                 (async function() {

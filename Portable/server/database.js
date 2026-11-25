@@ -1087,12 +1087,26 @@ function moveMapItemsToRegion(orgId, uniqueIds, targetRegionId) {
 
 function getUsers() {
     const s = loadStore();
-    return Array.isArray(s.users) ? s.users : [];
+    var list = Array.isArray(s.users) ? s.users : [];
+    try {
+        var mapPermissions = require('./lib/map-permissions');
+        for (var i = 0; i < list.length; i++) {
+            mapPermissions.migrateUserRecord(list[i]);
+        }
+    } catch (eMigUsers) {}
+    return list;
 }
 
 function setUsers(users) {
     const s = loadStore();
-    s.users = Array.isArray(users) ? users : [];
+    var list = Array.isArray(users) ? users : [];
+    try {
+        var mapPermissions = require('./lib/map-permissions');
+        for (var i = 0; i < list.length; i++) {
+            mapPermissions.migrateUserRecord(list[i]);
+        }
+    } catch (eMigUsers) {}
+    s.users = list;
     saveStore();
 }
 
@@ -1190,6 +1204,96 @@ function addOrgChatMessage(orgId, message) {
     }
     saveStore();
     return message;
+}
+
+var MAX_OBJECT_COMMENTS_PER_ORG = 5000;
+
+function getObjectCommentsList(orgId) {
+    if (!orgId) return [];
+    const s = loadStore();
+    const key = resolveSettingsOrgStorageKey(orgId);
+    if (!s.settingsByOrg) s.settingsByOrg = {};
+    var o = s.settingsByOrg[key] || {};
+    try {
+        var list = typeof o.objectComments === 'string' ? JSON.parse(o.objectComments) : o.objectComments;
+        return Array.isArray(list) ? list : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveObjectCommentsList(orgId, list) {
+    if (!orgId) return;
+    const s = loadStore();
+    const key = resolveSettingsOrgStorageKey(orgId);
+    if (!s.settingsByOrg) s.settingsByOrg = {};
+    if (!s.settingsByOrg[key]) s.settingsByOrg[key] = {};
+    var arr = Array.isArray(list) ? list : [];
+    if (arr.length > MAX_OBJECT_COMMENTS_PER_ORG) {
+        arr = arr.slice(arr.length - MAX_OBJECT_COMMENTS_PER_ORG);
+    }
+    s.settingsByOrg[key].objectComments = JSON.stringify(arr);
+    saveStore();
+}
+
+function getObjectCommentsForObject(orgId, objectUniqueId) {
+    var uid = objectUniqueId != null ? String(objectUniqueId) : '';
+    if (!uid) return [];
+    return getObjectCommentsList(orgId).filter(function (c) {
+        return c && String(c.objectUniqueId) === uid;
+    });
+}
+
+function addObjectComment(orgId, comment) {
+    if (!orgId || !comment) throw new Error('orgId and comment required');
+    var list = getObjectCommentsList(orgId);
+    list.push(comment);
+    saveObjectCommentsList(orgId, list);
+    return comment;
+}
+
+function updateObjectComment(orgId, commentId, patch) {
+    var list = getObjectCommentsList(orgId);
+    var found = null;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && String(list[i].id) === String(commentId)) {
+            if (patch.text !== undefined) list[i].text = String(patch.text).slice(0, 4000);
+            if (patch.status !== undefined) list[i].status = patch.status === 'done' ? 'done' : 'open';
+            if (patch.assigneeUserId !== undefined) list[i].assigneeUserId = patch.assigneeUserId || null;
+            if (patch.assigneeName !== undefined) list[i].assigneeName = patch.assigneeName || null;
+            list[i].updatedAt = new Date().toISOString();
+            found = list[i];
+            break;
+        }
+    }
+    if (found) saveObjectCommentsList(orgId, list);
+    return found;
+}
+
+function removeObjectComment(orgId, commentId) {
+    var list = getObjectCommentsList(orgId);
+    var before = list.length;
+    var removed = null;
+    list = list.filter(function (c) {
+        if (c && String(c.id) === String(commentId)) {
+            removed = c;
+            return false;
+        }
+        return true;
+    });
+    if (list.length !== before) saveObjectCommentsList(orgId, list);
+    return removed;
+}
+
+function getOpenTaskCountsByObject(orgId) {
+    var counts = Object.create(null);
+    getObjectCommentsList(orgId).forEach(function (c) {
+        if (!c || c.kind !== 'task' || c.status === 'done') return;
+        var uid = c.objectUniqueId != null ? String(c.objectUniqueId) : '';
+        if (!uid) return;
+        counts[uid] = (counts[uid] || 0) + 1;
+    });
+    return counts;
 }
 
 function removeOrgChatMessage(orgId, messageId) {
@@ -1591,6 +1695,9 @@ function updateOrganization(orgId, updates) {
     }
     if (updates.embedCreatedAt !== undefined) {
         s.organizations[idx].embedCreatedAt = updates.embedCreatedAt ? String(updates.embedCreatedAt) : null;
+    }
+    if (updates.shareLinks !== undefined) {
+        s.organizations[idx].shareLinks = Array.isArray(updates.shareLinks) ? updates.shareLinks : [];
     }
     if (updates.zabbixEnabled !== undefined) s.organizations[idx].zabbixEnabled = !!updates.zabbixEnabled;
     if (updates.zabbixApiUrl !== undefined) {
@@ -3099,6 +3206,12 @@ module.exports = {
     addOrgChatMessage,
     removeOrgChatMessage,
     updateOrgChatMessageText,
+    getObjectCommentsList,
+    getObjectCommentsForObject,
+    addObjectComment,
+    updateObjectComment,
+    removeObjectComment,
+    getOpenTaskCountsByObject,
     getChatMedia,
     getChatMediaItem,
     addChatMedia,

@@ -598,24 +598,125 @@ function tryHandleHostNodeConnectionTrace(path, hostObj, currentCableId, current
     return { action: 'break' };
 }
 
+function resolveTypedMapObject(type, uid) {
+    if (!uid) return null;
+    if (typeof getMapObjectByUid === 'function') {
+        var byUid = getMapObjectByUid(uid, type);
+        if (byUid) return byUid;
+    }
+    if (!Array.isArray(objects)) return null;
+    return objects.find(function(obj) {
+        return obj && obj.properties && obj.properties.get('type') === type &&
+            String(obj.properties.get('uniqueId')) === String(uid);
+    }) || null;
+}
+
+/** Хосты, на которых может лежать drop (ONU/МК/РМ): сам объект + соседи в ящике. */
+function collectDropAssignmentHosts(hostObj) {
+    var hosts = [];
+    var seen = {};
+    function addHost(h) {
+        if (!h || !h.properties) return;
+        var id = typeof getObjectUniqueId === 'function' ? getObjectUniqueId(h) : null;
+        var key = id || ('h' + hosts.length);
+        if (seen[key]) return;
+        seen[key] = true;
+        hosts.push(h);
+    }
+    addHost(hostObj);
+    if (typeof getObjectCabinetId === 'function' && typeof getCabinetMembers === 'function') {
+        var cabId = getObjectCabinetId(hostObj);
+        if (cabId) {
+            getCabinetMembers(cabId).forEach(function(m) {
+                if (!m || !m.properties) return;
+                if (typeof isFiberHostType === 'function' && isFiberHostType(m.properties.get('type'))) {
+                    addHost(m);
+                }
+            });
+        }
+    }
+    return hosts;
+}
+
+function fiberPairsForDropLookup(hostObj, cableId, fiberNumber) {
+    var pairs = [{ cableId: cableId, fiberNumber: fiberNumber }];
+    var seen = {};
+    seen[String(cableId) + ':' + Number(fiberNumber)] = true;
+    function addPair(cid, fn) {
+        if (cid == null || fn == null || isNaN(Number(fn))) return;
+        var k = String(cid) + ':' + Number(fn);
+        if (seen[k]) return;
+        seen[k] = true;
+        pairs.push({ cableId: cid, fiberNumber: Number(fn) });
+    }
+    collectDropAssignmentHosts(hostObj).forEach(function(h) {
+        if (typeof getSplicedFiberGroup !== 'function') return;
+        var group = getSplicedFiberGroup(h, cableId, fiberNumber) || [];
+        group.forEach(function(g) {
+            if (g) addPair(g.cableId, g.fiberNumber);
+        });
+    });
+    return pairs;
+}
+
+function findDropAssignmentOnHosts(hostObj, propName, cableId, fiberNumber) {
+    var hosts = collectDropAssignmentHosts(hostObj);
+    var pairs = fiberPairsForDropLookup(hostObj, cableId, fiberNumber);
+    for (var hi = 0; hi < hosts.length; hi++) {
+        for (var pi = 0; pi < pairs.length; pi++) {
+            var ass = getHostAssignment(hosts[hi], propName, pairs[pi].cableId, pairs[pi].fiberNumber);
+            if (ass) {
+                return {
+                    assignment: ass,
+                    host: hosts[hi],
+                    cableId: pairs[pi].cableId,
+                    fiberNumber: pairs[pi].fiberNumber
+                };
+            }
+        }
+    }
+    return null;
+}
+
+function findTerminalByIncomingFiber(type, hostObj, cableId, fiberNumber) {
+    if (!Array.isArray(objects)) return null;
+    var pairs = fiberPairsForDropLookup(hostObj, cableId, fiberNumber);
+    for (var i = 0; i < objects.length; i++) {
+        var obj = objects[i];
+        if (!obj || !obj.properties || obj.properties.get('type') !== type) continue;
+        var inc = obj.properties.get('incomingFiber');
+        if (!inc || inc.cableId == null || inc.fiberNumber == null) continue;
+        for (var pi = 0; pi < pairs.length; pi++) {
+            if (String(inc.cableId) === String(pairs[pi].cableId) &&
+                Number(inc.fiberNumber) === Number(pairs[pi].fiberNumber)) {
+                return {
+                    object: obj,
+                    cableId: pairs[pi].cableId,
+                    fiberNumber: pairs[pi].fiberNumber
+                };
+            }
+        }
+    }
+    return null;
+}
+
 function tryAppendHostDropTerminals(path, hostObj, cableId, fiberNumber) {
     if (!hostObj || !path) return false;
-    var onuConn = getHostAssignment(hostObj, 'onuConnections', cableId, fiberNumber);
-    if (onuConn) {
-        var connectedOnu = objects.find(function(obj) {
-            return obj.properties && obj.properties.get('type') === 'onu' && obj.properties.get('uniqueId') === onuConn.onuId;
-        });
+
+    var onuHit = findDropAssignmentOnHosts(hostObj, 'onuConnections', cableId, fiberNumber);
+    if (onuHit && onuHit.assignment && onuHit.assignment.onuId) {
+        var connectedOnu = resolveTypedMapObject('onu', onuHit.assignment.onuId);
         if (connectedOnu) {
-            var routeIdsDrop = onuConn.routeIds || [];
+            var routeIdsDrop = onuHit.assignment.routeIds || [];
             var distanceMDrop = typeof measureHostToOnuDropDistanceM === 'function'
-                ? measureHostToOnuDropDistanceM(hostObj, connectedOnu, routeIdsDrop)
+                ? measureHostToOnuDropDistanceM(onuHit.host || hostObj, connectedOnu, routeIdsDrop)
                 : 0;
             path.push({
                 type: 'onuConnection',
-                cableId: cableId,
-                fiberNumber: fiberNumber,
-                onuName: onuConn.onuName || 'ONU',
-                cross: hostObj,
+                cableId: onuHit.cableId,
+                fiberNumber: onuHit.fiberNumber,
+                onuName: onuHit.assignment.onuName || 'ONU',
+                cross: onuHit.host || hostObj,
                 onu: connectedOnu,
                 routeIds: routeIdsDrop,
                 distanceM: distanceMDrop,
@@ -627,22 +728,42 @@ function tryAppendHostDropTerminals(path, hostObj, cableId, fiberNumber) {
                 objectName: connectedOnu.properties.get('name') || 'ONU',
                 object: connectedOnu
             });
+            return true;
         }
-        return true;
+    } else {
+        var onuByInc = findTerminalByIncomingFiber('onu', hostObj, cableId, fiberNumber);
+        if (onuByInc && onuByInc.object) {
+            path.push({
+                type: 'onuConnection',
+                cableId: onuByInc.cableId,
+                fiberNumber: onuByInc.fiberNumber,
+                onuName: onuByInc.object.properties.get('name') || 'ONU',
+                cross: hostObj,
+                onu: onuByInc.object,
+                routeIds: [],
+                distanceM: 0,
+                segmentLengthM: 0
+            });
+            path.push({
+                type: 'object',
+                objectType: 'onu',
+                objectName: onuByInc.object.properties.get('name') || 'ONU',
+                object: onuByInc.object
+            });
+            return true;
+        }
     }
-    var mcConn = getHostAssignment(hostObj, 'mediaConverterConnections', cableId, fiberNumber);
-    if (mcConn && mcConn.mediaConverterId) {
-        var connectedMc = objects.find(function(obj) {
-            return obj.properties && obj.properties.get('type') === 'mediaConverter' &&
-                obj.properties.get('uniqueId') === mcConn.mediaConverterId;
-        });
+
+    var mcHit = findDropAssignmentOnHosts(hostObj, 'mediaConverterConnections', cableId, fiberNumber);
+    if (mcHit && mcHit.assignment && mcHit.assignment.mediaConverterId) {
+        var connectedMc = resolveTypedMapObject('mediaConverter', mcHit.assignment.mediaConverterId);
         if (connectedMc) {
             path.push({
                 type: 'mediaConverterConnection',
-                cableId: cableId,
-                fiberNumber: fiberNumber,
-                mediaConverterName: mcConn.mediaConverterName || 'Медиаконвертер',
-                cross: hostObj,
+                cableId: mcHit.cableId,
+                fiberNumber: mcHit.fiberNumber,
+                mediaConverterName: mcHit.assignment.mediaConverterName || 'Медиаконвертер',
+                cross: mcHit.host || hostObj,
                 mediaConverter: connectedMc
             });
             path.push({
@@ -652,22 +773,39 @@ function tryAppendHostDropTerminals(path, hostObj, cableId, fiberNumber) {
                 object: connectedMc,
                 port: null
             });
+            return true;
         }
+    }
+    var mcByInc = findTerminalByIncomingFiber('mediaConverter', hostObj, cableId, fiberNumber);
+    if (mcByInc && mcByInc.object) {
+        path.push({
+            type: 'mediaConverterConnection',
+            cableId: mcByInc.cableId,
+            fiberNumber: mcByInc.fiberNumber,
+            mediaConverterName: mcByInc.object.properties.get('name') || 'Медиаконвертер',
+            cross: hostObj,
+            mediaConverter: mcByInc.object
+        });
+        path.push({
+            type: 'object',
+            objectType: 'mediaConverter',
+            objectName: mcByInc.object.properties.get('name') || 'Медиаконвертер',
+            object: mcByInc.object,
+            port: null
+        });
         return true;
     }
-    var rbConn = getHostAssignment(hostObj, 'radioBridgeConnections', cableId, fiberNumber);
-    if (rbConn && rbConn.radioBridgeId) {
-        var connectedRb = objects.find(function(obj) {
-            return obj.properties && obj.properties.get('type') === 'radioBridge' &&
-                obj.properties.get('uniqueId') === rbConn.radioBridgeId;
-        });
+
+    var rbHit = findDropAssignmentOnHosts(hostObj, 'radioBridgeConnections', cableId, fiberNumber);
+    if (rbHit && rbHit.assignment && rbHit.assignment.radioBridgeId) {
+        var connectedRb = resolveTypedMapObject('radioBridge', rbHit.assignment.radioBridgeId);
         if (connectedRb) {
             path.push({
                 type: 'radioBridgeConnection',
-                cableId: cableId,
-                fiberNumber: fiberNumber,
-                radioBridgeName: rbConn.radioBridgeName || 'Радиомост',
-                cross: hostObj,
+                cableId: rbHit.cableId,
+                fiberNumber: rbHit.fiberNumber,
+                radioBridgeName: rbHit.assignment.radioBridgeName || 'Радиомост',
+                cross: rbHit.host || hostObj,
                 radioBridge: connectedRb
             });
             path.push({
@@ -677,8 +815,28 @@ function tryAppendHostDropTerminals(path, hostObj, cableId, fiberNumber) {
                 object: connectedRb,
                 port: null
             });
+            return true;
         }
-        return true;
+    } else {
+        var rbByInc = findTerminalByIncomingFiber('radioBridge', hostObj, cableId, fiberNumber);
+        if (rbByInc && rbByInc.object) {
+            path.push({
+                type: 'radioBridgeConnection',
+                cableId: rbByInc.cableId,
+                fiberNumber: rbByInc.fiberNumber,
+                radioBridgeName: rbByInc.object.properties.get('name') || 'Радиомост',
+                cross: hostObj,
+                radioBridge: rbByInc.object
+            });
+            path.push({
+                type: 'object',
+                objectType: 'radioBridge',
+                objectName: rbByInc.object.properties.get('name') || 'Радиомост',
+                object: rbByInc.object,
+                port: null
+            });
+            return true;
+        }
     }
     return false;
 }
@@ -922,6 +1080,10 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                         afterSplitterInputBranch = true;
                         continue;
                     }
+                    /* Drop (ONU/МК/РМ) раньше сварки — иначе конец на кассете вместо МК */
+                    if (tryAppendHostDropTerminals(path, currentObject, currentCableId, currentFiberNumber)) {
+                        break;
+                    }
                     var spliceEarly = findFiberConnection(currentCableId, currentFiberNumber, currentObject);
                     if (spliceEarly) {
                         var nextCableEarly = findCableById(spliceEarly.cableId);
@@ -960,9 +1122,6 @@ function traceFiberPathFromObject(startObject, startCableId, startFiberNumber, t
                             afterSplitterInputBranch = true;
                             continue;
                         }
-                    }
-                    if (tryAppendHostDropTerminals(path, currentObject, currentCableId, currentFiberNumber)) {
-                        break;
                     }
                     var hostNodeEarly = tryHandleHostNodeConnectionTrace(
                         path, currentObject, currentCableId, currentFiberNumber, currentCable, previousObject, traceOptions
@@ -2421,27 +2580,34 @@ var traceHighlightClearTimer = null;
 var traceReturnContext = null;
 var fiberTraceLoadingToken = 0;
 
-function appendFiberTraceExtrasHtml(bodyHtml, paths) {
-    bodyHtml = bodyHtml || '';
+function wrapFiberTraceStudioSlots(schematicHtml, stepsHtml, paths) {
     var extras = '';
-    if (window.FiberTrace && FiberTrace.buildTraceSchematicsHtml) {
-        try {
-            extras += FiberTrace.buildTraceSchematicsHtml(paths || []);
-        } catch (err) {
-            var msg = (err && err.message) ? err.message : 'Не удалось построить схему';
-            extras += '<div class="trace-schematic-error">' +
-                '<div class="fiber-trace-loading-title">Схема не построена</div>' +
-                '<div class="fiber-trace-loading-hint">' + escapeHtml(msg) + '</div></div>';
-        }
-    }
-    extras += bodyHtml;
+    extras += '<!--trace-slot:schematic-->' + (schematicHtml || '') + '<!--/trace-slot:schematic-->';
+    extras += '<!--trace-slot:steps-->' + (stepsHtml || '');
     if (window.FiberTrace && FiberTrace.buildFreeFibersHtml) {
         extras += FiberTrace.buildFreeFibersHtml(paths || []);
     }
+    extras += '<!--/trace-slot:steps-->';
     if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
         extras += FiberTrace.buildTraceActionsHtml();
     }
     return extras;
+}
+
+function appendFiberTraceExtrasHtml(bodyHtml, paths) {
+    bodyHtml = bodyHtml || '';
+    var schematicHtml = '';
+    if (window.FiberTrace && FiberTrace.buildTraceSchematicsHtml) {
+        try {
+            schematicHtml = FiberTrace.buildTraceSchematicsHtml(paths || []);
+        } catch (err) {
+            var msg = (err && err.message) ? err.message : 'Не удалось построить схему';
+            schematicHtml = '<div class="trace-schematic-error">' +
+                '<div class="fiber-trace-loading-title">Схема не построена</div>' +
+                '<div class="fiber-trace-loading-hint">' + escapeHtml(msg) + '</div></div>';
+        }
+    }
+    return wrapFiberTraceStudioSlots(schematicHtml, bodyHtml, paths);
 }
 
 function appendFiberTraceExtrasHtmlAsync(bodyHtml, paths, ctl) {
@@ -2451,28 +2617,13 @@ function appendFiberTraceExtrasHtmlAsync(bodyHtml, paths, ctl) {
             return appendFiberTraceExtrasHtml(bodyHtml, paths);
         }
         return FiberTrace.buildTraceSchematicsHtmlAsync(paths || [], ctl).then(function (schematicHtml) {
-            var extras = schematicHtml || '';
-            extras += bodyHtml;
-            if (window.FiberTrace && FiberTrace.buildFreeFibersHtml) {
-                extras += FiberTrace.buildFreeFibersHtml(paths || []);
-            }
-            if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
-                extras += FiberTrace.buildTraceActionsHtml();
-            }
-            return extras;
+            return wrapFiberTraceStudioSlots(schematicHtml || '', bodyHtml, paths);
         }).catch(function (err) {
             var msg = (err && err.message) ? err.message : 'Не удалось построить схему';
-            var extras = '<div class="trace-schematic-error">' +
+            var schematicHtml = '<div class="trace-schematic-error">' +
                 '<div class="fiber-trace-loading-title">Схема не построена</div>' +
                 '<div class="fiber-trace-loading-hint">' + escapeHtml(msg) + '</div></div>';
-            extras += bodyHtml;
-            if (window.FiberTrace && FiberTrace.buildFreeFibersHtml) {
-                extras += FiberTrace.buildFreeFibersHtml(paths || []);
-            }
-            if (window.FiberTrace && FiberTrace.buildTraceActionsHtml) {
-                extras += FiberTrace.buildTraceActionsHtml();
-            }
-            return extras;
+            return wrapFiberTraceStudioSlots(schematicHtml, bodyHtml, paths);
         });
     });
 }

@@ -2106,6 +2106,7 @@
     window.openSignalLevelFromOltPort = openSignalLevelFromOltPort;
     window.openSignalLevelFromUplinkPort = openSignalLevelFromUplinkPort;
     window.calculateSignalAlongPath = calculateSignalAlongPath;
+    window.calculateSignalAlongTracePath = calculateSignalAlongTracePath;
     window.buildPathFromTrace = buildPathFromTrace;
     window.buildOltPorts = buildOltPorts;
     window.updateOltPortCounters = updateOltPortCounters;

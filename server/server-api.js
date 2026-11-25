@@ -27,6 +27,8 @@ const cpuPool = require('./lib/cpu-pool');
 const zabbixClient = require('./lib/zabbix-client');
 const nedImport = require('./lib/ned-import');
 const perfMonitor = require('./lib/perf-monitor');
+const mapPermissions = require('./lib/map-permissions');
+const shareLinksLib = require('./lib/share-links');
 
 var updateBroadcastInFlight = false;
 
@@ -364,8 +366,11 @@ function buildEmbedUserPayload(organization) {
         userId: null,
         username: 'embed',
         fullName: 'Встраивание',
-        role: 'user',
+        role: 'viewer',
         embed: true,
+        allowedRegionIds: [],
+        canDeleteObjects: false,
+        canDeleteCables: false,
         organizationId: organizationId,
         avatarUrl: null,
         organization: {
@@ -377,6 +382,45 @@ function buildEmbedUserPayload(organization) {
             zabbixEnabled: !!(organization.zabbixEnabled && organization.zabbixApiUrl && organization.zabbixApiToken)
         }
     };
+}
+
+function buildShareUserPayload(organization, link) {
+    var organizationId = organization.id;
+    var allowed = link && link.regionId ? [String(link.regionId)] : [];
+    return {
+        userId: null,
+        username: 'share',
+        fullName: (link && link.label) ? String(link.label) : 'Гостевой просмотр',
+        role: 'viewer',
+        share: true,
+        embed: true,
+        shareLinkId: link && link.id ? link.id : null,
+        allowedRegionIds: allowed,
+        canDeleteObjects: false,
+        canDeleteCables: false,
+        shareView: {
+            regionId: link && link.regionId ? String(link.regionId) : null,
+            center: link && link.center ? link.center : null,
+            zoom: link && link.zoom != null ? link.zoom : null,
+            expiresAt: link && link.expiresAt ? link.expiresAt : null
+        },
+        organizationId: organizationId,
+        avatarUrl: null,
+        organization: {
+            id: organization.id,
+            name: organization.name,
+            status: organization.status,
+            mapLimits: getMapObjectLimitPayload(organizationId),
+            concurrentUsers: getConcurrentUsersPayload(organizationId),
+            zabbixEnabled: false
+        }
+    };
+}
+
+function resolveShareLinkSession(token) {
+    var hit = shareLinksLib.findShareLinkByToken(db.getOrganizations() || [], token);
+    if (!hit) return null;
+    return hit;
 }
 
 var sessionTokenCache = new Map();
@@ -396,6 +440,18 @@ function getSessionByToken(token) {
         var embedValue = { userId: null, organizationId: embedOrg.id, isEmbed: true };
         sessionTokenCache.set(token, { at: now, value: embedValue });
         return embedValue;
+    }
+    var shareHit = resolveShareLinkSession(token);
+    if (shareHit) {
+        var shareValue = {
+            userId: null,
+            organizationId: shareHit.organization.id,
+            isEmbed: true,
+            isShare: true,
+            shareRegionId: shareHit.link.regionId || null
+        };
+        sessionTokenCache.set(token, { at: now, value: shareValue });
+        return shareValue;
     }
     var sessions = db.getSessions();
     var ses = sessions.find(function(s) { return s.token === token && db.sessionIsActive(s); });
@@ -426,6 +482,8 @@ function getSessionUserFromToken(token) {
     if (!token) return null;
     var embedOrg = resolveOrganizationByEmbedToken(token);
     if (embedOrg) return buildEmbedUserPayload(embedOrg);
+    var shareHit = resolveShareLinkSession(token);
+    if (shareHit) return buildShareUserPayload(shareHit.organization, shareHit.link);
     const sessions = db.getDb().prepare('SELECT user_id, organization_id FROM sessions WHERE token = ? AND expires_at > datetime(\'now\')').all(token);
     if (sessions.length === 0) return null;
     const users = db.getUsers();
@@ -434,11 +492,16 @@ function getSessionUserFromToken(token) {
     const organizationId = user.organizationId != null ? user.organizationId : (sessions[0].organization_id || null);
     const organization = organizationId ? db.getOrganization(organizationId) : null;
     const mapLimits = organizationId ? getMapObjectLimitPayload(organizationId) : null;
+    mapPermissions.migrateUserRecord(user);
+    var perms = mapPermissions.permissionFieldsForClient(user);
     return {
         userId: user.id,
         username: user.username,
         fullName: user.fullName || user.full_name,
-        role: user.role,
+        role: perms.role,
+        allowedRegionIds: perms.allowedRegionIds,
+        canDeleteObjects: perms.canDeleteObjects,
+        canDeleteCables: perms.canDeleteCables,
         organizationId: organizationId,
         avatarUrl: avatars.getAvatarApiPath(user.id, user.avatarUpdatedAt),
         organization: organization ? {
@@ -484,20 +547,25 @@ function canAdminManageUser(admin, target) {
 }
 
 function userToClientFields(u) {
+    mapPermissions.migrateUserRecord(u);
+    var perms = mapPermissions.permissionFieldsForClient(u);
     return {
         id: u.id,
         username: u.username,
         fullName: u.fullName || u.full_name,
-        role: u.role,
+        role: perms.role,
         status: u.status || 'approved',
         createdAt: u.createdAt,
         organizationId: u.organizationId || null,
+        allowedRegionIds: perms.allowedRegionIds,
+        canDeleteObjects: perms.canDeleteObjects,
+        canDeleteCables: perms.canDeleteCables,
         avatarUrl: avatars.getAvatarApiPath(u.id, u.avatarUpdatedAt)
     };
 }
 
 function isGlobalAdmin(user) {
-    return !!(user && user.role === 'admin' && (user.organizationId == null));
+    return mapPermissions.isGlobalAdmin(user);
 }
 
 function getClientIp(req) {
@@ -547,7 +615,11 @@ function getPasswordResetEmailLimitOptions() {
 }
 
 function isOrgAdmin(user) {
-    return !!(user && user.role === 'admin' && user.organizationId);
+    return mapPermissions.isOrgAdmin(user);
+}
+
+function canEditMap(user) {
+    return mapPermissions.canEditMap(user);
 }
 
 function countOrgAdmins(organizationId, usersList) {
@@ -559,11 +631,16 @@ function countOrgAdmins(organizationId, usersList) {
 }
 
 function buildLoginUserPayload(user, organizationId, organization) {
+    mapPermissions.migrateUserRecord(user);
+    var perms = mapPermissions.permissionFieldsForClient(user);
     return {
         userId: user.id,
         username: user.username,
         fullName: user.fullName || user.full_name,
-        role: user.role,
+        role: perms.role,
+        allowedRegionIds: perms.allowedRegionIds,
+        canDeleteObjects: perms.canDeleteObjects,
+        canDeleteCables: perms.canDeleteCables,
         organizationId: organizationId,
         avatarUrl: avatars.getAvatarApiPath(user.id, user.avatarUpdatedAt),
         organization: organization ? {
@@ -664,17 +741,21 @@ async function validateCredentials(username, password) {
 app.get('/api/map', (req, res) => {
     try {
         var user = getSessionUser(req);
+        if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
         if (isGlobalAdmin(user)) {
             return res.status(403).json({ error: 'Главному администратору недоступен интерфейс карты. Используйте панель администратора.' });
         }
-        var orgId = (user && user.organizationId) ? user.organizationId : null;
-        if (!orgId && user) return res.status(403).json({ error: 'Выберите организацию или привяжите учётную запись к организации' });
+        var orgId = user.organizationId || null;
+        if (!orgId) return res.status(403).json({ error: 'Выберите организацию или привяжите учётную запись к организации' });
         var regionId = req.query && req.query.regionId != null ? String(req.query.regionId).trim() : '';
         if (!regionId) {
             return res.status(400).json({
                 error: 'Укажите regionId. Сначала получите список регионов: GET /api/map-regions',
                 code: 'MAP_REGION_REQUIRED'
             });
+        }
+        if (!mapPermissions.userCanAccessRegion(user, regionId)) {
+            return res.status(403).json({ error: 'Нет доступа к этому региону карты', code: 'MAP_REGION_FORBIDDEN' });
         }
         var mig = null;
         if (orgId && db.ensureMapRegionsMigrated) {
@@ -740,6 +821,9 @@ app.get('/api/map-regions', (req, res) => {
         if (migRegions && migRegions.changed) dropSyncMapCache(orgId);
         try { getSyncStateForOrg(orgId, { forceFromDb: !!(migRegions && migRegions.changed) }); } catch (eLive) {}
         var payload = db.listMapRegionsWithCounts(orgId);
+        if (payload && Array.isArray(payload.regions)) {
+            payload.regions = mapPermissions.filterRegionsForUser(user, payload.regions);
+        }
         res.json(payload);
     } catch (e) {
         res.status(500).json({ error: String(e.message) });
@@ -750,7 +834,7 @@ app.post('/api/map-regions', (req, res) => {
     try {
         var user = getSessionUser(req);
         if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
-        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        if (!canEditMap(user)) return res.status(403).json({ error: 'Недостаточно прав для управления регионами' });
         var orgId = user.organizationId;
         if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
         var name = req.body && req.body.name;
@@ -765,7 +849,10 @@ app.patch('/api/map-regions/:id', (req, res) => {
     try {
         var user = getSessionUser(req);
         if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
-        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        if (!canEditMap(user)) return res.status(403).json({ error: 'Недостаточно прав для управления регионами' });
+        if (!mapPermissions.userCanAccessRegion(user, req.params.id)) {
+            return res.status(403).json({ error: 'Нет доступа к этому региону карты', code: 'MAP_REGION_FORBIDDEN' });
+        }
         var orgId = user.organizationId;
         if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
         var updated = db.updateMapRegion(orgId, req.params.id, {
@@ -784,7 +871,7 @@ app.delete('/api/map-regions/:id', (req, res) => {
     try {
         var user = getSessionUser(req);
         if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
-        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации может удалять регионы' });
         var orgId = user.organizationId;
         if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
         var result = db.deleteMapRegion(orgId, req.params.id);
@@ -801,7 +888,7 @@ app.post('/api/map/move-to-region', (req, res) => {
     try {
         var user = getSessionUser(req);
         if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
-        if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+        if (!canEditMap(user)) return res.status(403).json({ error: 'Недостаточно прав для переноса объектов' });
         var orgId = user.organizationId;
         if (!orgId) return res.status(403).json({ error: 'Укажите организацию' });
         var uniqueIds = req.body && req.body.uniqueIds;
@@ -810,6 +897,9 @@ app.post('/api/map/move-to-region', (req, res) => {
             return res.status(400).json({ error: 'Укажите uniqueIds' });
         }
         if (!targetRegionId) return res.status(400).json({ error: 'Укажите targetRegionId' });
+        if (!mapPermissions.userCanAccessRegion(user, targetRegionId)) {
+            return res.status(403).json({ error: 'Нет доступа к целевому региону', code: 'MAP_REGION_FORBIDDEN' });
+        }
         try { flushMapDbSave(orgId); } catch (eFlush) {}
         var result = db.moveMapItemsToRegion(orgId, uniqueIds, targetRegionId);
         try {
@@ -843,7 +933,7 @@ app.post('/api/map/move-to-region', (req, res) => {
 app.post('/api/import/ned', express.raw({ type: '*/*', limit: '120mb' }), async function(req, res) {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
-    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    if (!canEditMap(user)) return res.status(403).json({ error: 'Недостаточно прав для импорта' });
     try {
         await nedImport.ensureConverterReady();
     } catch (e) {
@@ -868,7 +958,7 @@ app.post('/api/map', (req, res) => {
     if (isGlobalAdmin(user)) return res.status(403).json({ error: 'Главному администратору недоступно сохранение карты.' });
     var orgId = user.organizationId;
     if (!orgId) return res.status(403).json({ error: 'Укажите организацию для сохранения карты' });
-    if (user.role !== 'admin') return res.status(403).json({ error: 'Только администратор может сохранять карту' });
+    if (!canEditMap(user)) return res.status(403).json({ error: 'Недостаточно прав для сохранения карты' });
     try {
         const data = req.body && req.body.data;
         if (!Array.isArray(data)) return res.status(400).json({ error: 'Ожидается массив data' });
@@ -879,6 +969,22 @@ app.post('/api/map', (req, res) => {
             return res.status(400).json({
                 error: 'Укажите regionId (или replaceAll для полной замены карты организации)',
                 code: 'MAP_REGION_REQUIRED'
+            });
+        }
+        var prevFull = db.getMapData(orgId) || [];
+        var core = db.mapRegionsCore;
+        var prevSlice = replaceAll
+            ? prevFull
+            : (core ? core.filterItemsByRegionId(prevFull, regionId) : prevFull);
+        var saveCheck = mapPermissions.assertMaySaveMapSlice(user, prevSlice, data, {
+            regionId: regionId,
+            replaceAll: replaceAll
+        });
+        if (!saveCheck.ok) {
+            return res.status(saveCheck.status || 403).json({
+                error: saveCheck.error,
+                code: saveCheck.code,
+                removed: saveCheck.removed
             });
         }
         var savedFull = null;
@@ -2658,6 +2764,90 @@ app.post('/api/auth/embed', (req, res) => {
     });
 });
 
+function buildOrgShareUrl(req, shareToken) {
+    var base = serverConfig.publicSiteUrl || process.env.PUBLIC_SITE_URL || getSiteBaseUrl(req) || '';
+    base = String(base || '').trim().replace(/\/$/, '');
+    return (base || '') + '/index.html?share=1&shareToken=' + encodeURIComponent(shareToken);
+}
+
+app.get('/api/organizations/me/share-links', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    var links = shareLinksLib.getOrgShareLinks(org).filter(function (l) { return !l.revoked; }).map(function (l) {
+        var view = shareLinksLib.publicShareLinkView(l);
+        view.shareUrl = buildOrgShareUrl(req, l.token);
+        return view;
+    });
+    res.json({ links: links });
+});
+
+app.post('/api/organizations/me/share-links', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    var body = req.body || {};
+    var ttlDays = parseInt(body.ttlDays, 10);
+    var ttlMs = null;
+    if (!isNaN(ttlDays) && ttlDays > 0) ttlMs = ttlDays * 24 * 60 * 60 * 1000;
+    if (body.expiresAt) ttlMs = null;
+    var link = shareLinksLib.createShareLink(org, {
+        label: body.label,
+        regionId: body.regionId,
+        center: body.center,
+        zoom: body.zoom,
+        ttlMs: ttlMs,
+        expiresAt: body.expiresAt,
+        createdBy: user.userId
+    });
+    db.updateOrganization(user.organizationId, { shareLinks: shareLinksLib.getOrgShareLinks(org) });
+    invalidateSessionTokenCache(link.token);
+    var view = shareLinksLib.publicShareLinkView(link);
+    view.shareUrl = buildOrgShareUrl(req, link.token);
+    res.json({ ok: true, link: view });
+});
+
+app.delete('/api/organizations/me/share-links/:id', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!isOrgAdmin(user)) return res.status(403).json({ error: 'Только администратор организации' });
+    var org = db.getOrganization(user.organizationId);
+    if (!org) return res.status(404).json({ error: 'Организация не найдена' });
+    var before = shareLinksLib.getOrgShareLinks(org);
+    var target = before.find(function (l) {
+        return String(l.id) === String(req.params.id) || String(l.token) === String(req.params.id);
+    });
+    var ok = shareLinksLib.revokeShareLink(org, req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Ссылка не найдена' });
+    db.updateOrganization(user.organizationId, { shareLinks: shareLinksLib.getOrgShareLinks(org) });
+    if (target && target.token) invalidateSessionTokenCache(target.token);
+    res.json({ ok: true });
+});
+
+app.post('/api/auth/share', (req, res) => {
+    var body = req.body || {};
+    var shareToken = String(body.shareToken || body.token || '').trim();
+    if (!shareToken) return res.status(400).json({ success: false, error: 'Не указан токен ссылки' });
+    var ip = getClientIp(req);
+    var rate = security.checkRateLimit('share:' + ip, getAuthRateLimitOptions());
+    if (!rate.ok) {
+        return res.status(429).json({ success: false, error: 'Слишком много попыток. Подождите немного.' });
+    }
+    var hit = resolveShareLinkSession(shareToken);
+    if (!hit) {
+        return res.status(401).json({ success: false, error: 'Ссылка недействительна или истекла' });
+    }
+    res.json({
+        success: true,
+        token: shareToken,
+        user: buildShareUserPayload(hit.organization, hit.link)
+    });
+});
+
 function normalizeZabbixOrgUrl(raw) {
     return zabbixClient.normalizeApiUrl(raw).replace(/\/api_jsonrpc\.php$/i, '');
 }
@@ -3050,7 +3240,7 @@ app.put('/api/users/:userId', async (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
     const userId = req.params.userId;
-    const { fullName, role, password, organizationId, email } = req.body || {};
+    const { fullName, role, password, organizationId, email, allowedRegionIds, canDeleteObjects, canDeleteCables } = req.body || {};
     const users = db.getUsers();
     const i = users.findIndex(u => u.id === userId);
     if (i === -1) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -3066,8 +3256,9 @@ app.put('/api/users/:userId', async (req, res) => {
         users[i].organizationId = null;
     }
 
-    if (targetIsMainAdmin && role !== undefined && role !== 'admin') return res.status(400).json({ error: 'Нельзя снять роль администратора с главного администратора' });
-    if (role !== undefined && users[i].role === 'admin' && role !== 'admin') {
+    var nextRole = role !== undefined ? mapPermissions.sanitizeRoleInput(role, users[i].role) : mapPermissions.normalizeMapRole(users[i].role);
+    if (targetIsMainAdmin && role !== undefined && nextRole !== 'admin') return res.status(400).json({ error: 'Нельзя снять роль администратора с главного администратора' });
+    if (role !== undefined && mapPermissions.normalizeMapRole(users[i].role) === 'admin' && nextRole !== 'admin') {
         if (String(admin.userId) === String(userId)) {
             return res.status(400).json({ error: 'Нельзя снять с себя роль администратора' });
         }
@@ -3083,7 +3274,12 @@ app.put('/api/users/:userId', async (req, res) => {
         }
         users[i].email = emailTrim || null;
     }
-    if (role !== undefined) users[i].role = role;
+    mapPermissions.applyPermissionFieldsFromBody(users[i], {
+        role: role,
+        allowedRegionIds: allowedRegionIds,
+        canDeleteObjects: canDeleteObjects,
+        canDeleteCables: canDeleteCables
+    });
     if (password && String(password).length >= 6) {
         try {
             users[i].password = await passwords.hashPassword(password);
@@ -3103,6 +3299,7 @@ app.put('/api/users/:userId', async (req, res) => {
             users[i].organizationId = organizationId;
         }
     }
+    mapPermissions.migrateUserRecord(users[i]);
     db.setUsers(users);
     res.json({ ok: true });
 });
@@ -3132,7 +3329,7 @@ app.delete('/api/users/:userId', (req, res) => {
 app.post('/api/users', async (req, res) => {
     const admin = getSessionUser(req);
     if (!admin || admin.role !== 'admin') return res.status(403).json({ error: 'Только администратор' });
-    const { username, password, fullName, role, organizationId, email } = req.body || {};
+    const { username, password, fullName, role, organizationId, email, allowedRegionIds, canDeleteObjects, canDeleteCables } = req.body || {};
     if (!username || username.length < 3) return res.status(400).json({ error: 'Имя не менее 3 символов' });
     if (!password || password.length < 6) return res.status(400).json({ error: 'Пароль не менее 6 символов' });
     var resolvedOrgId = organizationId || null;
@@ -3165,12 +3362,16 @@ app.post('/api/users', async (req, res) => {
         password: hashedPassword,
         fullName: fullName || username,
         full_name: fullName || username,
-        role: role || 'user',
+        role: mapPermissions.sanitizeRoleInput(role, 'viewer'),
         status: 'approved',
         emailVerified: true,
         organizationId: resolvedOrgId,
+        allowedRegionIds: mapPermissions.normalizeAllowedRegionIds(allowedRegionIds),
+        canDeleteObjects: canDeleteObjects !== undefined ? !!canDeleteObjects : true,
+        canDeleteCables: canDeleteCables !== undefined ? !!canDeleteCables : true,
         createdAt: new Date().toISOString()
     };
+    mapPermissions.migrateUserRecord(newUser);
     if (resolvedEmail) newUser.email = resolvedEmail;
     users.push(newUser);
     db.setUsers(users);
@@ -3399,6 +3600,100 @@ function editOrgChatMessage(user, messageId, payload) {
     broadcastOrgChatUpdated(orgId, updated);
     return { ok: true, message: updated };
 }
+
+app.get('/api/object-comments', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Нет организации' });
+    if (user.embed && !user.share) {
+        /* embed may read; share too — both view-only */
+    }
+    var objectUniqueId = req.query && req.query.objectUniqueId != null ? String(req.query.objectUniqueId).trim() : '';
+    if (!objectUniqueId) return res.status(400).json({ error: 'Укажите objectUniqueId' });
+    var comments = db.getObjectCommentsForObject(user.organizationId, objectUniqueId);
+    res.json({ comments: comments });
+});
+
+app.get('/api/object-comments/open-counts', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Нет организации' });
+    res.json({ counts: db.getOpenTaskCountsByObject(user.organizationId) });
+});
+
+app.post('/api/object-comments', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Нет организации' });
+    if (user.embed || user.share) return res.status(403).json({ error: 'Гостевой просмотр не может оставлять комментарии' });
+    var body = req.body || {};
+    var objectUniqueId = body.objectUniqueId != null ? String(body.objectUniqueId).trim() : '';
+    var text = body.text != null ? String(body.text).trim() : '';
+    if (!objectUniqueId) return res.status(400).json({ error: 'Укажите objectUniqueId' });
+    if (!text) return res.status(400).json({ error: 'Введите текст' });
+    var kind = body.kind === 'task' ? 'task' : 'comment';
+    if (kind === 'task' && !canEditMap(user)) {
+        return res.status(403).json({ error: 'Задачи могут создавать только редакторы' });
+    }
+    var comment = {
+        id: 'oc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+        objectUniqueId: objectUniqueId,
+        userId: user.userId,
+        userName: user.fullName || user.username || 'Пользователь',
+        text: text.slice(0, 4000),
+        kind: kind,
+        status: kind === 'task' ? 'open' : null,
+        assigneeUserId: body.assigneeUserId || null,
+        assigneeName: body.assigneeName || null,
+        createdAt: new Date().toISOString()
+    };
+    db.addObjectComment(user.organizationId, comment);
+    res.json({ ok: true, comment: comment });
+});
+
+app.patch('/api/object-comments/:id', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Нет организации' });
+    if (user.embed || user.share) return res.status(403).json({ error: 'Нет доступа' });
+    var list = db.getObjectCommentsList(user.organizationId);
+    var existing = list.find(function (c) { return c && String(c.id) === String(req.params.id); });
+    if (!existing) return res.status(404).json({ error: 'Комментарий не найден' });
+    var body = req.body || {};
+    var isOwner = String(existing.userId) === String(user.userId);
+    var isAdmin = mapPermissions.normalizeMapRole(user.role) === 'admin';
+    if (body.status !== undefined) {
+        if (!canEditMap(user) && !isOwner) {
+            return res.status(403).json({ error: 'Нет прав менять статус задачи' });
+        }
+    }
+    if (body.text !== undefined && !isOwner && !isAdmin) {
+        return res.status(403).json({ error: 'Можно менять только свой комментарий' });
+    }
+    var updated = db.updateObjectComment(user.organizationId, req.params.id, {
+        text: body.text,
+        status: body.status,
+        assigneeUserId: body.assigneeUserId,
+        assigneeName: body.assigneeName
+    });
+    if (!updated) return res.status(404).json({ error: 'Комментарий не найден' });
+    res.json({ ok: true, comment: updated });
+});
+
+app.delete('/api/object-comments/:id', (req, res) => {
+    const user = getSessionUser(req);
+    if (!user) return res.status(401).json({ error: 'Требуется авторизация' });
+    if (!user.organizationId) return res.status(403).json({ error: 'Нет организации' });
+    if (user.embed || user.share) return res.status(403).json({ error: 'Нет доступа' });
+    var list = db.getObjectCommentsList(user.organizationId);
+    var existing = list.find(function (c) { return c && String(c.id) === String(req.params.id); });
+    if (!existing) return res.status(404).json({ error: 'Комментарий не найден' });
+    var isOwner = String(existing.userId) === String(user.userId);
+    var isAdmin = mapPermissions.normalizeMapRole(user.role) === 'admin';
+    if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Можно удалять только свои комментарии' });
+    db.removeObjectComment(user.organizationId, req.params.id);
+    res.json({ ok: true });
+});
 
 app.get('/api/chat/members', (req, res) => {
     const user = getSessionUser(req);
@@ -4845,8 +5140,16 @@ function isSyncClientAdmin(clientId) {
     const userId = syncClientUserIds.get(clientId);
     if (!userId) return false;
     const users = db.getUsers();
-    const user = users.find(function(u) { return u.id === userId; });
-    return user && user.role === 'admin';
+    const user = users.find(function(u) { return String(u.id) === String(userId); });
+    if (!user) return false;
+    mapPermissions.migrateUserRecord(user);
+    return mapPermissions.canEditMap({
+        role: user.role,
+        organizationId: user.organizationId,
+        allowedRegionIds: user.allowedRegionIds,
+        canDeleteObjects: user.canDeleteObjects,
+        canDeleteCables: user.canDeleteCables
+    });
 }
 
 function cableEndpointUniqueIdsFromSerialized(fullState, cable) {

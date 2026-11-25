@@ -95,6 +95,10 @@ async function confirmAndDeleteObject(obj, opts) {
 }
 
 function deleteObject(obj, opts) {
+    if (!(opts && (opts.skipSync || opts.remoteOp)) && typeof canDeleteObjects === 'function' && !canDeleteObjects()) {
+        if (typeof showWarning === 'function') showWarning('Удаление объектов запрещено для вашей роли', 'Нет доступа');
+        return;
+    }
 
         const objType = obj.properties.get('type');
     const objName = obj.properties.get('name') || '';
