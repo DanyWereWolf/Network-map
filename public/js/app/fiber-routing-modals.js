@@ -406,6 +406,23 @@ function resolveSplitterOutputPeer(splitterObj, outConn) {
     return otherEnd ? { cable: outCable, host: otherEnd, remoteHost: null } : null;
 }
 
+function findSplitterOutputIndex(splitterObj, outConn) {
+    if (!splitterObj || !splitterObj.properties || !outConn) return null;
+    var outs = splitterObj.properties.get('outputConnections') || [];
+    for (var i = 0; i < outs.length; i++) {
+        if (outs[i] === outConn) return i;
+        if (!outs[i]) continue;
+        if (outConn.onuId && outs[i].onuId === outConn.onuId) return i;
+        if (outConn.nodeId && outs[i].nodeId === outConn.nodeId) return i;
+        if (outConn.mediaConverterId && outs[i].mediaConverterId === outConn.mediaConverterId) return i;
+        if (outConn.splitterId && outs[i].splitterId === outConn.splitterId) return i;
+        if (outConn.cableId && outs[i].cableId === outConn.cableId &&
+            Number(outs[i].fiberNumber) === Number(outConn.fiberNumber)) return i;
+        if (outConn.crossPort != null && Number(outs[i].crossPort) === Number(outConn.crossPort)) return i;
+    }
+    return null;
+}
+
 function buildSplitterOutputToNodePathSteps(splitterObj, outConn) {
     if (!outConn || !outConn.nodeId || !splitterObj) return null;
     var nodeObj = objects.find(function(o) {
@@ -413,8 +430,16 @@ function buildSplitterOutputToNodePathSteps(splitterObj, outConn) {
     });
     if (!nodeObj) return null;
     var nodeName = nodeObj.properties.get('name') || 'Узел';
+    var outIdx = findSplitterOutputIndex(splitterObj, outConn);
     return [
-        { type: 'splitterOutputToNode', splitter: splitterObj, nodeObj: nodeObj, nodeName: nodeName, switchPort: outConn.switchPort != null ? outConn.switchPort : null },
+        {
+            type: 'splitterOutputToNode',
+            splitter: splitterObj,
+            nodeObj: nodeObj,
+            nodeName: nodeName,
+            switchPort: outConn.switchPort != null ? outConn.switchPort : null,
+            outputIndex: outIdx
+        },
         { type: 'object', objectType: 'node', objectName: nodeName, object: nodeObj, port: null }
     ];
 }
@@ -426,8 +451,15 @@ function buildSplitterOutputToMediaConverterPathSteps(splitterObj, outConn) {
     });
     if (!mcObj) return null;
     var mcName = mcObj.properties.get('name') || 'Медиаконвертер';
+    var outIdxMc = findSplitterOutputIndex(splitterObj, outConn);
     return [
-        { type: 'splitterOutputToMediaConverter', splitter: splitterObj, mediaConverterObj: mcObj, mediaConverterName: mcName },
+        {
+            type: 'splitterOutputToMediaConverter',
+            splitter: splitterObj,
+            mediaConverterObj: mcObj,
+            mediaConverterName: mcName,
+            outputIndex: outIdxMc
+        },
         { type: 'object', objectType: 'mediaConverter', objectName: mcName, object: mcObj, port: null }
     ];
 }
@@ -480,6 +512,7 @@ function buildSplitterOutputToOnuPathSteps(splitterObj, onuObj, outputEntry) {
     if (!onuObj || !onuObj.properties) return null;
     var onuName = onuObj.properties.get('name') || 'ONU';
     var drop = resolveSplitterToOnuDropFiber(splitterObj, onuObj, outputEntry || null);
+    var outIdxOnu = findSplitterOutputIndex(splitterObj, outputEntry || { onuId: getObjectUniqueId(onuObj) });
     var steps = [{
         type: 'splitterOutputToOnu',
         splitter: splitterObj,
@@ -487,7 +520,8 @@ function buildSplitterOutputToOnuPathSteps(splitterObj, onuObj, outputEntry) {
         onuName: onuName,
         cableId: drop ? drop.cableId : null,
         fiberNumber: drop ? drop.fiberNumber : null,
-        cable: drop ? drop.cable : null
+        cable: drop ? drop.cable : null,
+        outputIndex: outIdxOnu
     }];
     if (drop && drop.cable) {
         var cabName = drop.cable.properties.get('cableName') ||

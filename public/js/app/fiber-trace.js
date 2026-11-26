@@ -2003,7 +2003,9 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
             var key = expandKey(prefix, splitterObj);
             if (expandedKeys.has(key)) continue;
             expandedKeys.add(key);
-            var inputFiber = splitterObj.properties.get('inputFiber') || getSplitterRootInputFiber(splitterObj);
+            if (typeof syncSplitterInputFromHost === 'function') syncSplitterInputFromHost(splitterObj);
+            var inputFiber = splitterObj.properties.get('inputFiber') ||
+                (typeof getSplitterRootInputFiber === 'function' ? getSplitterRootInputFiber(splitterObj) : null);
             var outputConnections = splitterObj.properties.get('outputConnections') || [];
             if (!inputFiber) continue;
             var hasCableOutputs = outputConnections.some(function(o) { return o && o.cableId; });
@@ -2028,7 +2030,15 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                         }
                     }
                     if (sub.error || !sub.path.length) continue;
-                    paths.push(prefix.concat(sub.path.slice(1)));
+                    var outTag = {
+                        type: 'splitterOutputToHost',
+                        splitter: splitterObj,
+                        host: otherEnd,
+                        cableId: out.cableId,
+                        fiberNumber: out.fiberNumber,
+                        outputIndex: oi
+                    };
+                    paths.push(prefix.concat([outTag], sub.path.slice(1)));
                     anyExpanded = true;
                 }
             }
@@ -2041,7 +2051,7 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                         var onuSuffix = typeof buildSplitterOutputToOnuPathSteps === 'function'
                             ? buildSplitterOutputToOnuPathSteps(splitterObj, onuObj, out2)
                             : [
-                                { type: 'splitterOutputToOnu', splitter: splitterObj, onuObj: onuObj, onuName: onuObj.properties.get('name') || 'ONU' },
+                                { type: 'splitterOutputToOnu', splitter: splitterObj, onuObj: onuObj, onuName: onuObj.properties.get('name') || 'ONU', outputIndex: oi2 },
                                 { type: 'object', objectType: 'onu', objectName: onuObj.properties.get('name') || 'ONU', object: onuObj, port: null }
                             ];
                         if (onuSuffix && onuSuffix.length) {
@@ -2119,7 +2129,7 @@ function traceAllFiberPathsFromObject(startObject, startCableId, startFiberNumbe
                     if (targetSplitter) {
                         var targetOutputs = targetSplitter.properties.get('outputConnections') || [];
                         var midSuffix = [
-                            { type: 'splitterOutputToSplitter', fromSplitter: splitterObj, toSplitter: targetSplitter },
+                            { type: 'splitterOutputToSplitter', fromSplitter: splitterObj, toSplitter: targetSplitter, outputIndex: oi2 },
                             { type: 'object', objectType: 'splitter', objectName: targetSplitter.properties.get('name') || 'Сплиттер', object: targetSplitter, port: null }
                         ];
                         paths.push(prefix.concat(midSuffix));
